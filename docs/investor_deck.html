@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Investment Memorandum & Executive Overview - SIMRS SATUSEHAT RME</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    @page {
+      size: A4 portrait;
+      margin: 16mm 14mm 16mm 14mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.52;
+      color: #0f172a;
+      background: #ffffff;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .avoid-break {
+      page-break-inside: avoid;
+    }
+
+    /* Executive Cover Page */
+    .cover {
+      min-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 15px 5px;
+      page-break-after: always;
+    }
+
+    .cover-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 15px;
+      margin-bottom: 25px;
+    }
+
+    .logo-badge {
+      font-weight: 800;
+      font-size: 13pt;
+      color: #0369a1;
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .confidential-tag {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 7.5pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .hero-tag {
+      display: inline-block;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      color: #166534;
+      font-size: 8.5pt;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .cover-title {
+      font-size: 26pt;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.2;
+      margin-bottom: 12px;
+      letter-spacing: -0.8px;
+    }
+
+    .cover-subtitle {
+      font-size: 13pt;
+      font-weight: 600;
+      color: #0284c7;
+      line-height: 1.4;
+      margin-bottom: 18px;
+    }
+
+    .cover-description {
+      font-size: 10pt;
+      color: #475569;
+      line-height: 1.6;
+      max-width: 95%;
+      margin-bottom: 25px;
+    }
+
+    .highlight-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 15px;
+      margin-bottom: 25px;
+    }
+
+    .highlight-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+    }
+
+    .highlight-val {
+      font-size: 18pt;
+      font-weight: 800;
+      color: #0369a1;
+      margin-bottom: 4px;
+    }
+
+    .highlight-lbl {
+      font-size: 8pt;
+      color: #64748b;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .cover-meta {
+      background: #f1f5f9;
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      font-size: 8.5pt;
+    }
+
+    .meta-row {
+      display: flex;
+      flex-direction: column;
+    }
+    .meta-row span:first-child {
+      color: #64748b;
+      font-weight: 600;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+    }
+    .meta-row span:last-child {
+      color: #0f172a;
+      font-weight: 700;
+      font-size: 9.5pt;
+    }
+
+    .cover-footer {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 8pt;
+      color: #94a3b8;
+    }
+
+    /* Headings */
+    h1 {
+      font-size: 14pt;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 5px;
+      margin-top: 20px;
+      margin-bottom: 12px;
+      letter-spacing: -0.3px;
+    }
+
+    h2 {
+      font-size: 11.5pt;
+      font-weight: 700;
+      color: #0369a1;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      border-left: 3px solid #0284c7;
+      padding-left: 8px;
+    }
+
+    p {
+      margin-bottom: 8px;
+      color: #334155;
+    }
+
+    /* Cards & Grids */
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+
+    .card-problem {
+      background: #fff5f5;
+      border: 1px solid #fecaca;
+      border-left: 4px solid #ef4444;
+      padding: 10px 12px;
+      border-radius: 0 6px 6px 0;
+    }
+
+    .card-solution {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-left: 4px solid #10b981;
+      padding: 10px 12px;
+      border-radius: 0 6px 6px 0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 7px;
+      border-radius: 9999px;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-primary { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-success { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      margin-bottom: 12px;
+      font-size: 8pt;
+    }
+
+    th {
+      background: #0f172a;
+      color: #ffffff;
+      text-align: left;
+      padding: 7px 9px;
+      font-weight: 600;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 6px 9px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    .callout {
+      border-radius: 6px;
+      padding: 9px 13px;
+      margin-bottom: 10px;
+      font-size: 8.5pt;
+    }
+    .callout-info { background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; }
+    .callout-highlight { background: #faf5ff; border: 1px solid #e9d5ff; color: #6b21a8; }
+
+    .market-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 10px;
+      background: #f8fafc;
+      text-align: center;
+    }
+    .market-box h4 {
+      font-size: 9pt;
+      color: #475569;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .market-box .val {
+      font-size: 15pt;
+      font-weight: 800;
+      color: #0284c7;
+      margin-bottom: 2px;
+    }
+    .market-box p {
+      font-size: 7.5pt;
+      color: #64748b;
+      margin-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover">
+    <div>
+      <div class="cover-header">
+        <div class="logo-badge">
+          <span>🏥 HEALTH-TECH VENTURES</span>
+        </div>
+        <div class="confidential-tag">
+          INVESTOR MEMORANDUM &bull; CONFIDENTIAL
+        </div>
+      </div>
+
+      <div class="hero-tag">
+        Peluang Investasi SaaS HealthTech Indonesia (RegTech & Healthcare)
+      </div>
+
+      <div class="cover-title">
+        Platform SIMRS & Rekam Medis Elektronik (RME) Generasi Baru
+      </div>
+      
+      <div class="cover-subtitle">
+        Solusi Interoperabilitas FHIR HL7 R4 & Ekosistem Pelayanan Faskes Terintegrasi SATUSEHAT Kemenkes RI
+      </div>
+
+      <div class="cover-description">
+        Transformasi digital layanan kesehatan nasional yang didorong mandat regulasi <strong>Permenkes No. 24 Tahun 2022</strong>. Menghubungkan puluhan ribu klinik dan rumah sakit dengan ekosistem data satu pintu Kemenkes RI secara andal, offline-first, dan efisien.
+      </div>
+
+      <div class="highlight-grid">
+        <div class="highlight-card">
+          <div class="highlight-val">65.000+</div>
+          <div class="highlight-lbl">Target Faskes di Indonesia</div>
+        </div>
+        <div class="highlight-card">
+          <div class="highlight-val">IDR 7.5 Triliun</div>
+          <div class="highlight-lbl">Total Addressable Market (TAM)</div>
+        </div>
+        <div class="highlight-card">
+          <div class="highlight-val">100% Mandat</div>
+          <div class="highlight-lbl">Kepatuhan Hukum Kemenkes</div>
+        </div>
+      </div>
+
+      <div class="cover-meta">
+        <div class="meta-row">
+          <span>Putaran Pendanaan</span>
+          <span>Seed / Early Growth Round</span>
+        </div>
+        <div class="meta-row">
+          <span>Fokus Industri</span>
+          <span>Healthcare B2B SaaS, HealthTech & Interoperability</span>
+        </div>
+        <div class="meta-row">
+          <span>Kesiapan Produk (TRL)</span>
+          <span>TRL-8 / Production-Ready MVP Live Architecture</span>
+        </div>
+        <div class="meta-row">
+          <span>Tanggal Dokumen</span>
+          <span>September 2026</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <span>Dokumen ini disusun untuk Calon Investor & Mitra Strategis</span>
+      <span>HealthTech Platform Overview</span>
+    </div>
+  </div>
+
+  <!-- ==================== PROBLEM & SOLUTION ==================== -->
+  <div>
+    <h1>1. Masalah Pasar & Solusi Produk</h1>
+
+    <div class="callout callout-highlight">
+      <strong>Katalis Utama (Regulatory Tailwind):</strong> Pemerintah Indonesia melalui Kemenkes mewajibkan 100% fasilitas kesehatan (Rumah Sakit, Puskesmas, Klinik, Praktik Dokter) untuk mengadopsi RME dan terhubung ke SATUSEHAT Cloud. Sanksi administratif dan pencabutan izin akreditasi diterapkan bagi yang tidak patuh.
+    </div>
+
+    <div class="grid-2" style="margin-top: 10px;">
+      <div>
+        <h3 style="color: #dc2626; margin-bottom: 8px;">Masalah Nyata Faskes (Pain Points)</h3>
+        
+        <div class="card-problem" style="margin-bottom: 8px;">
+          <strong>1. Sistem Legacy & Tidak Siap FHIR</strong>
+          <p style="font-size: 8pt; color: #4b5563; margin-top: 2px;">Mayoritas vendor SIMRS lokal menggunakan arsitektur monolitik usang yang gagal memenuhi standar HL7 FHIR R4 Kemenkes yang kompleks.</p>
+        </div>
+
+        <div class="card-problem" style="margin-bottom: 8px;">
+          <strong>2. Ketergantungan Internet (Single Point of Failure)</strong>
+          <p style="font-size: 8pt; color: #4b5563; margin-top: 2px;">Jika koneksi internet atau server cloud SATUSEHAT lambat/down, operasional poli terhenti total dan antrean pasien membludak.</p>
+        </div>
+
+        <div class="card-problem">
+          <strong>3. Risiko Pelanggaran UU PDP & Hukum Medis</strong>
+          <p style="font-size: 8pt; color: #4b5563; margin-top: 2px;">Banyak sistem tidak memiliki manajemen consent pasien sesuai UU PDP No. 27/2022 serta tidak memiliki audit penguncian berkas 24 jam sesuai Permenkes 24/2022.</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="color: #16a34a; margin-bottom: 8px;">Solusi Unggulan Kami (Our Product)</h3>
+        
+        <div class="card-solution" style="margin-bottom: 8px;">
+          <strong>1. Native FHIR R4 Engine & Zero-Friction Bridge</strong>
+          <p style="font-size: 8pt; color: #4b5563; margin-top: 2px;">Transformasi otomatis data klinis ke bundle FHIR Kemenkes (Encounter, Condition, Obs, MedRequest) tanpa perlu middleware mahal.</p>
+        </div>
+
+        <div class="card-solution" style="margin-bottom: 8px;">
+          <strong>2. Arsitektur Tangguh (Edge & Offline-First)</strong>
+          <p style="font-size: 8pt; color: #4b5563; margin-top: 2px;">Pelayanan poli tetap berjalan 100% cepat saat offline dengan penyimpanan lokal super-cepat, dilengkapi background retry worker.</p>
+        </div>
+
+        <div class="card-solution">
+          <strong>3. Single-Pane Clinical Workspace + TTS Audio</strong>
+          <p style="font-size: 8pt; color: #4b5563; margin-top: 2px;">Dokter mengisi SOAP, CPOE KFA, dan TTV dalam 1 layar responsif, lengkap dengan display antrean TV multimedia & pemanggilan suara otomatis.</p>
+        </div>
+      </div>
+    </div>
+
+    <h1>2. Peluang Pasar (Market Size: TAM, SAM, SOM)</h1>
+    <div class="grid-3" style="margin-top: 10px;">
+      <div class="market-box">
+        <h4>Total Addressable Market (TAM)</h4>
+        <div class="val">IDR 7.5 T</div>
+        <p>65.000+ Faskes di Indonesia (3.100+ RS, 10.000+ Puskesmas, 15.000+ Klinik, 35.000+ Praktik Mandiri).</p>
+      </div>
+
+      <div class="market-box">
+        <h4>Serviceable Available Market (SAM)</h4>
+        <div class="val">IDR 2.2 T</div>
+        <p>18.000+ Rumah Sakit Swasta Tipe C/D & Jaringan Klinik Pratama/Utama modern yang butuh RME mandiri.</p>
+      </div>
+
+      <div class="market-box">
+        <h4>Serviceable Obtainable Market (SOM)</h4>
+        <div class="val">IDR 45 M / Thn</div>
+        <p>Target penetrasi 1.500 Faskes (ARR IDR 45M) dalam 36 bulan pasca-ekspansi.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BUSINESS MODEL & COMPETITIVE MOAT ==================== -->
+  <div>
+    <h1>3. Model Bisnis & Aliran Pendapatan (Monetization Strategy)</h1>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 25%;">Model Pendapatan</th>
+          <th style="width: 25%;">Target Segmen</th>
+          <th style="width: 25%;">Skema Harga (Pricing)</th>
+          <th style="width: 25%;">Karakteristik & Retensi</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>B2B SaaS Subscription</strong></td>
+          <td>Klinik Pratama & Klinik Utama Mandiri</td>
+          <td>Rp 1.500.000 - Rp 3.500.000 / bulan / faskes</td>
+          <td>Pendapatan berulang bulanan (MRR) dengan tingkat retensi tinggi (*high switching cost*).</td>
+        </tr>
+        <tr>
+          <td><strong>Enterprise License & SLA</strong></td>
+          <td>Rumah Sakit Swasta (Tipe C & D)</td>
+          <td>Setup Fee Rp 50jt - Rp 150jt + Rp 5jt - Rp 12jt / bulan maintenance</td>
+          <td>Kontrak tahunan multi-tahun, custom bridging antrean farmasi & PACS radiologi.</td>
+        </tr>
+        <tr>
+          <td><strong>Value-Added API & Transactions</strong></td>
+          <td>Jaringan Lab & Ekosistem Farmasi</td>
+          <td>Pay-per-transaction (Rp 500 - Rp 1.500 / request bridging klaim & resep)</td>
+          <td>Potensi monetisasi dari integrasi suplier obat B2B & notifikasi WhatsApp gateway.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h1>4. Keunggulan Kompetitif (Competitive Moats)</h1>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="color: #0369a1;">1. Teknologi Modern & Latensi Super Rendah</h3>
+        <p style="font-size: 8pt; color: #475569;">Dibangun dengan Next.js 15, TypeScript, Tailwind CSS, dan Drizzle ORM. Waktu respon UI &lt; 100ms dibandingkan software desktop legacy berbasis Java/VB6 yang berat.</p>
+      </div>
+
+      <div class="card">
+        <h3 style="color: #0369a1;">2. Kepatuhan Hukum Built-in (Permenkes 24 & PDP)</h3>
+        <p style="font-size: 8pt; color: #475569;">Satu-satunya sistem yang langsung menyematkan proteksi locking 24 jam, pencatatan Addendum ber-audit trail, dan Consent engine berbasis FHIR R4 sejak hari pertama.</p>
+      </div>
+
+      <div class="card">
+        <h3 style="color: #0369a1;">3. Zero-Interruption Offline Resilience</h3>
+        <p style="font-size: 8pt; color: #475569;">Pelayanan dokter di poli tidak pernah macet akibat internet putus. Sistem memiliki arsitektur dual-write dengan queue retry otomatis saat koneksi gateway pulih.</p>
+      </div>
+
+      <div class="card">
+        <h3 style="color: #0369a1;">4. Pengalaman Klinis Terbaik bagi DPJP (UX DPJP)</h3>
+        <p style="font-size: 8pt; color: #475569;">Form SOAP cerdas, katalog terintegrasi ICD-10, ICD-9-CM, Kamus Farmasi (KFA), serta peringatan bahaya TTV / alergi obat otomatis (Clinical Decision Support).</p>
+      </div>
+    </div>
+
+    <h1>5. Unit Economics & Metrik Finansial Proyeksi</h1>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Metrik Unit Bisnis</th>
+          <th>Estimasi Target</th>
+          <th>Rasionalisasi Bisnis</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Customer Acquisition Cost (CAC)</strong></td>
+          <td>Rp 4.500.000 / Faskes</td>
+          <td>Melalui direct B2B sales, kemitraan asosiasi klinik (ASKLIN/PKFI), dan digital marketing.</td>
+        </tr>
+        <tr>
+          <td><strong>Lifetime Value (LTV)</strong></td>
+          <td>Rp 54.000.000 / Faskes</td>
+          <td>Berdasarkan rata-rata masa berlangganan 36 bulan dengan ARPU Rp 1.5jt/bulan.</td>
+        </tr>
+        <tr>
+          <td><strong>LTV / CAC Ratio</strong></td>
+          <td><strong>12.0x</strong></td>
+          <td>Rasio unit economics yang luar biasa sehat (&gt; 3x standar industri SaaS).</td>
+        </tr>
+        <tr>
+          <td><strong>Gross Margin</strong></td>
+          <td><strong>82% - 85%</strong></td>
+          <td>Infrastruktur cloud ringan dengan arsitektur serverless & efisiensi SQLite/Postgres.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== TRACTION, ROADMAP & USE OF FUNDS ==================== -->
+  <div>
+    <h1>6. Proyeksi Pertumbuhan Finansial (Tahun 1 - Tahun 3)</h1>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Tahun Finansial</th>
+          <th>Jumlah Faskes Aktif</th>
+          <th>Monthly Recurring Rev (MRR)</th>
+          <th>Annual Recurring Rev (ARR)</th>
+          <th>Gross Margin (%)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Tahun 1 (2026)</strong></td>
+          <td>150 Faskes</td>
+          <td>Rp 300 Juta</td>
+          <td>Rp 3.6 Miliar</td>
+          <td>78%</td>
+        </tr>
+        <tr>
+          <td><strong>Tahun 2 (2027)</strong></td>
+          <td>600 Faskes</td>
+          <td>Rp 1.35 Miliar</td>
+          <td>Rp 16.2 Miliar</td>
+          <td>83%</td>
+        </tr>
+        <tr>
+          <td><strong>Tahun 3 (2028)</strong></td>
+          <td>1.800 Faskes</td>
+          <td>Rp 4.2 Miliar</td>
+          <td>Rp 50.4 Miliar</td>
+          <td>86%</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h1>7. Roadmap Produk & Ekspansi Bisnis</h1>
+
+    <div class="card">
+      <ul style="font-size: 8.5pt; margin-left: 18px; line-height: 1.6; color: #334155;">
+        <li><strong>Fase 1 (Bulan 1 - 6):</strong> Dominasi Pasar Rawat Jalan & Bridging SATUSEHAT Kemenkes untuk 150 klinik piloting di Jabodetabek & Jawa Barat.</li>
+        <li><strong>Fase 2 (Bulan 7 - 12):</strong> Peluncuran Modul Rawat Inap (Inpatient EHR), Bridging BPJS Kesehatan VClaim & Antrean Online Mobile JKN.</li>
+        <li><strong>Fase 3 (Bulan 13 - 24):</strong> Ekspansi Nasional ke Jawa Timur, Jawa Tengah, Bali, dan Sumatera; Integrasi B2B Supply Chain Farmasi & E-Prescription Delivery.</li>
+        <li><strong>Fase 4 (Bulan 25 - 36):</strong> AI Clinical Co-Pilot untuk asisten dokter (analisis resep & deteksi dini komplikasi) serta ekspansi ke faskes regional Asia Tenggara.</li>
+      </ul>
+    </div>
+
+    <h1>8. Kebutuhan Dana Investasi & Alokasi (Use of Funds)</h1>
+
+    <div class="grid-2">
+      <div class="card" style="background: #f8fafc;">
+        <h3 style="color: #0369a1;">Target Putaran Pendanaan (Ask)</h3>
+        <div style="font-size: 18pt; font-weight: 800; color: #0f172a; margin: 6px 0;">
+          IDR 5.000.000.000
+        </div>
+        <p style="font-size: 8pt; color: #64748b;">(Seed Round / Pertukaran Saham Ekuitas atau Convertible Note) untuk mempercepat ekspansi pasar dan mencapai milestone 600 faskes dalam 18 bulan.</p>
+      </div>
+
+      <div class="card" style="background: #f8fafc;">
+        <h3 style="color: #166534;">Alokasi Penggunaan Dana</h3>
+        <table style="margin-top: 4px; font-size: 7.5pt;">
+          <tr><td><strong>40%</strong></td><td>Product Engineering & Integrasi BPJS/SATUSEHAT</td></tr>
+          <tr><td><strong>35%</strong></td><td>B2B Go-To-Market, Sales & Asosiasi Faskes</td></tr>
+          <tr><td><strong>15%</strong></td><td>Operations, Customer Success & Medical Compliance</td></tr>
+          <tr><td><strong>10%</strong></td><td>Legal, ISO 27001 Certification & Working Capital</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="callout callout-info" style="margin-top: 15px;">
+      <strong>Kesimpulan untuk Investor:</strong><br>
+      Kombinasi regulasi wajib Kemenkes, pasar faskes Indonesia yang sangat besar, dan keunggulan teknologi *offline-first FHIR-native* menjadikan platform ini peluang investasi SaaS B2B dengan resiko terukur (*regulatory moat*) dan potensi skala pertumbuhan eksponensial.
+    </div>
+  </div>
+
+</body>
+</html>

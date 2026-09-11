@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>BPMN & Functional Specification Document (FSD) - SIMRS SATUSEHAT RME</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    @page {
+      size: A4 portrait;
+      margin: 15mm 13mm 15mm 13mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9pt;
+      line-height: 1.48;
+      color: #0f172a;
+      background: #ffffff;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .avoid-break {
+      page-break-inside: avoid;
+    }
+
+    /* Cover Page */
+    .cover {
+      min-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 15px 5px;
+      page-break-after: always;
+    }
+
+    .cover-header {
+      border-bottom: 3px solid #0284c7;
+      padding-bottom: 20px;
+      margin-bottom: 20px;
+    }
+
+    .badge-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 9999px;
+      color: #166534;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .cover-title {
+      font-size: 23pt;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.25;
+      margin-bottom: 12px;
+      letter-spacing: -0.6px;
+    }
+
+    .cover-subtitle {
+      font-size: 12pt;
+      font-weight: 600;
+      color: #0369a1;
+      line-height: 1.4;
+      margin-bottom: 14px;
+    }
+
+    .cover-desc {
+      font-size: 9.5pt;
+      color: #475569;
+      line-height: 1.6;
+      max-width: 95%;
+      margin-bottom: 20px;
+    }
+
+    .cover-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 18px;
+    }
+
+    .meta-box {
+      display: flex;
+      flex-direction: column;
+    }
+    .meta-box .lbl {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #64748b;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .meta-box .val {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .cover-footer {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 8pt;
+      color: #94a3b8;
+    }
+
+    /* Headings */
+    h1 {
+      font-size: 13.5pt;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 5px;
+      margin-top: 18px;
+      margin-bottom: 10px;
+      letter-spacing: -0.3px;
+    }
+
+    h2 {
+      font-size: 11pt;
+      font-weight: 700;
+      color: #0369a1;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      border-left: 3px solid #0284c7;
+      padding-left: 8px;
+    }
+
+    h3 {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 10px;
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin-bottom: 7px;
+      color: #334155;
+    }
+
+    /* Swimlane & Workflow Boxes */
+    .swimlane-container {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+    }
+
+    .swimlane-row {
+      display: flex;
+      border-bottom: 1px dashed #cbd5e1;
+      padding: 6px 0;
+      align-items: center;
+      font-size: 8pt;
+    }
+    .swimlane-row:last-child {
+      border-bottom: none;
+    }
+
+    .swimlane-actor {
+      width: 25%;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .swimlane-action {
+      width: 75%;
+      color: #334155;
+      padding-left: 10px;
+      border-left: 2px solid #0284c7;
+    }
+
+    /* FSD Phase Spec Cards */
+    .fsd-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .fsd-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 5px;
+      margin-bottom: 6px;
+    }
+
+    .phase-badge {
+      background: #e0f2fe;
+      color: #0369a1;
+      font-weight: 700;
+      font-size: 8pt;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .phase-title {
+      font-weight: 700;
+      font-size: 9.5pt;
+      color: #0f172a;
+      flex: 1;
+      margin-left: 8px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 9999px;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-ui { background: #fdf2f8; color: #9d174d; border: 1px solid #fbcfe8; }
+    .badge-api { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-family: 'JetBrains Mono', monospace; }
+    .badge-rule { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      margin-bottom: 10px;
+      font-size: 8pt;
+    }
+
+    th {
+      background: #0f172a;
+      color: #ffffff;
+      text-align: left;
+      padding: 6px 8px;
+      font-weight: 600;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    .callout {
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      font-size: 8pt;
+    }
+    .callout-info { background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; }
+    .callout-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .callout-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+
+    pre, code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7.5pt;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .diagram-code {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 7.5pt;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1.4;
+      color: #334155;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover">
+    <div>
+      <div class="cover-header">
+        <div class="badge-top">
+          <span>✓ Dokumen Rekayasa Sistem: BPMN & Functional Specification Document (FSD)</span>
+        </div>
+        <div class="cover-title">
+          Spesifikasi Fungsional & Pemodelan Alur Kerja Klinis Rawat Jalan (BPMN / FSD)
+        </div>
+        <div class="cover-subtitle">
+          SIMRS & Rekam Medis Elektronik (RME) Terintegrasi SATUSEHAT Kemenkes RI (HL7 FHIR R4)
+        </div>
+        <div class="cover-desc">
+          Dokumen teknis komprehensif yang memetakan seluruh interaksi fungsional antarmuka (UI), validasi logika bisnis (*Business Rules Engine*), alur kerja lintas peran (*Swimlane BPMN*), serta integrasi pipeline data otomatis ke platform SATUSEHAT sesuai mandat <strong>Permenkes No. 24 Tahun 2022</strong> dan <strong>UU Perlindungan Data Pribadi No. 27/2022</strong>.
+        </div>
+
+        <div class="cover-grid">
+          <div class="meta-box">
+            <span class="lbl">Klasifikasi Dokumen</span>
+            <span class="val">Functional Spec & Clinical BPMN (FSD-CLN-01)</span>
+          </div>
+          <div class="meta-box">
+            <span class="lbl">Versi Dokumen</span>
+            <span class="val">v1.0.0 (Production Blueprint)</span>
+          </div>
+          <div class="meta-box">
+            <span class="lbl">Target Pembaca</span>
+            <span class="val">Software Engineer, QA/Tester, Komite Medis, DPJP</span>
+          </div>
+          <div class="meta-box">
+            <span class="lbl">Tanggal Pengesahan</span>
+            <span class="val">11 September 2026</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <span>SIMRS & SATUSEHAT Integration Suite &bull; Engineering Documentation</span>
+      <span>Dokumen Rahasia & Acuan Baku Implementasi Faskes</span>
+    </div>
+  </div>
+
+  <!-- ==================== BPMN MASTER SWIMLANE ==================== -->
+  <div>
+    <h1>1. Pemodelan Alur Kerja Klinis Master (BPMN Swimlane)</h1>
+    
+    <p>
+      Alur pelayanan rawat jalan dirancang terpadu dalam 6 jalur aktor yang saling terkoordinasi secara asinkronus dan real-time:
+    </p>
+
+    <div class="swimlane-container">
+      <div class="swimlane-row">
+        <div class="swimlane-actor">👤 1. Pasien / Keluarga</div>
+        <div class="swimlane-action">
+          Tiba di Faskes &rarr; Menyerahkan KTP (NIK) di Loket &rarr; Memberikan Persetujuan (Consent UU PDP) &rarr; Menerima Karcis Antrean & Kartu Berobat &rarr; Menunggu di Ruang Tunggu Poli &rarr; Masuk Ruang Periksa saat Dipanggil &rarr; Menerima Edukasi & Lembar E-Resep / Resume Medis.
+        </div>
+      </div>
+
+      <div class="swimlane-row">
+        <div class="swimlane-actor">🖥️ 2. Petugas Pendaftaran</div>
+        <div class="swimlane-action">
+          Input NIK 16 digit &rarr; Query Validasi IHS SATUSEHAT &rarr; Verifikasi/Input Demografi &rarr; Perekaman Informed Consent (Opt-In/Out) &rarr; Pilih Poli Tujuan & Triase &rarr; Terbitkan Tiket Antrean (misal: <code>A-01</code>) & Cetak Kartu Pasien Barcode.
+        </div>
+      </div>
+
+      <div class="swimlane-row">
+        <div class="swimlane-actor">👩‍⚕️ 3. Perawat Poliklinik</div>
+        <div class="swimlane-action">
+          Monitoring Worklist Poli &rarr; Tekan Tombol "Panggil Pasien" (Trigger TTS Audio & TV Display) &rarr; Anamnesis Awal & Pengukuran TTV (Tensi, Nadi, Suhu, SpO2, BB/TB) &rarr; Evaluasi Early Warning Alert IMT & TTV &rarr; Ubah Status Kunjungan: <code>in-progress</code>.
+        </div>
+      </div>
+
+      <div class="swimlane-row">
+        <div class="swimlane-actor">👨‍⚕️ 4. Dokter DPJP</div>
+        <div class="swimlane-action">
+          Buka Dashboard 1 Layar &rarr; Anamnesis SOAP Terpadu &rarr; Input Diagnosis Primer/Sekunder (ICD-10) &rarr; Input Tindakan Medis (ICD-9-CM) &rarr; Order Penunjang Lab (LOINC) / Rad (jika perlu) &rarr; E-Prescribing KFA (dengan visualisasi jadwal minum & cek alergi) &rarr; Rencana Kontrol & Kepulangan &rarr; Finalisasi Berkas.
+        </div>
+      </div>
+
+      <div class="swimlane-row">
+        <div class="swimlane-actor">💊 5. Penunjang & Farmasi</div>
+        <div class="swimlane-action">
+          <em>Laboratorium:</em> Input Hasil Uji + Nilai Rujukan + Flag Kritis.<br>
+          <em>Radiologi:</em> Input Ekspertise Pembacaan X-Ray/USG.<br>
+          <em>Apoteker:</em> Verifikasi E-Resep KFA & Jadwal Minum Obat &rarr; Cetak Etiket & Dispensing Obat.
+        </div>
+      </div>
+
+      <div class="swimlane-row">
+        <div class="swimlane-actor">⚙️ 6. Background Engine</div>
+        <div class="swimlane-action">
+          Otomatis mentransformasikan data lokal &rarr; Resource FHIR HL7 R4 (<code>Encounter</code>, <code>Condition</code>, <code>Observation</code>, <code>MedicationRequest</code>, <code>Composition</code>) &rarr; POST ke SATUSEHAT Gateway &rarr; Auto-Lock berkas dalam 24 jam & Log Audit Addendum.
+        </div>
+      </div>
+    </div>
+
+    <h1>2. Diagram Transmisi Data Teknis (Sequence Diagram)</h1>
+
+    <div class="diagram-code">
+<strong>ALUR INTERAKSI TEKNIS: DPJP &rarr; DATABASE LOKAL &rarr; SATUSEHAT CLOUD</strong><br><br>
+[DPJP UI] --(1) Submit Form SOAP / Resep KFA--> [Next.js API Handler: /api/encounters]<br>
+[Next.js API] --(2) Write SQLite Local Database (Drizzle ORM)--> [Local DB Store]<br>
+[Local DB Store] --(3) Data Committed (HTTP 200 OK)--> [Next.js API]<br>
+[Next.js API] --(4) Background Async FHIR Transformation Engine--> [FHIR Bundle Payload]<br>
+[Next.js API] --(5) HTTPS OAuth2 POST /Encounter, /Condition, /MedReq--> [SATUSEHAT Cloud Gateway]<br>
+alt Jika Gateway Respons 201 Created<br>
+&nbsp;&nbsp;[SATUSEHAT Cloud] --> [Next.js API]: Return FHIR Resource ID (e.g. "ss-enc-89210")<br>
+&nbsp;&nbsp;[Next.js API] --> [Local DB]: Update encounters.syncStatus = 'synced'<br>
+else Jika Gateway Timeout / Error 504<br>
+&nbsp;&nbsp;[SATUSEHAT Cloud] --> [Next.js API]: Error 504 / Connection Timeout<br>
+&nbsp;&nbsp;[Next.js API] --> [Local DB]: Write satusehat_sync_logs (status: 'failed', retry_count: 0)<br>
+&nbsp;&nbsp;[Next.js API] --> [DPJP UI]: Banner Notifikasi "Data tersimpan lokal, antrean sync pending"<br>
+end
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== SPESIFIKASI FUNGSIONAL LENGKAP ==================== -->
+  <div>
+    <h1>3. Spesifikasi Fungsional Terinci (FSD per Fase Pelayanan)</h1>
+
+    <!-- FASE 1 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-01</span>
+        <span class="phase-title">Pendaftaran Pasien, Validasi NIK/IHS & Informed Consent UU PDP</span>
+        <span class="badge badge-ui">Loket / Admission</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>PatientRegistrationModule.tsx</code>, <code>QueueTicketPrintModal.tsx</code>, <code>PatientCardPrintModal.tsx</code></td>
+        </tr>
+        <tr>
+          <td><strong>Input & Parameter</strong></td>
+          <td>NIK (16 digit), Nama Lengkap, Tanggal Lahir (YYYY-MM-DD), Jenis Kelamin, No HP, Alamat, Golongan Darah, Kontak Darurat, Payer (BPJS/Mandiri), Persetujuan SATUSEHAT (Opt-In/Out).</td>
+        </tr>
+        <tr>
+          <td><strong>Aturan Validasi (Rules)</strong></td>
+          <td>
+            <ul style="margin-left: 14px;">
+              <li>NIK wajib 16 digit numerik dengan kode wilayah provinsi yang valid (11-96).</li>
+              <li>Sistem mengecek keunikan NIK; jika duplikat, tampilkan profil pasien eksisting.</li>
+              <li>Pilihan Consent "Opt-In" membuat status FHIR Consent aktif untuk pengiriman data cloud.</li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Aksi & Trigger Tombol</strong></td>
+          <td>
+            <strong>[Cari NIK]:</strong> Query ke endpoint <code>/api/satusehat/patient?nik=...</code> untuk auto-fill data.<br>
+            <strong>[Daftarkan Pasien & Cetak Antrean]:</strong> POST <code>/api/patients</code> & POST <code>/api/queue</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Output Sistem</strong></td>
+          <td>Data pasien tersimpan di <code>patients</code>, item antrean dibuat di <code>queue_items</code>, pop-up cetak karcis antrean & kartu berobat pasien ber-barcode MRN.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FASE 2 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-02</span>
+        <span class="phase-title">Manajemen Antrean Poli, Pemanggilan Suara TTS & Public TV Display</span>
+        <span class="badge badge-ui">Triage / Poli</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>ClinicalShiftBar.tsx</code>, <code>EhrLeftSidebar.tsx</code>, <code>PublicQueueDisplayModal.tsx</code>, <code>queueVoiceAnnouncer.ts</code></td>
+        </tr>
+        <tr>
+          <td><strong>Input & Parameter</strong></td>
+          <td>Pilihan Poli (Poli Penyakit Dalam, Poli Jantung, Poli Anak, dll), Filter Status Antrean (Semua, Menunggu, Sedang Dilayani, Selesai).</td>
+        </tr>
+        <tr>
+          <td><strong>Aturan Validasi (Rules)</strong></td>
+          <td>
+            <ul style="margin-left: 14px;">
+              <li>Pasien dengan triase <em>Geriatric</em> atau <em>Urgent</em> diprioritaskan di daftar tunggu.</li>
+              <li>Hanya 1 pasien yang dapat berstatus <code>in-progress</code> per dokter/ruangan periksa.</li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Aksi & Trigger Tombol</strong></td>
+          <td>
+            <strong>[Panggil Pasien]:</strong> Memanggil audio Text-to-Speech Web API: <em>"Nomor Antrean [No], silakan menuju [Nama Poli], Ruang [No Ruang]"</em>, update status antrean ke <code>in-progress</code>, dan sinkronisasi tampilan monitor Public Queue Display.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Output Sistem</strong></td>
+          <td>Audio pengumuman terdengar di speaker ruang tunggu, nomor antrean terpampang di monitor TV publik, worklist DPJP otomatis memuat profil pasien aktif.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FASE 3 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-03</span>
+        <span class="phase-title">Pemeriksaan Fisik, Tanda-Tanda Vital (TTV) & Early Warning Score</span>
+        <span class="badge badge-ui">Perawat / DPJP</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>VitalsCard.tsx</code>, <code>validation.ts</code> (evaluateVitalSigns)</td>
+        </tr>
+        <tr>
+          <td><strong>Input & Parameter</strong></td>
+          <td>Sistolik (mmHg), Diastolik (mmHg), Nadi (bpm), Suhu (°C), Pernapasan (x/mnt), SpO2 (%), Berat Badan (kg), Tinggi Badan (cm), Catatan Pemeriksaan Fisik.</td>
+        </tr>
+        <tr>
+          <td><strong>Aturan Validasi (Rules)</strong></td>
+          <td>
+            <ul style="margin-left: 14px;">
+              <li>Kalkulasi Indeks Massa Tubuh (IMT / BMI): <code>BB (kg) / (TB (m))²</code> secara real-time.</li>
+              <li><strong>Early Warning Alerts:</strong>
+                Sistolik &gt; 180 / &lt; 90 mmHg (Kritis), Nadi &gt; 120 / &lt; 50 bpm (Kritis), Suhu &gt; 38.5°C (Demam Tinggi), SpO2 &lt; 92% (Hipoksia).
+              </li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Aksi & Trigger Tombol</strong></td>
+          <td>
+            <strong>[Simpan TTV]:</strong> Memvalidasi rentang fisiologis dan memperbarui data TTV di tabel <code>vitals</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Output Sistem</strong></td>
+          <td>Nilai IMT dan kategori gizi ditampilkan; badge status "Critical Alert" merah menyala pada banner atas pasien jika ada parameter vital yang abnormal.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FASE 4 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-04</span>
+        <span class="phase-title">Asuhan Medis DPJP (SOAP), Kodifikasi ICD-10 & Prosedur ICD-9-CM</span>
+        <span class="badge badge-ui">Dokter DPJP</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>OutpatientEntryForm.tsx</code> (Sub-modul Anamnesis & Diagnosis)</td>
+        </tr>
+        <tr>
+          <td><strong>Input & Parameter</strong></td>
+          <td>Keluhan Utama (*Subjective*), Anamnesis Riwayat Penyakit, Diagnosis Primer (ICD-10), Diagnosis Sekunder (ICD-10), Tindakan Medis (ICD-9-CM), Instruksi Edukasi.</td>
+        </tr>
+        <tr>
+          <td><strong>Aturan Validasi (Rules)</strong></td>
+          <td>
+            <ul style="margin-left: 14px;">
+              <li>Wajib mengisi minimal 1 Diagnosis Primer berstandar ICD-10 resmi.</li>
+              <li>Form dilengkapi pencarian autocomplete kode diagnosis internasional dan nama ramah pasien.</li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Output Sistem</strong></td>
+          <td>Tersimpan di tabel <code>diagnoses</code> dan <code>procedures</code>; siap dikirim sebagai FHIR <code>Condition</code> dan <code>Procedure</code>.</td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== SPESIFIKASI FASE 5 - 8 ==================== -->
+  <div>
+    <!-- FASE 5 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-05</span>
+        <span class="phase-title">Penunjang Diagnostik (Laboratorium LOINC & Radiologi Modalitas)</span>
+        <span class="badge badge-ui">Penunjang Medis</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>DiagnosticSupportModule.tsx</code>, tabel <code>diagnostic_orders</code>, <code>lab_results</code>, <code>radiology_results</code></td>
+        </tr>
+        <tr>
+          <td><strong>Input & Parameter</strong></td>
+          <td>Kode Tes (LOINC), Kategori (Lab / Radiologi), Prioritas (Rutin, Cito/Urgent), Nilai Hasil Uji, Satuan, Rentang Rujukan Normal, Kesimpulan Ekspertise Radiologi.</td>
+        </tr>
+        <tr>
+          <td><strong>Aturan Validasi (Rules)</strong></td>
+          <td>
+            Sistem otomatis membandingkan nilai hasil lab dengan rentang rujukan: jika nilai melebihi batas, berikan flag visual <strong>"High"</strong>, <strong>"Low"</strong>, atau <strong>"Critical"</strong>.
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Output Sistem</strong></td>
+          <td>Hasil penunjang tampil di tab "Penunjang Lab & Radiologi" dan langsung terangkum dalam Resume Medis Terpadu.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FASE 6 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-06</span>
+        <span class="phase-title">Resep Elektronik (CPOE / E-Prescribing) Standar Master KFA Kemenkes</span>
+        <span class="badge badge-ui">DPJP & Farmasi</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>OutpatientEntryForm.tsx</code>, <code>MedicationScheduleCard.tsx</code>, <code>PrescriptionPrintModal.tsx</code></td>
+        </tr>
+        <tr>
+          <td><strong>Input & Parameter</strong></td>
+          <td>Kode Obat KFA Kemenkes (contoh: <code>93000182</code>), Nama Obat, Sediaan, Dosis, Frekuensi, Waktu Minum (Sebelum/Sesudah Makan), Checkbox Jadwal (Pagi/Siang/Sore/Malam), Jumlah & Durasi (Hari).</td>
+        </tr>
+        <tr>
+          <td><strong>Aturan Validasi (Rules)</strong></td>
+          <td>
+            <strong>Deteksi Alergi Obat Otomatis:</strong> Jika obat yang dipilih memiliki relasi silang dengan daftar alergi pasien, tampilkan modal peringatan bahaya (*Clinical Decision Support*).
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Output Sistem</strong></td>
+          <td>Tersimpan di tabel <code>prescriptions</code>, visualisasi kartu jadwal obat terbit, modal cetak lembar resep digital resmi ber-barcode siap diproses apotek.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FASE 7 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-07</span>
+        <span class="phase-title">Resume Medis Terintegrasi 1 Layar & Cetak Berkas Rekam Medis</span>
+        <span class="badge badge-ui">Clinical Review</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>ResumeMedisPrintModal.tsx</code>, <code>EhrRightPanel.tsx</code>, <code>OutpatientTimeline.tsx</code></td>
+        </tr>
+        <tr>
+          <td><strong>Input & Parameter</strong></td>
+          <td>Instruksi Tindak Lanjut, Tanggal Kontrol Ulang, Rujukan RS Lain (jika ada), Disposisi Kepulangan (Pulang Berobat Jalan, Rujuk Rawat Inap, Rujuk RS Luar).</td>
+        </tr>
+        <tr>
+          <td><strong>Output Sistem</strong></td>
+          <td>Lembar Resume Medis Rawat Jalan resmi ber-kop rumah sakit, barcode nomor rekam medis, QR code keabsahan digital, dan rincian lengkap SOAP siap cetak (A4).</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FASE 8 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-08</span>
+        <span class="phase-title">Penguncian Berkas 24 Jam (Permenkes 24/2022) & Audit Trail Addendum</span>
+        <span class="badge badge-rule">Legal Compliance</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>MedicalRecordLockModal.tsx</code>, tabel <code>medical_addendums</code>, field <code>encounters.isLocked</code></td>
+        </tr>
+        <tr>
+          <td><strong>Aturan Validasi (Rules)</strong></td>
+          <td>
+            <ul style="margin-left: 14px;">
+              <li>Sesuai Permenkes No. 24/2022 Pasal 21, seluruh berkas rekam medis terkunci permanen setelah 24 jam pasca-pemeriksaan atau saat dokter menekan "Kunci Berkas".</li>
+              <li>Berkas terkunci tidak dapat diedit atau dihapus secara langsung (*Immutability Rule*).</li>
+              <li>Koreksi atau catatan tambahan hanya boleh dilakukan melalui formulir <strong>Addendum Medis</strong> yang merekam nama dokter dan timestamp ISO audit.</li>
+            </ul>
+          </td>
+        </tr>
+        <tr>
+          <td><strong>Output Sistem</strong></td>
+          <td>Ikon gembok merah aktif pada header, form beralih ke mode *read-only*, riwayat Addendum Medis terlampir permanen di bawah rekam medis asli.</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- FASE 9 -->
+    <div class="fsd-card avoid-break">
+      <div class="fsd-header">
+        <span class="phase-badge">FASE-09</span>
+        <span class="phase-title">Interoperabilitas FHIR R4, Inspector Payload & Failover Retry Sync</span>
+        <span class="badge badge-api">Integration Engine</span>
+      </div>
+      <table>
+        <tr>
+          <td style="width: 22%;"><strong>Antarmuka & Komponen</strong></td>
+          <td style="width: 78%;"><code>SatusehatFhirDetailModal.tsx</code>, <code>RequestLogs.tsx</code>, <code>fhir-transformer.ts</code>, <code>/api/satusehat/sync-retry</code></td>
+        </tr>
+        <tr>
+          <td><strong>Fitur Fungsional</strong></td>
+          <td>
+            1. Inspector JSON payload mentah untuk setiap resource FHIR (Encounter, Condition, Obs, MedReq, Consent, CarePlan).<br>
+            2. Pelacakan status HTTP response code dan pesan error dari gateway Kemenkes.<br>
+            3. Tombol <strong>[Retry Sync]</strong> untuk mengirim ulang resource yang mengalami kegagalan koneksi.
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="callout callout-success" style="margin-top: 14px;">
+      <strong>Persetujuan & Otorisasi FSD:</strong><br>
+      Spesifikasi Fungsional dan BPMN Alur Klinis ini merupakan dokumen acuan baku untuk pengembangan antarmuka, pembuatan tes QA, serta pelatihan operasional bagi tenaga medis di faskes.
+    </div>
+  </div>
+
+</body>
+</html>

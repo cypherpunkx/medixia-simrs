@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>User Stories & Product Backlog - SIMRS SATUSEHAT RME</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    @page {
+      size: A4 portrait;
+      margin: 16mm 14mm 16mm 14mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9.5pt;
+      line-height: 1.5;
+      color: #1e293b;
+      background: #ffffff;
+    }
+
+    /* Print Specific Page Breaks */
+    .page-break {
+      page-break-before: always;
+    }
+
+    .avoid-break {
+      page-break-inside: avoid;
+    }
+
+    /* Cover Page */
+    .cover {
+      min-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 10px 5px;
+      page-break-after: always;
+    }
+
+    .cover-top {
+      border-bottom: 3px solid #0284c7;
+      padding-bottom: 25px;
+    }
+
+    .faskes-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 9999px;
+      color: #166534;
+      font-size: 9pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 18px;
+    }
+
+    .cover-title {
+      font-size: 24pt;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.25;
+      margin-bottom: 12px;
+      letter-spacing: -0.5px;
+    }
+
+    .cover-subtitle {
+      font-size: 12.5pt;
+      font-weight: 600;
+      color: #0369a1;
+      line-height: 1.4;
+      margin-bottom: 15px;
+    }
+
+    .cover-desc {
+      font-size: 9.5pt;
+      color: #64748b;
+      max-width: 95%;
+      line-height: 1.6;
+    }
+
+    .cover-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 25px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .meta-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .meta-label {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #64748b;
+      font-weight: 600;
+      margin-bottom: 3px;
+    }
+
+    .meta-value {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .cover-footer {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 8pt;
+      color: #64748b;
+    }
+
+    /* Headings */
+    h1 {
+      font-size: 14pt;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 5px;
+      margin-top: 18px;
+      margin-bottom: 12px;
+      letter-spacing: -0.3px;
+    }
+
+    h2 {
+      font-size: 11.5pt;
+      font-weight: 700;
+      color: #0369a1;
+      margin-top: 14px;
+      margin-bottom: 8px;
+      border-left: 3px solid #0284c7;
+      padding-left: 8px;
+    }
+
+    h3 {
+      font-size: 10pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 10px;
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin-bottom: 8px;
+      color: #334155;
+    }
+
+    /* Cards & Containers */
+    .card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 10px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #f1f5f9;
+      padding-bottom: 6px;
+      margin-bottom: 6px;
+    }
+
+    .story-id {
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      color: #0284c7;
+      font-size: 8.5pt;
+      background: #e0f2fe;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .story-title {
+      font-weight: 700;
+      font-size: 9.5pt;
+      color: #0f172a;
+      flex: 1;
+      margin-left: 8px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 9999px;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .badge-must { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+    .badge-should { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+    .badge-could { background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; }
+    .badge-fhir { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-family: 'JetBrains Mono', monospace; font-size: 7.5pt; }
+
+    .story-narrative {
+      background: #f8fafc;
+      border-left: 3px solid #0284c7;
+      padding: 6px 10px;
+      margin-bottom: 6px;
+      font-size: 8.5pt;
+      border-radius: 0 4px 4px 0;
+    }
+
+    .story-narrative p {
+      margin-bottom: 2px;
+    }
+    .story-narrative p:last-child {
+      margin-bottom: 0;
+    }
+
+    .gherkin-box {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 8pt;
+      font-family: 'JetBrains Mono', monospace;
+      color: #334155;
+      line-height: 1.4;
+    }
+
+    .gherkin-keyword {
+      font-weight: 700;
+      color: #0284c7;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      margin-bottom: 12px;
+      font-size: 8pt;
+    }
+
+    th {
+      background: #0f172a;
+      color: #ffffff;
+      text-align: left;
+      padding: 6px 8px;
+      font-weight: 600;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    /* Code & Technical blocks */
+    pre, code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 8pt;
+    }
+
+    .callout {
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+      font-size: 8.5pt;
+    }
+
+    .callout-info {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      color: #0369a1;
+    }
+
+    .callout-warning {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      color: #92400e;
+    }
+
+    .callout-success {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: #166534;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .diagram-box {
+      background: #f8fafc;
+      border: 1px dashed #94a3b8;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 10px;
+      font-size: 8pt;
+      font-family: 'JetBrains Mono', monospace;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover">
+    <div class="cover-top">
+      <div class="faskes-badge">
+        <span>✓ Standar Resmi Kemenkes RI & HL7 FHIR R4</span>
+      </div>
+      <div class="cover-title">
+        Spesifikasi Kebutuhan Sistem:<br>User Stories & Product Backlog
+      </div>
+      <div class="cover-subtitle">
+        SIMRS & Rekam Medis Elektronik (RME) Terintegrasi SATUSEHAT Platform
+      </div>
+      <div class="cover-desc">
+        Dokumen rekayasa sistem komprehensif yang mencakup arsitektur fungsional, alur asuhan klinis rawat jalan, kepatuhan Permenkes No. 24 Tahun 2022, implementasi UU Perlindungan Data Pribadi (UU PDP No. 27/2022), serta pipeline interoperabilitas FHIR Kemenkes RI.
+      </div>
+
+      <div class="cover-meta-grid">
+        <div class="meta-item">
+          <span class="meta-label">Versi Dokumen</span>
+          <span class="meta-value">v1.0.0 (Production Ready)</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Tanggal Terbit</span>
+          <span class="meta-value">11 September 2026</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Arsitek Sistem & Lead</span>
+          <span class="meta-value">Principal System Architect</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Status Kesiapan</span>
+          <span class="meta-value">Ready for Sprint Execution</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <span>Klasifikasi: Rahasia Internal & Tim Pengembang Faskes</span>
+      <span>SIMRS & SATUSEHAT Integration Suite</span>
+    </div>
+  </div>
+
+  <!-- ==================== RINGKASAN EKSEKUTIF & PERSONA ==================== -->
+  <div>
+    <h1>1. Ringkasan Eksekutif & Matriks Pengguna</h1>
+    
+    <p>
+      Sistem ini dirancang untuk mendigitalkan seluruh siklus pelayanan rawat jalan di fasilitas pelayanan kesehatan (Rumah Sakit dan Klinik) sekaligus memenuhi kewajiban bridging data rekam medis elektronik nasional sesuai amanat <strong>Permenkes No. 24 Tahun 2022</strong>.
+    </p>
+
+    <div class="callout callout-info">
+      <strong>Pilar Utama Arsitektur:</strong>
+      <ul style="margin-left: 18px; margin-top: 3px;">
+        <li><strong>Single-Pane Clinical View:</strong> DPJP dapat melihat riwayat SOAP, TTV, hasil lab/radiologi, dan e-resep dalam satu layar tanpa reload.</li>
+        <li><strong>Zero Data Loss & Resiliency:</strong> Penyimpanan lokal berkecepatan tinggi dengan Drizzle ORM + SQLite yang memiliki queue worker untuk sinkronisasi SATUSEHAT.</li>
+        <li><strong>Informed Consent UU PDP:</strong> Manajemen persetujuan pasien aktif (Opt-In / Opt-Out) sebelum data dipertukarkan ke cloud.</li>
+        <li><strong>Medical Record Lock 24 Jam:</strong> Integritas hukum rekam medis dengan sistem penguncian permanen dan pencatatan Addendum ber-audit trail.</li>
+      </ul>
+    </div>
+
+    <h2>Matriks Peran Pengguna (User Personas)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 15%;">Kode Aktor</th>
+          <th style="width: 25%;">Peran / Jabatan</th>
+          <th style="width: 60%;">Tanggung Jawab Utama dalam Sistem</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>ACT-01</strong></td>
+          <td>Petugas Pendaftaran (Admission)</td>
+          <td>Registrasi pasien baru/lama, pencarian NIK & validasi IHS Kemenkes, penentuan triase, cetak karcis antrean & kartu berobat, perekaman persetujuan PDP.</td>
+        </tr>
+        <tr>
+          <td><strong>ACT-02</strong></td>
+          <td>Perawat Poliklinik (Triage Nurse)</td>
+          <td>Manajemen antrean poli, pemanggilan suara Text-to-Speech (TTS), pemeriksaan awal tanda-tanda vital (TTV), deteksi tanda bahaya/warning TTV.</td>
+        </tr>
+        <tr>
+          <td><strong>ACT-03</strong></td>
+          <td>Dokter DPJP</td>
+          <td>Dokumentasi klinis SOAP, penegakan diagnosis (ICD-10), tindakan (ICD-9-CM), pembuatan e-resep (KFA), order lab/radiologi, instruksi kepulangan, penguncian berkas rekam medis.</td>
+        </tr>
+        <tr>
+          <td><strong>ACT-04</strong></td>
+          <td>Petugas Lab & Radiologi</td>
+          <td>Penerimaan order LOINC, input hasil laboratorium dengan nilai rujukan dan flag kritis, input ekspertise hasil radiologi (X-Ray/USG/CT-Scan).</td>
+        </tr>
+        <tr>
+          <td><strong>ACT-05</strong></td>
+          <td>Apoteker / Farmasi</td>
+          <td>Verifikasi e-resep KFA, pengecekan aturan minum visual (pagi/siang/sore/malam), konfirmasi dispensing, cetak etiket resep.</td>
+        </tr>
+        <tr>
+          <td><strong>ACT-06</strong></td>
+          <td>Admin IT & Integrator</td>
+          <td>Manajemen kredensial OAuth 2.0 (Client ID, Secret, Org ID), pemantauan telemetri latensi API, inspeksi payload FHIR, retry sinkronisasi gagal.</td>
+        </tr>
+        <tr>
+          <td><strong>ACT-07</strong></td>
+          <td>Pasien & Keluarga</td>
+          <td>Melihat display antrean publik di ruang tunggu, menerima lembar karcis, kartu pasien ber-barcode, e-resep dan resume medis resmi.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== STANDAR TATA KELOLA AGILE ==================== -->
+  <div>
+    <h1>2. Standar Tata Kelola Rekayasa (DoR & DoD)</h1>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3 style="color: #0369a1; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Definition of Ready (DoR)</h3>
+        <p style="font-size: 8pt; color: #64748b; margin-top: 2px;">Syarat Story masuk ke Sprint Backlog:</p>
+        <ul style="font-size: 8pt; margin-left: 14px; color: #334155; line-height: 1.45;">
+          <li>Format User Story memiliki Acceptance Criteria Given-When-Then.</li>
+          <li>Kesesuaian Permenkes 24/2022 & standar Kemenkes terverifikasi.</li>
+          <li>Kodifikasi medis (ICD-10, ICD-9-CM, LOINC, KFA) telah dispesifikasikan.</li>
+          <li>Skema Drizzle dan endpoint API Next.js telah dipetakan.</li>
+          <li>State UI (loading, empty, error) sudah disepakati bersama.</li>
+          <li>Story Points telah disetujui tim Engineering.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3 style="color: #166534; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Definition of Done (DoD)</h3>
+        <p style="font-size: 8pt; color: #64748b; margin-top: 2px;">Syarat Story dinyatakan selesai:</p>
+        <ul style="font-size: 8pt; margin-left: 14px; color: #334155; line-height: 1.45;">
+          <li>Lolos typecheck TypeScript (<code>tsc --noEmit</code>) tanpa error.</li>
+          <li>Unit & Repository tests mencapai code coverage ≥ 80%.</li>
+          <li>Payload FHIR JSON lolos validasi skema HL7 FHIR R4 resmi.</li>
+          <li>Kerahasiaan data terjaga: tidak ada Client Secret terekspos.</li>
+          <li>Format cetak (Resume, Karcis, Resep) rapi & proporsional.</li>
+          <li>Koreksi data rekam medis terkunci wajib melalui Addendum.</li>
+        </ul>
+      </div>
+    </div>
+
+    <h1>3. Matriks Pemetaan Teknis (Database ↔ API ↔ FHIR Kemenkes)</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>Modul Klinis</th>
+          <th>Tabel Drizzle ORM</th>
+          <th>Endpoint Internal Next.js</th>
+          <th>Resource HL7 FHIR R4 Kemenkes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Master Pasien</strong></td>
+          <td><code>patients</code></td>
+          <td><code>/api/patients</code>, <code>/api/patients/[id]</code></td>
+          <td><span class="badge badge-fhir">Patient</span></td>
+        </tr>
+        <tr>
+          <td><strong>Informed Consent</strong></td>
+          <td><code>patients (satusehatConsent)</code></td>
+          <td><code>/api/satusehat/patient</code></td>
+          <td><span class="badge badge-fhir">Consent</span></td>
+        </tr>
+        <tr>
+          <td><strong>Kunjungan Poli</strong></td>
+          <td><code>encounters</code></td>
+          <td><code>/api/encounters</code>, <code>/api/encounters/[id]</code></td>
+          <td><span class="badge badge-fhir">Encounter</span></td>
+        </tr>
+        <tr>
+          <td><strong>Tanda Vital (TTV)</strong></td>
+          <td><code>vitals</code></td>
+          <td><code>/api/encounters/[id]</code></td>
+          <td><span class="badge badge-fhir">Observation (vital-signs)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Diagnosis Medis</strong></td>
+          <td><code>diagnoses</code></td>
+          <td><code>/api/encounters/[id]</code></td>
+          <td><span class="badge badge-fhir">Condition (ICD-10)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Tindakan Medis</strong></td>
+          <td><code>procedures</code></td>
+          <td><code>/api/encounters/[id]</code></td>
+          <td><span class="badge badge-fhir">Procedure (ICD-9-CM)</span></td>
+        </tr>
+        <tr>
+          <td><strong>E-Resep Farmasi</strong></td>
+          <td><code>prescriptions</code></td>
+          <td><code>/api/encounters/[id]</code>, <code>/api/satusehat/kfa</code></td>
+          <td><span class="badge badge-fhir">MedicationRequest (KFA)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Order Lab & Rad</strong></td>
+          <td><code>diagnostic_orders</code></td>
+          <td><code>/api/encounters/[id]</code></td>
+          <td><span class="badge badge-fhir">ServiceRequest (LOINC)</span></td>
+        </tr>
+        <tr>
+          <td><strong>Hasil Penunjang</strong></td>
+          <td><code>lab_results</code>, <code>radiology_results</code></td>
+          <td><code>/api/encounters/[id]</code></td>
+          <td><span class="badge badge-fhir">DiagnosticReport & Obs</span></td>
+        </tr>
+        <tr>
+          <td><strong>Resume Medis</strong></td>
+          <td><code>encounters (followUpPlan)</code></td>
+          <td><code>/api/satusehat/resume-medis</code></td>
+          <td><span class="badge badge-fhir">Composition & CarePlan</span></td>
+        </tr>
+        <tr>
+          <td><strong>Audit & Log Sync</strong></td>
+          <td><code>satusehat_sync_logs</code></td>
+          <td><code>/api/satusehat/sync-retry</code></td>
+          <td><span class="badge badge-fhir">Bundle / Sync Audit</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== DETAILED USER STORIES ==================== -->
+  <div>
+    <h1>4. Rincian Lengkap User Stories & Kriteria Penerimaan</h1>
+
+    <!-- EPIC 01 -->
+    <h2>EPIC 01: Autentikasi, Manajemen Kredensial & Bridging SATUSEHAT (OAuth 2.0)</h2>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-01.1</span>
+        <span class="story-title">Koneksi OAuth 2.0 ke Gateway Auth SATUSEHAT Kemenkes RI</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Administrator IT Faskes</p>
+        <p><strong>Saya ingin:</strong> Menginput Client ID, Client Secret, dan memilih Environment (Staging / Production) untuk memperoleh JWT Access Token resmi,</p>
+        <p><strong>Sehingga:</strong> Seluruh transaksi bridging rekam medis faskes memiliki izin akses aman dan terotorisasi oleh Kemenkes RI.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Kredensial Client ID dan Client Secret yang sah dari DTO Kemenkes<br>
+        <span class="gherkin-keyword">WHEN</span> Admin menekan tombol "Hubungkan ke SATUSEHAT"<br>
+        <span class="gherkin-keyword">THEN</span> Sistem menerima token bearer aktif (TTL 3600 detik) dan menyimpannya secara terenkripsi.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-01.2</span>
+        <span class="story-title">Verifikasi & Profiling Identitas Faskes (Organization Resource)</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Administrator IT Faskes</p>
+        <p><strong>Saya ingin:</strong> Memverifikasi Organization ID faskes ke endpoint FHIR <code>Organization/{id}</code>,</p>
+        <p><strong>Sehingga:</strong> Memastikan faskes terdaftar secara valid di master database Kemenkes sebelum sinkronisasi dimulai.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Token OAuth aktif dan Organization ID (contoh: <code>10000004</code>)<br>
+        <span class="gherkin-keyword">WHEN</span> Tombol "Verifikasi Faskes" dieksekusi<br>
+        <span class="gherkin-keyword">THEN</span> Menampilkan nama resmi faskes, jenis pelayanan, status aktif, dan alamat faskes dari server SATUSEHAT.
+      </div>
+    </div>
+
+    <!-- EPIC 02 -->
+    <h2>EPIC 02: Pendaftaran, Identitas Pasien (NIK/IHS) & Manajemen Informed Consent (UU PDP)</h2>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-02.1</span>
+        <span class="story-title">Pencarian & Registrasi Pasien Berbasis NIK 16 Digit & Integrasi IHS Number</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Petugas Pendaftaran (Loket)</p>
+        <p><strong>Saya ingin:</strong> Mencari data pasien via 16 digit NIK yang langsung mengaitkan SATUSEHAT Patient ID (IHS),</p>
+        <p><strong>Sehingga:</strong> Pasien tidak memiliki rekam medis ganda dan riwayat kesehatannya tersinkron secara nasional.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Input 16 digit angka NIK KTP yang valid<br>
+        <span class="gherkin-keyword">WHEN</span> Petugas melakukan pencarian / submit registrasi<br>
+        <span class="gherkin-keyword">THEN</span> Sistem menautkan profil lokal dengan IHS Kemenkes (<code>P-xxxxxxxxxx</code>) dan mengisi data demografi secara akurat.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-02.2</span>
+        <span class="story-title">Manajemen Informed Consent Pertukaran Data Medis (UU PDP No. 27/2022)</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Petugas Loket & Pasien</p>
+        <p><strong>Saya ingin:</strong> Menetapkan status persetujuan (Opt-In / Opt-Out) berbagi data medis ke platform SATUSEHAT,</p>
+        <p><strong>Sehingga:</strong> Hak privasi pasien terlindungi secara hukum dan faskes patuh pada regulasi perlindungan data pribadi.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Pasien yang sedang mendaftar rawat jalan<br>
+        <span class="gherkin-keyword">WHEN</span> Pilihan Consent diatur ke "Opt-In" atau "Opt-Out"<br>
+        <span class="gherkin-keyword">THEN</span> Sistem menyusun payload FHIR <code>Consent</code> dengan provision type <code>permit</code> atau <code>deny</code>.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-02.3</span>
+        <span class="story-title">Penanganan Pasien Gawat Darurat Tanpa NIK (Emergency Fallback)</span>
+        <span class="badge badge-should">Should Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Petugas Pendaftaran IGD / Poliklinik</p>
+        <p><strong>Saya ingin:</strong> Mendaftarkan pasien darurat tanpa NIK dengan Nomor Rekam Medis Sementara (Temporary MRN),</p>
+        <p><strong>Sehingga:</strong> Pelayanan medis penyelamatan jiwa dapat segera dilakukan tanpa hambatan administrasi awal.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Pasien darurat tanpa tanda pengenal<br>
+        <span class="gherkin-keyword">WHEN</span> Petugas mencentang "Pasien Darurat Tanpa NIK"<br>
+        <span class="gherkin-keyword">THEN</span> Sistem menerbitkan No RM sementara dan menunda sinkronisasi IHS ke status <code>pending_identification</code>.
+      </div>
+    </div>
+
+    <!-- EPIC 03 -->
+    <h2>EPIC 03: Antrean Poliklinik, Pemanggilan Suara Text-to-Speech & Display TV</h2>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-03.1</span>
+        <span class="story-title">Penerbitan Nomor Antrean Poliklinik & Triase Prioritas</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Petugas Pendaftaran</p>
+        <p><strong>Saya ingin:</strong> Menerbitkan tiket antrean dengan kode departemen dan triase (Reguler, Geriatri, Pediatri, Urgensi),</p>
+        <p><strong>Sehingga:</strong> Pasien teralokasi secara berurutan pada poli yang dituju dengan estimasi waktu layanan yang jelas.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Pasien dan poli spesialis tujuan yang dipilih<br>
+        <span class="gherkin-keyword">WHEN</span> Pendaftaran poli dikonfirmasi<br>
+        <span class="gherkin-keyword">THEN</span> Tiket antrean (misal: <code>A-01</code>) dibuat di tabel <code>queue_items</code> dan masuk worklist dokter hari ini.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-03.2</span>
+        <span class="story-title">Pemanggilan Pasien dengan Suara Text-to-Speech (TTS) & Public Queue TV Display</span>
+        <span class="badge badge-should">Should Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Perawat Poliklinik / Dokter DPJP</p>
+        <p><strong>Saya ingin:</strong> Memanggil pasien dengan audio suara bahasa Indonesia dan menampilkan status di monitor ruang tunggu,</p>
+        <p><strong>Sehingga:</strong> Pasien di ruang tunggu dapat mendengar dan melihat giliran periksanya secara jelas dan tertib.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Antrean pasien berstatus "Menunggu" (Arrived)<br>
+        <span class="gherkin-keyword">WHEN</span> Tombol "Panggil Pasien" ditekan oleh perawat/dokter<br>
+        <span class="gherkin-keyword">THEN</span> Audio berbunyi: <em>"Nomor Antrean A 0 1, silakan menuju Poli Penyakit Dalam"</em><br>
+        <span class="gherkin-keyword">AND</span> Modal Public Queue Display memperbarui nomor aktif ke status "Sedang Dilayani".
+      </div>
+    </div>
+
+    <!-- EPIC 04 & 05 -->
+    <h2>EPIC 04 & 05: Asuhan Medis Rawat Jalan DPJP (SOAP), Kodifikasi ICD & Tanda Vital (TTV)</h2>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-04.1</span>
+        <span class="story-title">Dokumentasi Klinis SOAP, Anamnesis & Tindak Lanjut Pasien</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Dokter DPJP</p>
+        <p><strong>Saya ingin:</strong> Mengisi keluhan utama, riwayat penyakit (anamnesis), instruksi kontrol, dan status kepulangan,</p>
+        <p><strong>Sehingga:</strong> Catatan asuhan medis terekam lengkap dan siap dikonversi menjadi FHIR <code>Encounter</code> dan <code>CarePlan</code>.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Pasien dalam sesi konsultasi dokter aktif<br>
+        <span class="gherkin-keyword">WHEN</span> Dokter mengisi form SOAP dan menyimpan rekam medis<br>
+        <span class="gherkin-keyword">THEN</span> Data tersimpan ke tabel <code>encounters</code> dengan status kunjungan <code>finished</code>.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-04.2</span>
+        <span class="story-title">Kodifikasi Diagnosis ICD-10 & Prosedur Tindakan Medis ICD-9-CM</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Dokter DPJP</p>
+        <p><strong>Saya ingin:</strong> Memilih diagnosis primer/sekunder dari katalog ICD-10 dan tindakan medis dari katalog ICD-9-CM,</p>
+        <p><strong>Sehingga:</strong> Diagnosis terstandarisasi untuk klaim pembiayaan dan interoperabilitas FHIR <code>Condition</code> & <code>Procedure</code>.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Form entri diagnosis<br>
+        <span class="gherkin-keyword">WHEN</span> Dokter mengetik kode "I10" atau "Hipertensi"<br>
+        <span class="gherkin-keyword">THEN</span> Autocomplete menampilkan deskripsi medis resmi beserta nama ramah pasien dan mengaitkan ke encounter.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-05.1</span>
+        <span class="story-title">Pemeriksaan Fisik TTV, Kalkulasi IMT Otomatis & Early Warning Critical Badge</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Perawat & DPJP</p>
+        <p><strong>Saya ingin:</strong> Menginput Tensi, Nadi, Suhu, Pernapasan, SpO2, BB, TB dengan evaluasi otomatis,</p>
+        <p><strong>Sehingga:</strong> Sistem menghitung IMT secara real-time dan memberikan peringatan visual jika TTV berada di rentang kritis.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Pengisian BB (68 kg) dan TB (172 cm)<br>
+        <span class="gherkin-keyword">WHEN</span> Data diinput pada modul Vitals<br>
+        <span class="gherkin-keyword">THEN</span> IMT dihitung otomatis (22.99 kg/m² - Normal)<br>
+        <span class="gherkin-keyword">AND</span> Jika tekanan darah > 180 mmHg, badge "Critical Alert" merah menyala pada banner profil pasien.
+      </div>
+    </div>
+
+    <!-- EPIC 06 & 07 -->
+    <h2>EPIC 06 & 07: Penunjang Diagnostik Lab/Rad & E-Prescribing Terstandar KFA</h2>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-06.1</span>
+        <span class="story-title">Order & Hasil Laboratorium Terstandar LOINC dengan Flag Nilai Kritis</span>
+        <span class="badge badge-should">Should Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> DPJP & Petugas Lab</p>
+        <p><strong>Saya ingin:</strong> Membuat permintaan lab serta memasukkan hasil tes darah dengan nilai rujukan,</p>
+        <p><strong>Sehingga:</strong> Hasil tes terintegrasi di resume medis dan terpetakan ke FHIR <code>DiagnosticReport</code>.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Permintaan uji laboratorium (misal: HbA1c atau Glukosa Sewaktu)<br>
+        <span class="gherkin-keyword">WHEN</span> Analis lab menginput nilai hasil pemeriksaan<br>
+        <span class="gherkin-keyword">THEN</span> Sistem menandai status "Normal", "High", atau "Critical" sesuai nilai rujukan klinis.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-07.1</span>
+        <span class="story-title">Resep Elektronik Berbasis Kamus Farmasi dan Alat Kesehatan (KFA) Kemenkes RI</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Dokter DPJP</p>
+        <p><strong>Saya ingin:</strong> Meresepkan obat menggunakan katalog master KFA resmi dengan bentuk sediaan dan aturan minum terstruktur,</p>
+        <p><strong>Sehingga:</strong> Mengurangi resiko kesalahan obat (medication error) dan kompatibel dengan FHIR <code>MedicationRequest</code>.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Modul E-Prescribing<br>
+        <span class="gherkin-keyword">WHEN</span> Dokter memilih "Amlodipine 5 mg Tablet" (KFA 93000182)<br>
+        <span class="gherkin-keyword">THEN</span> Bentuk sediaan, satuan, aturan minum (Sesudah Makan), dan checkbox jadwal minum (Pagi/Malam) tersimpan terstruktur.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-07.3</span>
+        <span class="story-title">Deteksi Interaksi & Peringatan Alergi Obat Otomatis (Clinical Decision Support)</span>
+        <span class="badge badge-should">Should Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Dokter DPJP</p>
+        <p><strong>Saya ingin:</strong> Mendapatkan peringatan otomatis jika obat yang diresepkan memicu alergi pada pasien,</p>
+        <p><strong>Sehingga:</strong> Mencegah insiden anafilaksis dan meningkatkan keselamatan pasien (patient safety).</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Pasien memiliki riwayat alergi tercatat "Penisilin"<br>
+        <span class="gherkin-keyword">WHEN</span> Dokter mencoba menambahkan obat golongan Amoxicillin ke daftar resep<br>
+        <span class="gherkin-keyword">THEN</span> Modal konfirmasi bahaya alergi muncul dan mewajibkan verifikasi klinis dokter sebelum melanjutkan.
+      </div>
+    </div>
+
+    <!-- EPIC 08, 09, 10 -->
+    <h2>EPIC 08, 09 & 10: Resume Medis, Kepatuhan Permenkes 24/2022 & Interoperabilitas FHIR</h2>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-08.1</span>
+        <span class="story-title">Dashboard Resume Medis Terintegrasi Satu Layar & Ekspor Cetak Berkas Resmi</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> DPJP & Pasien</p>
+        <p><strong>Saya ingin:</strong> Meninjau seluruh ringkasan asuhan medis dalam 1 layar responsif dan mencetak lembar resmi berstandar RS,</p>
+        <p><strong>Sehingga:</strong> Mempermudah koordinasi medis dan menyediakan dokumen legal bagi pasien.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Kunjungan rawat jalan pasien yang telah selesai<br>
+        <span class="gherkin-keyword">WHEN</span> Tombol "Cetak Resume Medis" atau "Cetak Resep" ditekan<br>
+        <span class="gherkin-keyword">THEN</span> Modal cetak menampilkan dokumen format A4 ber-kop RS dengan QR code verifikasi dan barcode MRN yang siap cetak.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-09.1</span>
+        <span class="story-title">Penguncian Berkas Rekam Medis (Locking 24 Jam) Sesuai Permenkes No. 24/2022</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Komite Medis & Faskes</p>
+        <p><strong>Saya ingin:</strong> Rekam medis terkunci permanen setelah 24 jam selesai pemeriksaan atau saat difinalisasi oleh dokter,</p>
+        <p><strong>Sehingga:</strong> Mencegah manipulasi rekam medis secara ilegal demi kepatuhan hukum dan standar akreditasi.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Berkas kunjungan yang telah melewati batas 24 jam atau difinalisasi dokter<br>
+        <span class="gherkin-keyword">WHEN</span> Rekam medis berstatus terkunci (<code>isLocked = true</code>)<br>
+        <span class="gherkin-keyword">THEN</span> Form input beralih menjadi mode hanya-baca (read-only) dengan penanda gembok status hukum aktif.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-09.2</span>
+        <span class="story-title">Pencatatan Addendum Medis dengan Jejak Audit Transparan (Audit Trail)</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Dokter DPJP</p>
+        <p><strong>Saya ingin:</strong> Menambahkan catatan perbaikan (Addendum) pada rekam medis yang telah terkunci tanpa mengubah data asli,</p>
+        <p><strong>Sehingga:</strong> Penjelasan klinis tambahan memiliki histori audit yang sah (Nama Dokter, Timestamp, Catatan).</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Rekam medis yang berstatus terkunci permanen<br>
+        <span class="gherkin-keyword">WHEN</span> Dokter mengisi formulir Addendum Medis<br>
+        <span class="gherkin-keyword">THEN</span> Catatan tersimpan di tabel <code>medical_addendums</code> dan terlampir permanen di bawah riwayat kunjungan.
+      </div>
+    </div>
+
+    <div class="card avoid-break">
+      <div class="card-header">
+        <span class="story-id">US-10.1</span>
+        <span class="story-title">Inspector Payload FHIR R4 & Mekanisme Failover / Retry Sinkronisasi</span>
+        <span class="badge badge-must">Must Have</span>
+      </div>
+      <div class="story-narrative">
+        <p><strong>Sebagai:</strong> Administrator IT Faskes</p>
+        <p><strong>Saya ingin:</strong> Memeriksa status pengiriman resource FHIR per item dan melakukan retry manual jika gagal,</p>
+        <p><strong>Sehingga:</strong> Gangguan jaringan tidak mengakibatkan data hilang dan seluruh data berhasil terkirim ke Kemenkes.</p>
+      </div>
+      <div class="gherkin-box">
+        <span class="gherkin-keyword">GIVEN</span> Status sinkronisasi salah satu resource mengalami error (misal: HTTP 504 Gateway Timeout)<br>
+        <span class="gherkin-keyword">WHEN</span> Admin membuka modal "Detail Sinkronisasi FHIR" dan menekan tombol "Retry Sync"<br>
+        <span class="gherkin-keyword">THEN</span> Sistem mengirim ulang payload ke endpoint SATUSEHAT dan memperbarui status menjadi <code>synced</code> jika berhasil.
+      </div>
+    </div>
+
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== TABEL PRODUCT BACKLOG UTAMA ==================== -->
+  <div>
+    <h1>5. Matriks Prioritas Product Backlog (MoSCoW & Sprint Plan)</h1>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 8%;">ID</th>
+          <th style="width: 8%;">Epic</th>
+          <th style="width: 32%;">Item Fitur & Deskripsi Ringkas</th>
+          <th style="width: 10%;">Prioritas</th>
+          <th style="width: 8%;">Poin</th>
+          <th style="width: 16%;">Dependensi</th>
+          <th style="width: 18%;">Target Sprint</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>PB-001</strong></td>
+          <td>EPIC-01</td>
+          <td>OAuth 2.0 Auth Handler & Token Storage Staging/Prod</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>5</td>
+          <td>-</td>
+          <td>Sprint 1 (Core Auth)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-002</strong></td>
+          <td>EPIC-01</td>
+          <td>Verifikasi Profil Organization ID Kemenkes</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>3</td>
+          <td>PB-001</td>
+          <td>Sprint 1 (Core Auth)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-003</strong></td>
+          <td>EPIC-02</td>
+          <td>Master Pasien, Validasi NIK & Integrasi IHS Patient</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>8</td>
+          <td>PB-001</td>
+          <td>Sprint 1 (Master Data)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-004</strong></td>
+          <td>EPIC-02</td>
+          <td>Manajemen Persetujuan Informed Consent (UU PDP)</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>5</td>
+          <td>PB-003</td>
+          <td>Sprint 1 (Master Data)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-005</strong></td>
+          <td>EPIC-03</td>
+          <td>Pendaftaran Kunjungan Poli, No Antrean & Triase</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>8</td>
+          <td>PB-003</td>
+          <td>Sprint 2 (Front Desk)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-006</strong></td>
+          <td>EPIC-03</td>
+          <td>Audio Text-to-Speech Panggilan & Display TV Antrean</td>
+          <td><span class="badge badge-should">Should</span></td>
+          <td>5</td>
+          <td>PB-005</td>
+          <td>Sprint 2 (Front Desk)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-007</strong></td>
+          <td>EPIC-02</td>
+          <td>Penanganan Pasien Gawat Darurat Tanpa NIK (Temp MRN)</td>
+          <td><span class="badge badge-should">Should</span></td>
+          <td>5</td>
+          <td>PB-003</td>
+          <td>Sprint 2 (Front Desk)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-008</strong></td>
+          <td>EPIC-04</td>
+          <td>Form Input Rekam Medis DPJP (SOAP & Anamnesis)</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>8</td>
+          <td>PB-005</td>
+          <td>Sprint 3 (DPJP Core)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-009</strong></td>
+          <td>EPIC-04</td>
+          <td>Katalog Kodifikasi Diagnosis ICD-10</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>5</td>
+          <td>PB-008</td>
+          <td>Sprint 3 (DPJP Core)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-010</strong></td>
+          <td>EPIC-04</td>
+          <td>Katalog Kodifikasi Tindakan Prosedur Medis ICD-9-CM</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>5</td>
+          <td>PB-008</td>
+          <td>Sprint 3 (DPJP Core)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-011</strong></td>
+          <td>EPIC-05</td>
+          <td>Form TTV, Kalkulasi IMT & Early Warning Critical Alert</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>5</td>
+          <td>PB-008</td>
+          <td>Sprint 3 (DPJP Core)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-012</strong></td>
+          <td>EPIC-06</td>
+          <td>Order & Hasil Pemeriksaan Laboratorium (LOINC)</td>
+          <td><span class="badge badge-should">Should</span></td>
+          <td>8</td>
+          <td>PB-008</td>
+          <td>Sprint 4 (Ancillary & CPOE)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-013</strong></td>
+          <td>EPIC-06</td>
+          <td>Ekspertise & Viewer Hasil Pemeriksaan Radiologi</td>
+          <td><span class="badge badge-should">Should</span></td>
+          <td>5</td>
+          <td>PB-008</td>
+          <td>Sprint 4 (Ancillary & CPOE)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-014</strong></td>
+          <td>EPIC-07</td>
+          <td>E-Prescribing CPOE Berbasis Standar Master KFA</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>8</td>
+          <td>PB-008</td>
+          <td>Sprint 4 (Ancillary & CPOE)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-015</strong></td>
+          <td>EPIC-07</td>
+          <td>Jadwal Minum Obat Visual (Pagi/Siang/Sore/Malam)</td>
+          <td><span class="badge badge-should">Should</span></td>
+          <td>3</td>
+          <td>PB-014</td>
+          <td>Sprint 4 (Ancillary & CPOE)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-016</strong></td>
+          <td>EPIC-07</td>
+          <td>Deteksi Peringatan Alergi Obat Otomatis</td>
+          <td><span class="badge badge-should">Should</span></td>
+          <td>5</td>
+          <td>PB-014</td>
+          <td>Sprint 4 (Ancillary & CPOE)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-017</strong></td>
+          <td>EPIC-08</td>
+          <td>Dashboard Resume Medis Rawat Jalan 1 Layar Terpadu</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>8</td>
+          <td>PB-008, PB-011</td>
+          <td>Sprint 5 (Clinical Resume)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-018</strong></td>
+          <td>EPIC-08</td>
+          <td>Modal Cetak Resmi (Resume, Resep, Kartu, Karcis)</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>5</td>
+          <td>PB-017</td>
+          <td>Sprint 5 (Clinical Resume)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-019</strong></td>
+          <td>EPIC-09</td>
+          <td>Penguncian Otomatis Rekam Medis 24 Jam (Permenkes 24)</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>5</td>
+          <td>PB-017</td>
+          <td>Sprint 5 (Clinical Resume)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-020</strong></td>
+          <td>EPIC-09</td>
+          <td>Modul Catatan Addendum Medis & Audit Trail</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>5</td>
+          <td>PB-019</td>
+          <td>Sprint 5 (Clinical Resume)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-021</strong></td>
+          <td>EPIC-10</td>
+          <td>Engine Transformasi FHIR R4 Bundle & Individual POST</td>
+          <td><span class="badge badge-must">Must</span></td>
+          <td>8</td>
+          <td>PB-001, PB-008</td>
+          <td>Sprint 6 (FHIR Bridging)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-022</strong></td>
+          <td>EPIC-10</td>
+          <td>Detail Inspector FHIR Payload & Manual Retry Engine</td>
+          <td><span class="badge badge-should">Should</span></td>
+          <td>5</td>
+          <td>PB-021</td>
+          <td>Sprint 6 (FHIR Bridging)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-023</strong></td>
+          <td>EPIC-10</td>
+          <td>Telemetri Latensi HTTP, Log Tracker & Diagnostic Tool</td>
+          <td><span class="badge badge-could">Could</span></td>
+          <td>3</td>
+          <td>PB-021</td>
+          <td>Sprint 6 (FHIR Bridging)</td>
+        </tr>
+        <tr>
+          <td><strong>PB-024</strong></td>
+          <td>EPIC-09</td>
+          <td>Laporan Rekap Kepatuhan Mutu Penguncian Medis Faskes</td>
+          <td><span class="badge badge-could">Could</span></td>
+          <td>3</td>
+          <td>PB-019</td>
+          <td>Sprint 6 (FHIR Bridging)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== MATRIKS MITIGASI KEGAGALAN & ROADMAP ==================== -->
+  <div>
+    <h1>6. Matriks Mitigasi Risiko & Ketahanan Sistem (Resilience)</h1>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 25%;">Potensi Skenario Kegagalan</th>
+          <th style="width: 35%;">Dampak Klinis / Operasional</th>
+          <th style="width: 40%;">Mekanisme Mitigasi Rekayasa Otomatis</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Server SATUSEHAT Downtime / Timeout (HTTP 504)</strong></td>
+          <td>Pelayanan pasien terancam berhenti jika bergantung penuh pada cloud (online-only).</td>
+          <td><strong>Offline-First Architecture:</strong> Seluruh data disimpan langsung ke SQLite lokal faskes. Status sinkronisasi ditandai <code>pending</code> di <code>satusehat_sync_logs</code>, dan tombol Retry Sync disiapkan untuk pengiriman ulang saat jaringan pulih.</td>
+        </tr>
+        <tr>
+          <td><strong>Token OAuth 2.0 Expired Saat DPJP Submit Form</strong></td>
+          <td>Pengiriman data rekam medis gagal dan dokter berpotensi kehilangan input.</td>
+          <td><strong>Transparent Auto-Refresh:</strong> Middleware mendeteksi status 401, mengambil token baru via OAuth refresh pipeline secara asynchronous di latar belakang, lalu mengirim ulang form tanpa meminta dokter mengetik ulang.</td>
+        </tr>
+        <tr>
+          <td><strong>Duplikasi Pendaftaran NIK Pasien</strong></td>
+          <td>Tercatatnya dua Nomor Rekam Medis untuk satu orang yang sama.</td>
+          <td><strong>Unique Constraint Validation:</strong> Database menolak NIK duplikat dan UI otomatis mengarahkan ke profil pasien yang sudah terdaftar sebelumnya.</td>
+        </tr>
+        <tr>
+          <td><strong>Upaya Pengubahan Data Medis Terkunci (&gt; 24 Jam)</strong></td>
+          <td>Pelanggaran hukum terhadap Permenkes No. 24 Tahun 2022 Pasal 21.</td>
+          <td><strong>Immutability by Design:</strong> API menolak mutasi UPDATE/DELETE pada encounter berstatus locked. Setiap koreksi hanya dapat dicatat sebagai record baru di tabel <code>medical_addendums</code>.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h1>7. Roadmap Eksekusi Sprint (Sprint 1 s/d Sprint 6)</h1>
+
+    <div class="diagram-box">
+      <strong>JADWAL PELUNCURAN SISTEM (6 SPRINTS - 12 MINGGU):</strong><br><br>
+      [Sprint 1: M1-M2] Core Auth & Master Pasien (PB-001 s/d PB-004) -&gt; Milestone: Bridging Ready<br>
+      [Sprint 2: M3-M4] Loket Pendaftaran & Antrean TTS (PB-005 s/d PB-007) -&gt; Milestone: Front Desk Go-Live<br>
+      [Sprint 3: M5-M6] Asuhan Klinis DPJP, ICD & TTV (PB-008 s/d PB-011) -&gt; Milestone: Clinical SOAP Ready<br>
+      [Sprint 4: M7-M8] Penunjang Lab/Rad & E-Resep KFA (PB-012 s/d PB-016) -&gt; Milestone: Ancillary & CPOE Go-Live<br>
+      [Sprint 5: M9-M10] Resume Medis, Cetak & Lock 24 Jam (PB-017 s/d PB-020) -&gt; Milestone: Permenkes 24 Compliance<br>
+      [Sprint 6: M11-M12] FHIR Transformation Engine & Audit (PB-021 s/d PB-024) -&gt; Milestone: Full SATUSEHAT Live!
+    </div>
+
+    <div class="callout callout-success" style="margin-top: 15px;">
+      <strong>Persetujuan Dokumen:</strong><br>
+      Dokumen spesifikasi ini telah ditinjau dan disetujui untuk digunakan sebagai acuan baku pengembangan aplikasi SIMRS dan integrasi SATUSEHAT RME Kemenkes RI.
+    </div>
+  </div>
+
+</body>
+</html>

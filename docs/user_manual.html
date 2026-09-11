@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>User Manual & Petunjuk Teknis Operasional - SIMRS SATUSEHAT RME</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+    @page {
+      size: A4 portrait;
+      margin: 15mm 13mm 15mm 13mm;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 8.8pt;
+      line-height: 1.48;
+      color: #0f172a;
+      background: #ffffff;
+    }
+
+    .page-break {
+      page-break-before: always;
+    }
+
+    .avoid-break {
+      page-break-inside: avoid;
+    }
+
+    /* Cover Page */
+    .cover {
+      min-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 15px 5px;
+      page-break-after: always;
+    }
+
+    .cover-header {
+      border-bottom: 3px solid #0284c7;
+      padding-bottom: 20px;
+      margin-bottom: 20px;
+    }
+
+    .badge-top {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 9999px;
+      color: #166534;
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .cover-title {
+      font-size: 23pt;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.25;
+      margin-bottom: 12px;
+      letter-spacing: -0.6px;
+    }
+
+    .cover-subtitle {
+      font-size: 12pt;
+      font-weight: 600;
+      color: #0369a1;
+      line-height: 1.4;
+      margin-bottom: 14px;
+    }
+
+    .cover-desc {
+      font-size: 9.5pt;
+      color: #475569;
+      line-height: 1.6;
+      max-width: 95%;
+      margin-bottom: 20px;
+    }
+
+    .cover-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 18px;
+    }
+
+    .meta-box {
+      display: flex;
+      flex-direction: column;
+    }
+    .meta-box .lbl {
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      color: #64748b;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .meta-box .val {
+      font-size: 9.5pt;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .cover-footer {
+      border-top: 1px solid #e2e8f0;
+      padding-top: 12px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 8pt;
+      color: #94a3b8;
+    }
+
+    /* Headings */
+    h1 {
+      font-size: 13pt;
+      font-weight: 800;
+      color: #0f172a;
+      border-bottom: 2px solid #e2e8f0;
+      padding-bottom: 4px;
+      margin-top: 16px;
+      margin-bottom: 10px;
+      letter-spacing: -0.3px;
+    }
+
+    h2 {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: #0369a1;
+      margin-top: 12px;
+      margin-bottom: 6px;
+      border-left: 3px solid #0284c7;
+      padding-left: 8px;
+    }
+
+    h3 {
+      font-size: 9.2pt;
+      font-weight: 700;
+      color: #1e293b;
+      margin-top: 8px;
+      margin-bottom: 4px;
+    }
+
+    p {
+      margin-bottom: 6px;
+      color: #334155;
+    }
+
+    /* Step Cards */
+    .step-card {
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      margin-bottom: 8px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .step-num {
+      background: #0284c7;
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 8pt;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .step-title {
+      font-weight: 700;
+      font-size: 9.5pt;
+      color: #0f172a;
+    }
+
+    .step-body {
+      padding-left: 30px;
+      font-size: 8.5pt;
+      color: #334155;
+    }
+
+    .step-body ol, .step-body ul {
+      margin-left: 16px;
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+
+    .step-body li {
+      margin-bottom: 3px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 9999px;
+      font-size: 7pt;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .badge-info { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .badge-warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      margin-bottom: 10px;
+      font-size: 8pt;
+    }
+
+    th {
+      background: #0f172a;
+      color: #ffffff;
+      text-align: left;
+      padding: 5px 8px;
+      font-weight: 600;
+      font-size: 7.5pt;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #e2e8f0;
+      vertical-align: top;
+    }
+
+    tr:nth-child(even) td {
+      background: #f8fafc;
+    }
+
+    .callout {
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      font-size: 8pt;
+    }
+    .callout-info { background: #f0f9ff; border: 1px solid #bae6fd; color: #0369a1; }
+    .callout-success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .callout-warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .callout-danger { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 7.5pt;
+      background: #f1f5f9;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== COVER PAGE ==================== -->
+  <div class="cover">
+    <div>
+      <div class="cover-header">
+        <div class="badge-top">
+          <span>✓ Buku Panduan Pengguna & Petunjuk Teknis Operasional (Juknis)</span>
+        </div>
+        <div class="cover-title">
+          Petunjuk Teknis (Juknis) Pelayanan Rawat Jalan & Bridging SATUSEHAT
+        </div>
+        <div class="cover-subtitle">
+          Panduan Langkah demi Langkah untuk Petugas Loket, Perawat, Dokter DPJP, dan Farmasi
+        </div>
+        <div class="cover-desc">
+          Panduan operasional resmi untuk memandu staf fasilitas pelayanan kesehatan (Rumah Sakit & Klinik) dalam menjalankan proses pendaftaran pasien, pemanggilan antrean suara multimedia, asuhan medis SOAP, peresepan obat KFA, serta tata kelola penguncian berkas rekam medis elektronik sesuai <strong>Permenkes No. 24 Tahun 2022</strong>.
+        </div>
+
+        <div class="cover-grid">
+          <div class="meta-box">
+            <span class="lbl">Kode Dokumen</span>
+            <span class="val">JUKNIS-SIMRS-2026-v1</span>
+          </div>
+          <div class="meta-box">
+            <span class="lbl">Versi Rilis</span>
+            <span class="val">v1.0.0 (Production Guide)</span>
+          </div>
+          <div class="meta-box">
+            <span class="lbl">Pengguna Sasaran</span>
+            <span class="val">Petugas Loket, Perawat Poli, Dokter DPJP, Apoteker</span>
+          </div>
+          <div class="meta-box">
+            <span class="lbl">Masa Berlaku</span>
+            <span class="val">Tahun 2026 - 2027</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cover-footer">
+      <span>SIMRS & SATUSEHAT Integration Suite &bull; User Manual</span>
+      <span>Buku Panduan Operasional Faskes</span>
+    </div>
+  </div>
+
+  <!-- ==================== BAB 1: PERSIAPAN & LOKET PENDAFTARAN ==================== -->
+  <div>
+    <h1>1. Persiapan Sistem & Lingkungan Kerja</h1>
+    
+    <div class="callout callout-info">
+      <strong>Persyaratan Penggunaan:</strong>
+      Gunakan peramban modern (Google Chrome, Microsoft Edge, atau Mozilla Firefox versi terbaru). Pastikan speaker audio komputer menyala untuk fitur pemanggilan antrean suara Text-to-Speech (TTS).
+    </div>
+
+    <div class="grid-2">
+      <div class="step-card">
+        <strong>Status Koneksi SATUSEHAT (Header Kanan Atas):</strong>
+        <p style="margin-top: 4px; font-size: 8pt;">
+          <span class="badge badge-success">HIJAU (Terhubung)</span>: Sistem terhubung ke cloud Kemenkes.<br>
+          <span class="badge badge-warn">KUNING (Staging)</span>: Mode sandbox/simulasi pengujian.<br>
+          <span class="badge badge-info">OFFLINE (Lokal)</span>: Data tersimpan aman di lokal dan akan disinkron otomatis saat jaringan pulih.
+        </p>
+      </div>
+
+      <div class="step-card">
+        <strong>Shortcut Navigasi Cepat (Sidebar Kiri):</strong>
+        <p style="margin-top: 4px; font-size: 8pt;">
+          Sidebar kiri menyediakan akses 1-klik ke modul: <em>Pendaftaran</em>, <em>Input SOAP</em>, <em>TTV</em>, <em>Penunjang Lab/Rad</em>, <em>Resep Farmasi</em>, dan <em>Resume Medis</em>.
+        </p>
+      </div>
+    </div>
+
+    <h1>2. Panduan Petugas Pendaftaran (Loket / Admission)</h1>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <span class="step-title">Pencarian & Registrasi Berbasis NIK 16 Digit</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Buka menu <strong>"Pendaftaran & Antrean"</strong> pada sidebar sebelah kiri.</li>
+          <li>Ketikkan <strong>16 digit NIK KTP</strong> pasien pada kolom pencarian.</li>
+          <li>Klik tombol <strong>[Cari / Sinkron NIK]</strong>. Sistem akan otomatis memvalidasi NIK ke server SATUSEHAT dan mengisi Nama, Tanggal Lahir, Jenis Kelamin, serta nomor SATUSEHAT Patient ID (IHS) secara otomatis.</li>
+          <li>Lengkapi nomor telepon, alamat domisili, golongan darah, kontak darurat, dan jenis penjamin (BPJS Kesehatan / Umum / Asuransi).</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <span class="step-title">Perekaman Informed Consent Pertukaran Data (UU PDP)</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Tanyakan persetujuan pasien terkait integrasi data medis ke SATUSEHAT Kemenkes RI.</li>
+          <li>Pilih opsi persetujuan:
+            <ul>
+              <li><strong>Opt-In (Setuju):</strong> Data kunjungan akan disinkronkan ke rekam medis nasional SATUSEHAT.</li>
+              <li><strong>Opt-Out (Menolak):</strong> Data hanya disimpan secara lokal di faskes tanpa transmisi cloud.</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <span class="step-title">Penerbitan Antrean Poli & Cetak Dokumen Pasien</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Pilih <strong>Poliklinik Tujuan</strong> (misal: Poli Penyakit Dalam, Poli Anak, Poli Jantung) dan Dokter yang bertugas.</li>
+          <li>Tentukan <strong>Kategori Triase</strong> (Reguler, Geriatri / Lansia, Pediatri / Anak, atau Urgensi).</li>
+          <li>Klik tombol <strong>[Daftarkan Pasien & Terbitkan Antrean]</strong>.</li>
+          <li>Sistem akan membuka modal cetak:
+            <ul>
+              <li>Klik <strong>[Cetak Karcis Antrean]</strong> untuk mencetak tiket nomor antrean fisik ber-barcode.</li>
+              <li>Klik <strong>[Cetak Kartu Berobat]</strong> untuk pasien baru yang membutuhkan kartu tanda pasien fisik.</li>
+            </ul>
+          </li>
+          <li>Persilakan pasien menuju ruang tunggu poliklinik tujuan.</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 3 & 4: PERAWAT & DOKTER DPJP ==================== -->
+  <div>
+    <h1>3. Panduan Perawat Poliklinik (Triage & Worklist)</h1>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <span class="step-title">Memantau Antrean & Memanggil Pasien (Audio TTS)</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Pilih poliklinik aktif Anda pada bar atas (Shift Bar). Daftar pasien hari ini akan muncul pada worklist antrean.</li>
+          <li>Klik tombol <strong>[Panggil Pasien Berikutnya]</strong>.</li>
+          <li>Sistem secara otomatis:
+            <ul>
+              <li>Membunyikan pengumuman suara bahasa Indonesia di speaker ruang tunggu: <em>"Nomor Antrean A-01, silakan menuju Poli Penyakit Dalam, Ruang 102"</em>.</li>
+              <li>Mengubah status monitor TV antrean publik menjadi <em>"Sedang Dilayani"</em>.</li>
+            </ul>
+          </li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <span class="step-title">Pemeriksaan Fisik, Input TTV & Deteksi Tanda Bahaya</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Buka modul <strong>"Pemeriksaan Fisik & TTV"</strong>.</li>
+          <li>Masukkan hasil pengukuran tanda-tanda vital:
+            <ul>
+              <li>Tekanan Darah (Sistolik & Diastolik mmHg), Denyut Nadi (x/mnt), Frekuensi Napas (x/mnt).</li>
+              <li>Suhu Tubuh (°C), Saturasi Oksigen SpO2 (%), Berat Badan (kg), dan Tinggi Badan (cm).</li>
+            </ul>
+          </li>
+          <li>Sistem otomatis menghitung nilai <strong>Indeks Massa Tubuh (IMT / BMI)</strong>.</li>
+          <li><strong>Perhatian Khusus:</strong> Jika muncul badge peringatan merah <em>"Critical Alert"</em> (misal: Sistolik &gt; 180 mmHg atau SpO2 &lt; 90%), segera laporkan prioritas penanganan ke Dokter DPJP.</li>
+          <li>Klik <strong>[Simpan TTV]</strong>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <h1>4. Panduan Dokter DPJP (Asuhan Medis SOAP & E-Prescribing)</h1>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <span class="step-title">Dokumentasi Asuhan Medis SOAP & Anamnesis</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Pilih modul <strong>"Input Rekam Medis (SOAP)"</strong> pada sidebar.</li>
+          <li>Isi kolom <strong>Keluhan Utama</strong> (*Subjective*) dan rincian <strong>Anamnesis Riwayat Penyakit</strong>.</li>
+          <li>Periksa ringkasan TTV dan hasil pemeriksaan fisik yang telah dicatat perawat pada panel atas.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <span class="step-title">Penegakan Diagnosis ICD-10 & Tindakan ICD-9-CM</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Ketik nama penyakit atau kode pada kolom diagnosis (contoh: <code>I10</code> atau <code>Hipertensi</code>).</li>
+          <li>Pilih dari daftar rekomendasi autocomplete. Tetapkan status sebagai <strong>Diagnosis Primer</strong> atau <strong>Diagnosis Sekunder</strong>.</li>
+          <li>Pada kolom tindakan, masukkan prosedur medis yang dilakukan (contoh: <code>89.07</code> - Konsultasi Medis Umum atau <code>89.52</code> - EKG).</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <span class="step-title">Penulisan Resep Elektronik (Kamus Farmasi KFA Kemenkes)</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Buka bagian <strong>E-Resep Farmasi</strong>.</li>
+          <li>Cari nama obat berstandar KFA (contoh: <code>Amlodipine 5 mg Tablet</code>).</li>
+          <li>Tentukan dosis, bentuk sediaan, frekuensi (misal: <code>1 x 1 tablet</code>), waktu minum (<em>Sesudah Makan</em>), jumlah obat, dan durasi hari.</li>
+          <li>Centang kotak visualisasi jadwal minum: <strong>[Pagi]</strong>, <strong>[Siang]</strong>, <strong>[Sore]</strong>, atau <strong>[Malam]</strong>.</li>
+          <li><strong>Peringatan Alergi:</strong> Jika pasien memiliki riwayat alergi terhadap golongan obat yang dipilih, sistem akan memunculkan pop-up peringatan merah. Verifikasi kembali sebelum melanjutkan.</li>
+          <li>Klik <strong>[Tambahkan Obat ke Resep]</strong>.</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">4</span>
+        <span class="step-title">Instruksi Kepulangan & Finalisasi Pemeriksaan</span>
+      </div>
+      <div class="step-body">
+        <ol>
+          <li>Isi instruksi edukasi pasien dan tanggal kontrol ulang (jika dijadwalkan).</li>
+          <li>Pilih status kepulangan: <em>Pulang Berobat Jalan</em>, <em>Rujuk Rawat Inap</em>, atau <em>Rujuk Rumah Sakit Lain</em>.</li>
+          <li>Klik tombol <strong>[Simpan Rekam Medis & Selesaikan Kunjungan]</strong>.</li>
+          <li>Status antrean pasien akan otomatis berubah menjadi <strong>Selesai (Finished)</strong> dan data terkirim ke background worker SATUSEHAT.</li>
+        </ol>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- ==================== BAB 5 & 6: PENUNJANG, KEPATUHAN & FAQ ==================== -->
+  <div>
+    <h1>5. Panduan Penunjang Diagnostik & Farmasi</h1>
+
+    <div class="grid-2">
+      <div class="step-card">
+        <h3 style="color: #0369a1;">Petugas Laboratorium & Radiologi</h3>
+        <ul style="font-size: 8pt; margin-left: 14px; margin-top: 4px; line-height: 1.5;">
+          <li>Buka tab <strong>"Penunjang Lab & Radiologi"</strong>.</li>
+          <li>Pilih order pemeriksaan pasien yang berstatus <em>Ordered</em>.</li>
+          <li>Masukkan nilai hasil uji laboratorium (misal: Gula Darah: 140 mg/dL). Sistem otomatis memberi tanda <strong>High</strong> atau <strong>Normal</strong> berdasarkan nilai rujukan.</li>
+          <li>Untuk radiologi, masukkan hasil ekspertise pembacaan foto rontgen / USG dan kesimpulan dokter spesialis radiologi.</li>
+          <li>Klik <strong>[Simpan Hasil Pemeriksaan]</strong>.</li>
+        </ul>
+      </div>
+
+      <div class="step-card">
+        <h3 style="color: #166534;">Apoteker & Petugas Farmasi</h3>
+        <ul style="font-size: 8pt; margin-left: 14px; margin-top: 4px; line-height: 1.5;">
+          <li>Buka menu <strong>"Resep & Terapi Farmasi"</strong>.</li>
+          <li>Periksa resep elektronik pasien aktif, verifikasi nama obat KFA, dosis, dan jadwal minum obat.</li>
+          <li>Klik tombol <strong>[Cetak Lembar Resep / Etiket]</strong> untuk mencetak tiket etiket aturan minum obat pasien.</li>
+          <li>Serahkan obat kepada pasien disertai penjelasan aturan minum visual (pagi/siang/sore/malam).</li>
+        </ul>
+      </div>
+    </div>
+
+    <h1>6. Tata Kelola Hukum Medis: Penguncian 24 Jam & Addendum</h1>
+
+    <div class="callout callout-danger">
+      <strong>Kewajiban Hukum (Permenkes No. 24 Tahun 2022 Pasal 21):</strong>
+      Seluruh berkas Rekam Medis Elektronik (RME) <strong>terkunci secara otomatis dan permanen setelah 24 jam</strong> sejak pelayanan selesai. Berkas yang terkunci TIDAK DAPAT diedit atau dihapus secara langsung.
+    </div>
+
+    <div class="step-card avoid-break">
+      <div class="step-header">
+        <span class="step-num">!</span>
+        <span class="step-title">Tata Cara Pengisian Addendum Medis (Catatan Koreksi)</span>
+      </div>
+      <div class="step-body">
+        <p>Jika dokter DPJP perlu menambahkan keterangan atau klarifikasi medis pada berkas yang telah terkunci:</p>
+        <ol>
+          <li>Buka berkas kunjungan pasien yang bertanda gembok terkunci merah.</li>
+          <li>Klik tombol <strong>[Koreksi / Tambah Addendum Medis]</strong> pada panel kepatuhan.</li>
+          <li>Ketikkan catatan klarifikasi atau koreksi pada kolom teks Addendum.</li>
+          <li>Klik <strong>[Simpan Addendum Medis]</strong>.</li>
+          <li>Catatan Addendum akan terlampir secara permanen di bawah rekam medis asli dengan mencantumkan nama dokter dan waktu pencatatan resmi (*Audit Trail*).</li>
+        </ol>
+      </div>
+    </div>
+
+    <h1>7. Tanya Jawab & Penanganan Masalah (FAQ & Troubleshooting)</h1>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 30%;">Kendala / Pertanyaan</th>
+          <th style="width: 70%;">Langkah Penyelesaian Mandiri</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Suara panggilan antrean tidak berbunyi</strong></td>
+          <td>Pastikan volume speaker komputer aktif. Pastikan peramban tidak memblokir izin audio (*Audio Autoplay Permissions*). Klik di area layar mana saja untuk mengaktifkan sesi audio web.</td>
+        </tr>
+        <tr>
+          <td><strong>NIK Pasien tidak ditemukan di SATUSEHAT</strong></td>
+          <td>Pastikan NIK terdiri dari 16 digit angka yang sesuai KTP/KK. Jika pasien baru terdaftar di Dukcapil dan belum terindeks di SATUSEHAT, centang opsi <em>"Daftar Lokal Sementara"</em> agar pelayanan tetap berjalan.</td>
+        </tr>
+        <tr>
+          <td><strong>Indikator SATUSEHAT berwarna oranye / gagal kirim</strong></td>
+          <td>Pelayanan klinis dapat terus berjalan seperti biasa (*Offline-First*). Klik ikon status SATUSEHAT &rarr; buka <strong>"Detail Sinkronisasi FHIR"</strong> &rarr; klik tombol <strong>[Retry Sync]</strong> saat jaringan internet kembali stabil.</td>
+        </tr>
+        <tr>
+          <td><strong>Dokumen cetak terpotong saat diprint</strong></td>
+          <td>Pada jendela print peramban, pastikan ukuran kertas diatur ke <strong>A4</strong> dan skala diatur ke <strong>"Fit to Printable Area"</strong> atau 100% dengan margin Default.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-success" style="margin-top: 10px;">
+      <strong>Kontak Dukungan IT Rumah Sakit / Faskes:</strong><br>
+      Jika mengalami kendala teknis yang tidak tercantum dalam buku panduan ini, silakan hubungi Tim IT Helpdesk Faskes / Administrator SATUSEHAT.
+    </div>
+  </div>
+
+</body>
+</html>

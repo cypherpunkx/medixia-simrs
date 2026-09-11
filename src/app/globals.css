@@ -1,0 +1,266 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Clean Clinical White EHR Base Palette */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary: SATUSEHAT Clinical Teal #0D9488 */
+    --primary: 173 80% 30%;
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary: Clean Clinical Slate */
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent: Medical Trust Blue #0284C7 */
+    --accent: 199 89% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 214 32% 90%;
+    --input: 214 32% 90%;
+    --ring: 173 80% 30%;
+
+    --radius: 0.625rem;
+  }
+
+  .dark {
+    /* Optional Dark mode */
+    --background: 222 47% 7%;
+    --foreground: 210 40% 98%;
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 173 80% 45%;
+    --primary-foreground: 222 47% 7%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 189 94% 43%;
+    --accent-foreground: 222 47% 7%;
+    --destructive: 0 63% 40%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 173 80% 45%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-[#F8FAFC] text-foreground antialiased selection:bg-teal-500/20 selection:text-teal-900;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+  }
+}
+
+/* Custom Scrollbar for Medical Viewers */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Clean EHR Cards & Elevation */
+.ehr-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.02);
+}
+
+.ehr-card-hover {
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.ehr-card-hover:hover {
+  border-color: #0D9488;
+  box-shadow: 0 4px 12px -2px rgba(13, 148, 136, 0.08);
+}
+
+/* Micro-Interaction & Tactile Feedback Utilities */
+.card-interactive {
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.card-interactive:hover {
+  box-shadow: 0 2px 8px -1px rgba(15, 23, 42, 0.06);
+}
+
+.btn-press {
+  transition: transform 0.1s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.btn-press:active {
+  transform: scale(0.96);
+}
+
+/* Equalizer Audio Waves for Queue Calling */
+.audio-wave-wrap {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 14px;
+}
+.audio-wave-bar-1 {
+  width: 2.5px;
+  background-color: currentColor;
+  border-radius: 9999px;
+  animation: audio-bar-1 0.6s ease-in-out infinite;
+}
+.audio-wave-bar-2 {
+  width: 2.5px;
+  background-color: currentColor;
+  border-radius: 9999px;
+  animation: audio-bar-2 0.7s ease-in-out infinite;
+}
+.audio-wave-bar-3 {
+  width: 2.5px;
+  background-color: currentColor;
+  border-radius: 9999px;
+  animation: audio-bar-3 0.55s ease-in-out infinite;
+}
+
+/* Subtle Shimmer Sheen for Action Badges */
+.shimmer-badge {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-sheen 3s infinite;
+}
+
+/* Tabular Figures for Medical Numbers */
+.font-tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Modern Clinical Dropdowns & Selects */
+select {
+  background-color: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  transition: all 0.2s ease-in-out;
+}
+
+select:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+}
+
+select option {
+  background-color: #ffffff;
+  color: #0f172a;
+  padding: 0.5rem;
+  font-weight: 500;
+}
+
+select option:checked {
+  background-color: #f0fdfa;
+  color: #115e59;
+  font-weight: 700;
+}
+
+/* ==========================================================================
+   PRINT ENGINE (ZERO-DUPLICATE & CLEAN MEDICAL DOCUMENT PRINTING)
+   ========================================================================== */
+@media print {
+  /* 1. Page Configuration */
+  @page {
+    size: auto;
+    margin: 8mm 10mm;
+  }
+
+  /* 2. Global Document Clean State */
+  html,
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: auto !important;
+    font-size: 11pt !important;
+  }
+
+  /* 3. Hide ALL background page layout elements except print containers */
+  body > *:not([data-radix-portal]):not(.print-container):not(.printable-area):not(iframe),
+  nav,
+  header,
+  footer,
+  aside,
+  .no-print,
+  button:not(.printable-area button),
+  .sonner-toast,
+  [data-sonner-toaster] {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* 4. Hide Radix Dialog Overlay Backdrops & Shadows */
+  [data-radix-portal] > div[class*="backdrop-blur"],
+  [data-radix-portal] > div[class*="bg-black"],
+  [data-radix-portal] > [class*="fixed inset-0"] {
+    display: none !important;
+    background: transparent !important;
+    backdrop-filter: none !important;
+  }
+
+  /* 5. Ensure Print Container is 100% Visible and Properly Sized */
+  .print-container,
+  .printable-area {
+    display: block !important;
+    visibility: visible !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    overflow: visible !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  .print-container *,
+  .printable-area * {
+    visibility: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+

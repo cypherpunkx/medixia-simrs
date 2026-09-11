@@ -1,0 +1,39 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+.yarn/install-state.gz
+
+# Next.js build output
+/.next/
+/out/
+
+# Production & TypeScript build
+build
+dist
+*.tsbuildinfo
+
+# Environment variables & secrets
+.env*.local
+.env
+!.env.example
+
+# Local SQLite databases & temporary files
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+local-simrs.db
+/data/*.db
+
+# Debug & logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
