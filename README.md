@@ -145,16 +145,28 @@ DATABASE_URL=file:./local-simrs.db
 ```
 
 ### 4. Inisialisasi & Seeding Database
-Untuk mengisi master data pasien sampel, antrean poli hari ini, dan data rekam medis simulasi:
+Untuk mengisi master data medis (katalog KFA, kamus ICD, nakes, faskes) maupun simulasi data operasional:
 ```bash
-# Inisialisasi dan seed data awal
+# 1. Khusus Master Data (Faskes, Poli, User, Kamus KFA, ICD-10, ICD-9-CM)
+npm run db:seed:master
+
+# 2. Full Seeder (Master Data + Pasien Simulasi, Antrean Live, & Kunjungan RME)
 npm run db:seed
 
-# Atau jika ingin mereset total database dan seed ulang dari nol:
+# 3. Atau reset total database dan seed ulang dari nol:
 npm run db:seed:fresh
 ```
 
-### 5. Menjalankan Server Development
+### 5. Akun Pengujian Default (Demo Credentials)
+Gunakan akun uji berikut untuk mencoba sistem sesuai peranan (RBAC). Panduan lengkap tersedia di **[DEFAULT_USERS.md](./DEFAULT_USERS.md)**:
+
+| Role | Username | Password | Keterangan |
+| :--- | :--- | :--- | :--- |
+| **Administrator** | `admin` | `admin123` | Konfigurasi Faskes, Nakes, Master Kamus, & Outbox |
+| **Dokter (DPJP)** | `dr.rian` *(alias: `dokter`)* | `password123` | Form SOAP, ICD-10, Resep KFA, & Lock RME |
+| **Perawat (Nurse)** | `ns.siti` *(alias: `perawat`)* | `password123` | Triase, Tanda Vital (TTV), & Antrean Masuk Poli |
+
+### 6. Menjalankan Server Development
 ```bash
 npm run dev
 ```

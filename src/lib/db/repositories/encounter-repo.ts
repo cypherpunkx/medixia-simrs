@@ -18,6 +18,7 @@ import {
 import { eq, desc, sql, inArray, and } from "drizzle-orm";
 import { MemoryCache, CACHE_CONFIG, InvalidationService } from "@/lib/cache";
 import { generatePrefixedId } from "@/lib/id-generator";
+import { getNextRegistrationNumber } from "../sequence";
 import {
   OutpatientEncounter,
   VitalSigns,
@@ -635,6 +636,11 @@ export const EncounterRepository = {
       }
     }
 
+    const regNumToUse =
+      enc.registrationNumber ||
+      existing?.registrationNumber ||
+      (await getNextRegistrationNumber(enc.visitDate || now, "RJ"));
+
     // Wrap all writes in an atomic database transaction to prevent orphan records on partial failure
     await db.transaction(async (tx) => {
       if (existing) {
@@ -727,7 +733,7 @@ export const EncounterRepository = {
             enc.dischargeDisposition || "Pulang Berobat Jalan",
           encounterStatus: enc.encounterStatus || "finished",
           queueNumber: enc.queueNumber || null,
-          registrationNumber: enc.registrationNumber || null,
+          registrationNumber: regNumToUse,
           consentStatus: enc.consentStatus || "opt-in",
           syncStatus: enc.syncStatus || "synced",
           syncedAt: enc.syncedAt || now,

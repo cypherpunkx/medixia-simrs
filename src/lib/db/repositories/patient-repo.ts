@@ -4,6 +4,7 @@ import { eq, or, ilike, desc, inArray } from "drizzle-orm";
 import { PatientProfile } from "@/lib/satusehat/types";
 import { MemoryCache, CACHE_CONFIG, InvalidationService } from "@/lib/cache";
 import { generatePrefixedId, generateMRN } from "@/lib/id-generator";
+import { getNextMRN } from "../sequence";
 
 function mapRowToPatient(row: typeof patients.$inferSelect): PatientProfile {
   let parsedAllergies: string[] = [];
@@ -154,13 +155,13 @@ export const PatientRepository = {
     }
 
     const id = patient.id || generatePrefixedId("pat_");
-    const generatedMrn = generateMRN();
+    const mrnToUse = patient.mrn?.trim() || (await getNextMRN());
     const now = new Date().toISOString();
 
     await db.insert(patients).values({
       id,
       nik: patient.nik,
-      mrn: patient.mrn?.trim() || generatedMrn,
+      mrn: mrnToUse,
       name: patient.name.trim(),
       gender: patient.gender || "male",
       birthDate: patient.birthDate || "1990-01-01",

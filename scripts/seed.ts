@@ -449,6 +449,10 @@ async function createTables() {
     CREATE INDEX IF NOT EXISTS idx_master_icd9_code ON master_icd9(code);
     CREATE INDEX IF NOT EXISTS idx_master_icd9_category ON master_icd9(category);
     CREATE INDEX IF NOT EXISTS idx_master_icd9_active ON master_icd9(is_active);
+
+    -- Sequences untuk Penomoran Bisnis Berkecepatan Tinggi (Atomic & Anti-Collision di Concurrency Tinggi)
+    CREATE SEQUENCE IF NOT EXISTS reg_number_seq START WITH 1 INCREMENT BY 1 CYCLE;
+    CREATE SEQUENCE IF NOT EXISTS mrn_seq START WITH 100001 INCREMENT BY 1;
   `);
 }
 

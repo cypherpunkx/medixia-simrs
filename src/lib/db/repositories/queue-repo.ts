@@ -5,6 +5,7 @@ import { ClinicQueuePatientItem, PatientProfile } from "@/lib/satusehat/types";
 import { PatientRepository } from "./patient-repo";
 import { MemoryCache, CACHE_CONFIG, InvalidationService } from "@/lib/cache";
 import { generatePrefixedId } from "@/lib/id-generator";
+import { getNextRegistrationNumber } from "../sequence";
 
 export interface QueueFilterOptions {
   date?: string; // YYYY-MM-DD
@@ -268,12 +269,17 @@ export const QueueRepository = {
     const existingRows = await db.select().from(queueItems).where(eq(queueItems.id, id)).limit(1);
     const existing = existingRows[0];
 
+    const regNumToUse =
+      item.registrationNumber ||
+      existing?.registrationNumber ||
+      (await getNextRegistrationNumber(new Date(), "RJ"));
+
     if (existing) {
       await db
         .update(queueItems)
         .set({
           queueNumber: item.queueNumber || existing.queueNumber,
-          registrationNumber: item.registrationNumber || existing.registrationNumber,
+          registrationNumber: regNumToUse,
           patientId: patient.id,
           departmentId: resolvedDepartmentId !== null ? resolvedDepartmentId : existing.departmentId,
           doctorId: resolvedDoctorId !== null ? resolvedDoctorId : existing.doctorId,
@@ -295,7 +301,7 @@ export const QueueRepository = {
       await db.insert(queueItems).values({
         id,
         queueNumber: item.queueNumber,
-        registrationNumber: item.registrationNumber || null,
+        registrationNumber: regNumToUse,
         patientId: patient.id,
         departmentId: resolvedDepartmentId,
         doctorId: resolvedDoctorId,
