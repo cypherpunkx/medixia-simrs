@@ -29,6 +29,30 @@ function getCacheKey(env: string, clientId: string): string {
 
 export class SatusehatClient {
   /**
+   * Automatically resolve or fetch OAuth token from server environment variables / cache
+   */
+  public static async getOrFetchToken(
+    targetEnv?: SatusehatEnvironment,
+    options: { forceRefresh?: boolean } = {}
+  ): Promise<AuthApiResponse> {
+    const env: SatusehatEnvironment =
+      targetEnv || (process.env.SATUSEHAT_ENV as SatusehatEnvironment) || "staging";
+    const clientId = process.env.SATUSEHAT_CLIENT_ID || "SAMPLE_CLIENT_ID_KEMENKES";
+    const clientSecret = process.env.SATUSEHAT_CLIENT_SECRET || "SAMPLE_CLIENT_SECRET_987654321";
+    const orgId = process.env.SATUSEHAT_ORG_ID || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+
+    return this.authenticate(
+      {
+        clientId,
+        clientSecret,
+        env,
+        orgId,
+      },
+      options
+    );
+  }
+
+  /**
    * Request OAuth 2.0 Access Token from SATUSEHAT Gateway
    */
   public static async authenticate(
@@ -49,6 +73,30 @@ export class SatusehatClient {
           ],
         },
       };
+    }
+
+    if (env === "production") {
+      const isPlaceholder =
+        clientId.includes("SAMPLE_") ||
+        clientId.includes("your_client_id") ||
+        clientSecret.includes("SAMPLE_") ||
+        clientSecret.includes("your_client_secret");
+
+      if (isPlaceholder) {
+        return {
+          success: false,
+          error: {
+            message:
+              "Mode Live Production SATUSEHAT aktif, namun kredensial resmi Kemenkes belum dikonfigurasi.",
+            code: "PRODUCTION_CREDENTIALS_REQUIRED",
+            suggestions: [
+              "Buka Portal SATUSEHAT Kemenkes (https://satusehat.kemkes.go.id/platform).",
+              "Salin Client ID, Client Secret, dan Organization ID resmi faskes Anda.",
+              "Masukkan nilai tersebut ke dalam environment file (.env.local atau environment hosting produksi).",
+            ],
+          },
+        };
+      }
     }
 
     const cacheKey = getCacheKey(env, clientId);

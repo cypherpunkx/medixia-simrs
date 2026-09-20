@@ -9,30 +9,31 @@ export async function PATCH(
     const { id } = await params;
     const body = await req.json();
 
+    let callResult = null;
     if (body.action === "call") {
-      const callResult = QueueRepository.incrementCallCount(id);
-      if (!callResult) {
+      callResult = await QueueRepository.incrementCallCount(id);
+    }
+
+    if (body.status || body.satusehatStatus) {
+      const ok = await QueueRepository.updateStatus(id, body.status, body.satusehatStatus);
+      if (!ok && !callResult) {
         return NextResponse.json(
           { success: false, error: "Antrean tidak ditemukan." },
           { status: 404 }
         );
       }
+    }
+
+    if (callResult) {
       return NextResponse.json({ success: true, data: callResult });
     }
 
-    if (body.status) {
-      const ok = QueueRepository.updateStatus(id, body.status);
-      if (!ok) {
-        return NextResponse.json(
-          { success: false, error: "Antrean tidak ditemukan." },
-          { status: 404 }
-        );
-      }
+    if (body.status || body.satusehatStatus) {
       return NextResponse.json({ success: true, message: "Status antrean diperbarui." });
     }
 
     return NextResponse.json(
-      { success: false, error: "Action atau status wajib ditentukan." },
+      { success: false, error: "Action, status, atau satusehatStatus wajib ditentukan." },
       { status: 400 }
     );
   } catch (error) {

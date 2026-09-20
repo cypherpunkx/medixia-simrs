@@ -35,3 +35,9 @@ export function getSatusehatFhirUrl(env: SatusehatEnvironment): string {
     ? SATUSEHAT_CONFIG.endpoints.production.fhir
     : SATUSEHAT_CONFIG.endpoints.staging.fhir;
 }
+
+export function getSatusehatConsentUrl(env: SatusehatEnvironment): string {
+  return env === "production"
+    ? SATUSEHAT_CONFIG.endpoints.production.consent
+    : SATUSEHAT_CONFIG.endpoints.staging.consent;
+}

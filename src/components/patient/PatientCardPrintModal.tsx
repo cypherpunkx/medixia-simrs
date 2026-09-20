@@ -13,11 +13,12 @@ import { Button } from "@/components/ui/button";
 import { Printer, CreditCard, QrCode, ShieldCheck, Activity, HeartPulse } from "lucide-react";
 import { PatientProfile } from "@/lib/satusehat/types";
 import { printHtmlElement } from "@/lib/print/print-service";
+import { useAuth } from "@/lib/auth/auth-context";
 
 interface PatientCardPrintModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  patient: PatientProfile;
+  patient?: PatientProfile | null;
   hospitalName?: string;
 }
 
@@ -27,7 +28,24 @@ export function PatientCardPrintModal({
   patient,
   hospitalName = "RSUD Sehat Sejahtera",
 }: PatientCardPrintModalProps) {
+  const { facility } = useAuth();
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  if (!patient) return null;
+
+  const activeHospitalName = facility?.name || hospitalName;
+  const isKlinik =
+    facility?.type === "klinik_pratama" ||
+    facility?.type === "klinik_utama" ||
+    activeHospitalName.toLowerCase().includes("klinik");
+  const isPuskesmas =
+    facility?.type === "puskesmas" ||
+    activeHospitalName.toLowerCase().includes("puskesmas");
+  const cardSubtitle = isPuskesmas
+    ? "KARTU IDENTITAS PASIEN PUSKESMAS"
+    : isKlinik
+    ? "KARTU IDENTITAS PASIEN KLINIK"
+    : "KARTU IDENTITAS PASIEN RAWAT JALAN";
 
   const handlePrint = () => {
     if (printAreaRef.current) {
@@ -74,10 +92,10 @@ export function PatientCardPrintModal({
                   </div>
                   <div>
                     <h4 className="text-xs font-black uppercase tracking-tight text-teal-100">
-                      {hospitalName}
+                      {activeHospitalName}
                     </h4>
                     <span className="text-[9px] text-teal-300/80 font-medium block">
-                      KARTU IDENTITAS PASIEN RAWAT JALAN
+                      {cardSubtitle}
                     </span>
                   </div>
                 </div>

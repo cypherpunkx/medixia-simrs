@@ -80,15 +80,22 @@ export function printHtmlElement(
     containerMaxWidth = "100%";
   }
 
-  // 5. Tulis HTML mandiri ke dalam iframe
+  // 5. Salin class names dari root document (Next.js font variables & body styling)
+  const htmlClasses = document.documentElement.className || "";
+  const bodyClasses = document.body.className || "";
+
+  // 6. Tulis HTML mandiri ke dalam iframe
   iframeDoc.open();
   const htmlContent = [
     "<!DOCTYPE html>",
-    '<html lang="id">',
+    `<html lang="id" class="${htmlClasses}">`,
     "  <head>",
     '    <meta charset="utf-8" />',
     '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
     `    <title>${title}</title>`,
+    '    <link rel="preconnect" href="https://fonts.googleapis.com" />',
+    '    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />',
+    '    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet" />',
     stylesList.join("\n"),
     "    <style>",
     `      ${pageCss}`,
@@ -110,6 +117,9 @@ export function printHtmlElement(
     "        height: auto !important;",
     "        min-height: auto !important;",
     "        overflow: visible !important;",
+    "        font-family: var(--font-inter), 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;",
+    "        -webkit-font-smoothing: antialiased !important;",
+    "        -moz-osx-font-smoothing: grayscale !important;",
     "      }",
     "",
     "      body {",
@@ -118,6 +128,14 @@ export function printHtmlElement(
     "        align-items: center !important;",
     "        justify-content: flex-start !important;",
     "        background: #ffffff !important;",
+    "      }",
+    "",
+    "      .font-sans {",
+    "        font-family: var(--font-inter), 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif !important;",
+    "      }",
+    "",
+    "      .font-mono, code, kbd, samp, pre {",
+    "        font-family: var(--font-jetbrains-mono), 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace !important;",
     "      }",
     "",
     "      .print-container {",
@@ -157,7 +175,7 @@ export function printHtmlElement(
     `      ${customCss}`,
     "    </style>",
     "  </head>",
-    "  <body>",
+    `  <body class="${bodyClasses}">`,
     '    <div class="print-container">',
     element.outerHTML,
     "    </div>",
@@ -168,7 +186,7 @@ export function printHtmlElement(
   iframeDoc.write(htmlContent);
   iframeDoc.close();
 
-  // 6. Jalankan print dialog setelah dokumen siap
+  // 7. Jalankan print dialog setelah seluruh font dan styles siap
   const triggerPrint = () => {
     try {
       iframe.contentWindow?.focus();
@@ -182,6 +200,16 @@ export function printHtmlElement(
     }
   };
 
-  // Berikan jeda rendering pendek untuk memuat font dan stylesheet
-  setTimeout(triggerPrint, 250);
+  // Tunggu document.fonts.ready agar font Inter dan JetBrains Mono selesai ter-render
+  if (iframeDoc.fonts && typeof iframeDoc.fonts.ready !== "undefined") {
+    iframeDoc.fonts.ready
+      .then(() => {
+        setTimeout(triggerPrint, 100);
+      })
+      .catch(() => {
+        setTimeout(triggerPrint, 300);
+      });
+  } else {
+    setTimeout(triggerPrint, 300);
+  }
 }

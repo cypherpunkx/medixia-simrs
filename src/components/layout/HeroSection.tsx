@@ -82,7 +82,7 @@ export function HeroSection() {
               className="px-3.5 py-1 text-xs font-medium shadow-sm gap-1.5 rounded-full"
             >
               <Sparkles className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-              <span>Standar Integrasi SIMRS & RME Kemenkes RI</span>
+              <span>Standar Integrasi RME Kemenkes RI</span>
             </Badge>
           </div>
 
@@ -97,7 +97,7 @@ export function HeroSection() {
           {/* Subtitle */}
           <p className="hero-desc text-sm sm:text-base text-muted-foreground leading-relaxed max-w-2xl mx-auto">
             Gateway pengujian autentikasi OAuth 2.0 resmi untuk Fasilitas Pelayanan Kesehatan
-            (Rumah Sakit, Klinik, Lab, dan SIMRS). Dikelola secara aman dengan server-side token caching & FHIR validation.
+            (Rumah Sakit, Klinik, Lab, dan Praktik Mandiri). Dikelola secara aman dengan server-side token caching & FHIR validation.
           </p>
 
           {/* Feature Highlights Grid */}

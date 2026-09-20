@@ -34,7 +34,6 @@ interface TokenDisplayProps {
   session: AuthSession;
   onRefresh: () => void;
   onVerifyOrg: () => void;
-  onOpenCodeSnippet: () => void;
   isRefreshing?: boolean;
 }
 
@@ -42,7 +41,6 @@ export function TokenDisplay({
   session,
   onRefresh,
   onVerifyOrg,
-  onOpenCodeSnippet,
   isRefreshing = false,
 }: TokenDisplayProps) {
   const [copied, setCopied] = useState(false);
@@ -311,17 +309,6 @@ export function TokenDisplay({
               className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`}
             />
             <span>Refresh Token</span>
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onOpenCodeSnippet}
-            className="text-xs text-slate-600 hover:text-slate-900 gap-1.5"
-          >
-            <Code2 className="h-3.5 w-3.5 text-teal-600" />
-            <span>Lihat Code Snippet</span>
           </Button>
         </div>
 

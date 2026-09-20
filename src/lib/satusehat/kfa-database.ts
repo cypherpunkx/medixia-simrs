@@ -15,7 +15,7 @@ export interface KfaMedication {
 
 export const KFA_MEDICATIONS_DATABASE: KfaMedication[] = [
   {
-    kfaCode: "93001027",
+    kfaCode: "93001028",
     name: "Paracetamol 500 mg Tablet",
     genericName: "Paracetamol",
     form: "Tablet",

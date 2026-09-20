@@ -17,9 +17,9 @@ export async function GET(req: NextRequest) {
 
     let data: OutpatientEncounter[];
     if (patientId) {
-      data = EncounterRepository.getByPatientId(patientId);
+      data = await EncounterRepository.getByPatientId(patientId);
     } else {
-      data = EncounterRepository.getAll();
+      data = await EncounterRepository.getAll();
     }
 
     const durationMs = Number((performance.now() - startTime).toFixed(2));
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const patient = PatientRepository.getById(body.patientId);
+    const patient = await PatientRepository.getById(body.patientId);
     if (!patient) {
       return NextResponse.json(
         {
@@ -69,7 +69,92 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const created = EncounterRepository.create(body.encounter, body.patientId);
+    const { encounter, patientId } = body;
+
+    // 1. Mandatory fields validation
+    if (!encounter.chiefComplaint || !encounter.chiefComplaint.trim()) {
+      return NextResponse.json(
+        { success: false, error: "Keluhan utama pasien wajib diisi sesuai Permenkes No. 24/2022." },
+        { status: 400 }
+      );
+    }
+
+    // 2. Vital signs physiological validation
+    if (encounter.vitals) {
+      const { systolic, diastolic } = encounter.vitals;
+      if (systolic !== undefined && diastolic !== undefined && systolic <= diastolic) {
+        return NextResponse.json(
+          { success: false, error: "Validasi tanda vital gagal: Tekanan darah sistolik harus lebih besar dari diastolik." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 3. Primary diagnosis validation
+    if (!encounter.diagnoses || encounter.diagnoses.length === 0 || !encounter.diagnoses.some((d) => d.type === "primary")) {
+      return NextResponse.json(
+        { success: false, error: "Rekam medis wajib memiliki minimal 1 diagnosis utama (Primary Diagnosis) berstandar ICD-10." },
+        { status: 400 }
+      );
+    }
+
+    // Duplication check for ICD-10 diagnoses
+    const diagCodes = encounter.diagnoses.map((d) => (d.code || "").trim().toUpperCase());
+    const hasDuplicate = diagCodes.some((c, idx) => c && diagCodes.indexOf(c) !== idx);
+    if (hasDuplicate) {
+      return NextResponse.json(
+        { success: false, error: "Terdapat duplikasi kode diagnosis ICD-10 pada kunjungan yang sama." },
+        { status: 400 }
+      );
+    }
+
+    // 4. Clinical disposition & follow-up plan validation
+    if (encounter.dischargeDisposition === "Kontrol Kembali") {
+      const nextDate = encounter.followUpPlan?.nextVisitDate;
+      if (!nextDate) {
+        return NextResponse.json(
+          { success: false, error: "Tanggal kontrol wajib diisi untuk pasien dengan disposisi 'Kontrol Kembali'." },
+          { status: 400 }
+        );
+      }
+      const today = new Date().toISOString().split("T")[0];
+      if (nextDate < today) {
+        return NextResponse.json(
+          { success: false, error: "Tanggal rencana kontrol ulang tidak boleh merupakan tanggal lampau." },
+          { status: 400 }
+        );
+      }
+    }
+
+    if (
+      encounter.dischargeDisposition === "Dirujuk ke RS Lain" ||
+      encounter.dischargeDisposition === "Konsul Internal Poli Lain"
+    ) {
+      const refTo = encounter.followUpPlan?.referredTo;
+      if (!refTo || !refTo.trim()) {
+        return NextResponse.json(
+          { success: false, error: "Tujuan faskes rujukan atau poliklinik konsul wajib diisi." },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 5. Prescription items validation
+    if (encounter.prescriptions && encounter.prescriptions.length > 0) {
+      for (const rx of encounter.prescriptions) {
+        if (!rx.quantity || rx.quantity <= 0 || !rx.durationDays || rx.durationDays <= 0) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Item resep "${rx.medicationName || "Obat"}" tidak valid: jumlah dan durasi hari harus lebih dari 0.`,
+            },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    const created = await EncounterRepository.create(encounter, patientId);
     return NextResponse.json({ success: true, data: created }, { status: 201 });
   } catch (error) {
     return NextResponse.json(

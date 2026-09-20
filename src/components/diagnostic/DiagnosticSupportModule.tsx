@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CustomSelect } from "@/components/ui/custom-select";
 import {
   FlaskConical,
   Radio,
@@ -16,6 +17,14 @@ import {
   Search,
   X,
   Sparkles,
+  CloudUpload,
+  CheckCircle2,
+  Loader2,
+  ShieldCheck,
+  Clock,
+  AlertCircle,
+  Pencil,
+  Lock,
 } from "lucide-react";
 import {
   PatientProfile,
@@ -23,28 +32,108 @@ import {
   DiagnosticOrder,
   LabResult,
   RadiologyResult,
+  AuthSession,
+  SatusehatEnvironment,
 } from "@/lib/satusehat/types";
+import { generatePrefixedId } from "@/lib/id-generator";
+import { useAuth } from "@/lib/auth/auth-context";
+import { ModuleEmptyState } from "@/components/layout/ModuleEmptyState";
 import { toast } from "sonner";
 
 interface DiagnosticSupportModuleProps {
-  patient: PatientProfile;
-  encounter: OutpatientEncounter;
+  patient?: PatientProfile | null;
+  encounter?: OutpatientEncounter | null;
+  session?: AuthSession | null;
+  env?: SatusehatEnvironment | string;
   onUpdateEncounter: (updated: OutpatientEncounter) => void;
+  onOpenRegistration?: () => void;
 }
 
 const PRESET_LAB_TESTS = [
-  { code: "58410-2", name: "Darah Lengkap (CBC)", category: "Hematologi", unit: "-", refRange: "Normal" },
-  { code: "1558-6", name: "Glukosa Darah Puasa (GDP)", category: "Kimia Darah", unit: "mg/dL", refRange: "70 - 100" },
-  { code: "4548-4", name: "HbA1c (Glikemik Terkontrol)", category: "Kimia Darah", unit: "%", refRange: "< 5.7" },
-  { code: "2093-3", name: "Kolesterol Total", category: "Profil Lipid", unit: "mg/dL", refRange: "< 200" },
-  { code: "2085-9", name: "Kolesterol HDL", category: "Profil Lipid", unit: "mg/dL", refRange: "> 40" },
-  { code: "13457-7", name: "Kolesterol LDL", category: "Profil Lipid", unit: "mg/dL", refRange: "< 100" },
-  { code: "2571-8", name: "Trigliserida", category: "Profil Lipid", unit: "mg/dL", refRange: "< 150" },
-  { code: "2160-0", name: "Kreatinin Serum", category: "Faal Ginjal", unit: "mg/dL", refRange: "0.7 - 1.3" },
-  { code: "3094-0", name: "Ureum / BUN", category: "Faal Ginjal", unit: "mg/dL", refRange: "10 - 50" },
-  { code: "1920-8", name: "SGOT / AST", category: "Faal Hati", unit: "U/L", refRange: "0 - 35" },
-  { code: "1742-6", name: "SGPT / ALT", category: "Faal Hati", unit: "U/L", refRange: "0 - 45" },
-  { code: "24356-8", name: "Urinalisis Lengkap", category: "Urinalisis", unit: "-", refRange: "Normal" },
+  {
+    code: "58410-2",
+    name: "Darah Lengkap (CBC)",
+    category: "Hematologi",
+    unit: "-",
+    refRange: "Normal",
+  },
+  {
+    code: "1558-6",
+    name: "Glukosa Darah Puasa (GDP)",
+    category: "Kimia Darah",
+    unit: "mg/dL",
+    refRange: "70 - 100",
+  },
+  {
+    code: "4548-4",
+    name: "HbA1c (Glikemik Terkontrol)",
+    category: "Kimia Darah",
+    unit: "%",
+    refRange: "< 5.7",
+  },
+  {
+    code: "2093-3",
+    name: "Kolesterol Total",
+    category: "Profil Lipid",
+    unit: "mg/dL",
+    refRange: "< 200",
+  },
+  {
+    code: "2085-9",
+    name: "Kolesterol HDL",
+    category: "Profil Lipid",
+    unit: "mg/dL",
+    refRange: "> 40",
+  },
+  {
+    code: "13457-7",
+    name: "Kolesterol LDL",
+    category: "Profil Lipid",
+    unit: "mg/dL",
+    refRange: "< 100",
+  },
+  {
+    code: "2571-8",
+    name: "Trigliserida",
+    category: "Profil Lipid",
+    unit: "mg/dL",
+    refRange: "< 150",
+  },
+  {
+    code: "2160-0",
+    name: "Kreatinin Serum",
+    category: "Faal Ginjal",
+    unit: "mg/dL",
+    refRange: "0.7 - 1.3",
+  },
+  {
+    code: "3094-0",
+    name: "Ureum / BUN",
+    category: "Faal Ginjal",
+    unit: "mg/dL",
+    refRange: "10 - 50",
+  },
+  {
+    code: "1920-8",
+    name: "SGOT / AST",
+    category: "Faal Hati",
+    unit: "U/L",
+    refRange: "0 - 35",
+  },
+  {
+    code: "1742-6",
+    name: "SGPT / ALT",
+    category: "Faal Hati",
+    unit: "U/L",
+    refRange: "0 - 45",
+  },
+  {
+    code: "24356-8",
+    name: "Urinalisis Lengkap",
+    category: "Urinalisis",
+    unit: "-",
+    refRange: "Normal",
+  },
 ];
 
 const PRESET_RAD_TESTS: Array<{
@@ -61,20 +150,79 @@ const PRESET_RAD_TESTS: Array<{
 export function DiagnosticSupportModule({
   patient,
   encounter,
+  session,
+  env,
   onUpdateEncounter,
+  onOpenRegistration,
 }: DiagnosticSupportModuleProps) {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<"order" | "lab" | "rad">("order");
-  const [selectedCategory, setSelectedCategory] = useState<"laboratory" | "radiology">("laboratory");
-  const [selectedPreset, setSelectedPreset] = useState(PRESET_LAB_TESTS[0].code);
-  const [priority, setPriority] = useState<"routine" | "urgent" | "stat">("routine");
+  const [selectedCategory, setSelectedCategory] = useState<
+    "laboratory" | "radiology"
+  >("laboratory");
+  const [selectedPreset, setSelectedPreset] = useState(
+    PRESET_LAB_TESTS[0].code,
+  );
+  const [priority, setPriority] = useState<"routine" | "urgent" | "stat">(
+    "routine",
+  );
   const [clinicalNotes, setClinicalNotes] = useState("");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTest, setSearchTest] = useState("");
-  const [customTest, setCustomTest] = useState<{ code: string; name: string } | null>(null);
+  const [customTest, setCustomTest] = useState<{
+    code: string;
+    name: string;
+  } | null>(null);
   const [isAddingOrder, setIsAddingOrder] = useState(false);
+  const [isSyncing, setIsSyncing] = useState<string | null>(null);
+
+  // Direct SATUSEHAT Sync Helper for Diagnostic Addendums
+  const syncResourceToSatusehat = async (
+    targetEncounter: OutpatientEncounter,
+    resourceType: "ServiceRequest" | "DiagnosticReport",
+    itemLabel: string,
+    targetCategory?: "laboratory" | "radiology",
+  ) => {
+    if (!patient || !targetEncounter.satusehatEncounterId) {
+      return false;
+    }
+    try {
+      const res = await fetch("/api/satusehat/sync-retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patient,
+          encounter: targetEncounter,
+          targetResourceTypes: [resourceType],
+          targetCategory,
+          token: session?.accessToken,
+          env: (env as string) || "development",
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.data) {
+        const returnedEncounter = data.data.encounter || {
+          ...targetEncounter,
+          syncStatus: data.data.syncStatus,
+          syncedAt: data.data.syncedAt,
+          syncBreakdown: data.data.syncBreakdown,
+        };
+        onUpdateEncounter(returnedEncounter);
+        toast.success(`${itemLabel} berhasil disimpan`);
+        return true;
+      } else {
+        toast.warning(`${itemLabel} berhasil disimpan (sinkronisasi tertunda)`);
+        return false;
+      }
+    } catch {
+      toast.warning(`${itemLabel} berhasil disimpan (koneksi offline)`);
+      return false;
+    }
+  };
 
   // Lab Form State
   const [isAddingLab, setIsAddingLab] = useState(false);
+  const [editingLabId, setEditingLabId] = useState<string | null>(null);
   const [isLabPresetOpen, setIsLabPresetOpen] = useState(false);
   const [searchLabPreset, setSearchLabPreset] = useState("");
   const [labForm, setLabForm] = useState<{
@@ -97,8 +245,39 @@ export function DiagnosticSupportModule({
     performer: "Laboratorium Patologi RSUD",
   });
 
+  const handleStartEditLab = (lr: LabResult) => {
+    setEditingLabId(lr.id);
+    setLabForm({
+      testCode: lr.testCode,
+      testName: lr.testName,
+      category: lr.category,
+      value: String(lr.value),
+      unit: lr.unit,
+      referenceRange: lr.referenceRange,
+      flag: lr.flag,
+      performer: lr.performer,
+    });
+    setIsAddingLab(true);
+  };
+
+  const handleCancelEditLab = () => {
+    setEditingLabId(null);
+    setIsAddingLab(false);
+    setLabForm({
+      testCode: PRESET_LAB_TESTS[0].code,
+      testName: PRESET_LAB_TESTS[0].name,
+      category: PRESET_LAB_TESTS[0].category,
+      value: "",
+      unit: PRESET_LAB_TESTS[0].unit,
+      referenceRange: PRESET_LAB_TESTS[0].refRange,
+      flag: "normal",
+      performer: "Laboratorium Patologi RSUD",
+    });
+  };
+
   // Rad Form State
   const [isAddingRad, setIsAddingRad] = useState(false);
+  const [editingRadId, setEditingRadId] = useState<string | null>(null);
   const [isRadPresetOpen, setIsRadPresetOpen] = useState(false);
   const [searchRadPreset, setSearchRadPreset] = useState("");
   const [radForm, setRadForm] = useState<{
@@ -117,13 +296,39 @@ export function DiagnosticSupportModule({
     radiologistName: "dr. Hendra Pratama, Sp.Rad",
   });
 
+  const handleStartEditRad = (rad: RadiologyResult) => {
+    setEditingRadId(rad.id);
+    setRadForm({
+      examCode: rad.examCode,
+      examName: rad.examName,
+      modality: rad.modality,
+      findings: rad.findings,
+      conclusion: rad.conclusion,
+      radiologistName: rad.radiologistName,
+    });
+    setIsAddingRad(true);
+  };
+
+  const handleCancelEditRad = () => {
+    setEditingRadId(null);
+    setIsAddingRad(false);
+    setRadForm({
+      examCode: PRESET_RAD_TESTS[0].code,
+      examName: PRESET_RAD_TESTS[0].name,
+      modality: PRESET_RAD_TESTS[0].modality,
+      findings: "",
+      conclusion: "",
+      radiologistName: "dr. Hendra Pratama, Sp.Rad",
+    });
+  };
+
   const currentPresetList =
     selectedCategory === "laboratory" ? PRESET_LAB_TESTS : PRESET_RAD_TESTS;
   const filteredPresetList = searchTest.trim()
     ? currentPresetList.filter(
         (t) =>
           t.name.toLowerCase().includes(searchTest.toLowerCase()) ||
-          t.code.toLowerCase().includes(searchTest.toLowerCase())
+          t.code.toLowerCase().includes(searchTest.toLowerCase()),
       )
     : currentPresetList;
   const currentActivePreset =
@@ -136,7 +341,7 @@ export function DiagnosticSupportModule({
         (t) =>
           t.name.toLowerCase().includes(searchLabPreset.toLowerCase()) ||
           t.code.toLowerCase().includes(searchLabPreset.toLowerCase()) ||
-          t.category.toLowerCase().includes(searchLabPreset.toLowerCase())
+          t.category.toLowerCase().includes(searchLabPreset.toLowerCase()),
       )
     : PRESET_LAB_TESTS;
 
@@ -145,17 +350,27 @@ export function DiagnosticSupportModule({
         (t) =>
           t.name.toLowerCase().includes(searchRadPreset.toLowerCase()) ||
           t.code.toLowerCase().includes(searchRadPreset.toLowerCase()) ||
-          t.modality.toLowerCase().includes(searchRadPreset.toLowerCase())
+          t.modality.toLowerCase().includes(searchRadPreset.toLowerCase()),
       )
     : PRESET_RAD_TESTS;
 
-  const diagnosticOrders = encounter.diagnosticOrders || [];
-  const labResults = encounter.labResults || [];
-  const radiologyResults = encounter.radiologyResults || [];
+  const diagnosticOrders = encounter?.diagnosticOrders || [];
+  const labResults = encounter?.labResults || [];
+  const radiologyResults = encounter?.radiologyResults || [];
 
   // Order Submission (ServiceRequest)
-  const handleAddOrder = (e: React.FormEvent) => {
+  const handleAddOrder = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!encounter || !patient) return;
+
+    if (user && user.role !== "doctor" && user.role !== "admin") {
+      toast.error("Akses Ditolak: Wewenang Dokter DPJP", {
+        description: `Akun Anda terdaftar sebagai ${user.role.toUpperCase()}. Order pemeriksaan penunjang hanya dapat diterbitkan oleh Dokter DPJP.`,
+        duration: 5000,
+      });
+      return;
+    }
+
     let testCode = selectedPreset;
     let testName = "";
 
@@ -170,7 +385,7 @@ export function DiagnosticSupportModule({
     }
 
     const newOrder: DiagnosticOrder = {
-      id: `ORD-${Date.now().toString().slice(-6)}`,
+      id: generatePrefixedId("ord_"),
       testCode,
       testName,
       category: selectedCategory,
@@ -178,33 +393,60 @@ export function DiagnosticSupportModule({
       priority,
       orderDate: new Date().toISOString(),
       doctorName: encounter.doctorName,
-      clinicalNotes: clinicalNotes || `Permintaan pemeriksaan penunjang untuk pasien ${patient.name}`,
+      clinicalNotes:
+        clinicalNotes ||
+        `Permintaan pemeriksaan penunjang untuk pasien ${patient.name}`,
     };
 
     const updatedOrders = [...diagnosticOrders, newOrder];
-
-    onUpdateEncounter({
+    const updatedEncounter: OutpatientEncounter = {
       ...encounter,
       diagnosticOrders: updatedOrders,
-    });
+    };
 
-    setIsAddingOrder(false);
-    setClinicalNotes("");
-    toast.success(`Order ${testName} berhasil dikirim ke instalasi penunjang!`);
+    if (encounter.satusehatEncounterId) {
+      setIsSyncing("order");
+      try {
+        await syncResourceToSatusehat(
+          updatedEncounter,
+          "ServiceRequest",
+          `Order ${testName}`,
+          newOrder.category,
+        );
+      } finally {
+        setIsSyncing(null);
+        setIsAddingOrder(false);
+        setClinicalNotes("");
+      }
+    } else {
+      onUpdateEncounter(updatedEncounter);
+      setIsAddingOrder(false);
+      setClinicalNotes("");
+      toast.success(`Order ${testName} berhasil dibuat`);
+    }
   };
 
   const handleDeleteOrder = (orderId: string) => {
+    if (!encounter) return;
+    const target = diagnosticOrders.find((o) => o.id === orderId);
+    if (target?.satusehatServiceRequestId) {
+      toast.error("Akses Ditolak: Rekam Medis Terdaftar di Kemenkes", {
+        description: `Order "${target.testName}" telah diterbitkan ke SATUSEHAT (ID: ${target.satusehatServiceRequestId}). Sesuai Permenkes No. 24/2022, data tidak dapat dihapus permanen.`,
+      });
+      return;
+    }
     const updated = diagnosticOrders.filter((o) => o.id !== orderId);
     onUpdateEncounter({
       ...encounter,
       diagnosticOrders: updated,
     });
-    toast.info("Order pemeriksaan dihapus");
+    toast.info("Draf order pemeriksaan dihapus");
   };
 
   // Lab Results Submission (FHIR Observation / DiagnosticReport)
-  const handleSaveLabResult = (e: React.FormEvent) => {
+  const handleSaveLabResult = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!encounter) return;
     if (!labForm.testName.trim()) {
       toast.error("Nama pemeriksaan laboratorium wajib diisi");
       return;
@@ -214,12 +456,61 @@ export function DiagnosticSupportModule({
       return;
     }
 
+    if (editingLabId) {
+      const updated = labResults.map((l) =>
+        l.id === editingLabId
+          ? {
+              ...l,
+              testCode: labForm.testCode.trim() || "MISC-LAB",
+              testName: labForm.testName.trim(),
+              category: labForm.category.trim() || "Laboratorium Umum",
+              value: isNaN(Number(labForm.value))
+                ? labForm.value.trim()
+                : Number(labForm.value.trim()),
+              unit: labForm.unit.trim() || "-",
+              referenceRange: labForm.referenceRange.trim() || "Normal",
+              flag: labForm.flag,
+              resultDate: new Date().toISOString(),
+              performer: labForm.performer.trim() || "Laboratorium RSUD",
+            }
+          : l
+      );
+      const updatedEncounter: OutpatientEncounter = {
+        ...encounter,
+        labResults: updated,
+      };
+
+      if (encounter.satusehatEncounterId) {
+        setIsSyncing("lab");
+        try {
+          await syncResourceToSatusehat(
+            updatedEncounter,
+            "DiagnosticReport",
+            `Koreksi Hasil Lab ${labForm.testName}`,
+            "laboratory",
+          );
+        } finally {
+          setIsSyncing(null);
+          handleCancelEditLab();
+        }
+      } else {
+        onUpdateEncounter(updatedEncounter);
+        handleCancelEditLab();
+        toast.success(
+          `Hasil laboratorium ${labForm.testName} berhasil diperbarui!`
+        );
+      }
+      return;
+    }
+
     const newLab: LabResult = {
-      id: `LAB-${Date.now().toString().slice(-5)}`,
+      id: generatePrefixedId("lab_"),
       testCode: labForm.testCode.trim() || "MISC-LAB",
       testName: labForm.testName.trim(),
       category: labForm.category.trim() || "Laboratorium Umum",
-      value: isNaN(Number(labForm.value)) ? labForm.value.trim() : Number(labForm.value.trim()),
+      value: isNaN(Number(labForm.value))
+        ? labForm.value.trim()
+        : Number(labForm.value.trim()),
       unit: labForm.unit.trim() || "-",
       referenceRange: labForm.referenceRange.trim() || "Normal",
       flag: labForm.flag,
@@ -228,37 +519,55 @@ export function DiagnosticSupportModule({
     };
 
     const updated = [...labResults, newLab];
-    onUpdateEncounter({
+    const updatedEncounter: OutpatientEncounter = {
       ...encounter,
       labResults: updated,
-    });
+    };
 
-    setIsAddingLab(false);
-    setLabForm({
-      testCode: PRESET_LAB_TESTS[0].code,
-      testName: PRESET_LAB_TESTS[0].name,
-      category: PRESET_LAB_TESTS[0].category,
-      value: "",
-      unit: PRESET_LAB_TESTS[0].unit,
-      referenceRange: PRESET_LAB_TESTS[0].refRange,
-      flag: "normal",
-      performer: "Laboratorium Patologi RSUD",
-    });
-    toast.success(`Hasil laboratorium ${newLab.testName} berhasil disimpan!`);
+    if (encounter.satusehatEncounterId) {
+      setIsSyncing("lab");
+      try {
+        await syncResourceToSatusehat(
+          updatedEncounter,
+          "DiagnosticReport",
+          `Hasil Lab ${newLab.testName}`,
+          "laboratory",
+        );
+      } finally {
+        setIsSyncing(null);
+        handleCancelEditLab();
+      }
+    } else {
+      onUpdateEncounter(updatedEncounter);
+      handleCancelEditLab();
+      toast.success(`Hasil laboratorium ${newLab.testName} berhasil disimpan`);
+    }
   };
 
   const handleDeleteLabResult = (labId: string) => {
+    if (!encounter) return;
+    const target = labResults.find((l) => l.id === labId);
+    if (target?.satusehatDiagnosticReportId) {
+      toast.error("Akses Ditolak: Rekam Medis Terdaftar di Kemenkes", {
+        description: `Hasil laboratorium "${target.testName}" telah tersinkronisasi ke SATUSEHAT (DiagnosticReport ID: ${target.satusehatDiagnosticReportId}). Sesuai Permenkes No. 24/2022, arsip hasil tidak dapat dihapus permanen. Gunakan fitur Koreksi bila ada amandemen klinis.`,
+      });
+      return;
+    }
     const updated = labResults.filter((l) => l.id !== labId);
     onUpdateEncounter({
       ...encounter,
       labResults: updated,
     });
-    toast.info("Hasil laboratorium dihapus");
+    if (editingLabId === labId) {
+      handleCancelEditLab();
+    }
+    toast.info("Draf hasil laboratorium dihapus");
   };
 
   // Radiology Results Submission (FHIR DiagnosticReport RAD)
-  const handleSaveRadResult = (e: React.FormEvent) => {
+  const handleSaveRadResult = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!encounter) return;
     if (!radForm.examName.trim()) {
       toast.error("Nama pemeriksaan radiologi wajib diisi");
       return;
@@ -268,43 +577,116 @@ export function DiagnosticSupportModule({
       return;
     }
 
+    if (editingRadId) {
+      const updated = radiologyResults.map((r) =>
+        r.id === editingRadId
+          ? {
+              ...r,
+              examCode: radForm.examCode.trim() || "MISC-RAD",
+              examName: radForm.examName.trim(),
+              modality: radForm.modality,
+              findings: radForm.findings.trim(),
+              conclusion: radForm.conclusion.trim(),
+              radiologistName:
+                radForm.radiologistName.trim() || "dr. Hendra Pratama, Sp.Rad",
+              resultDate: new Date().toISOString(),
+            }
+          : r
+      );
+      const updatedEncounter: OutpatientEncounter = {
+        ...encounter,
+        radiologyResults: updated,
+      };
+
+      if (encounter.satusehatEncounterId) {
+        setIsSyncing("rad");
+        try {
+          await syncResourceToSatusehat(
+            updatedEncounter,
+            "DiagnosticReport",
+            `Koreksi Radiologi ${radForm.examName}`,
+            "radiology",
+          );
+        } finally {
+          setIsSyncing(null);
+          handleCancelEditRad();
+        }
+      } else {
+        onUpdateEncounter(updatedEncounter);
+        handleCancelEditRad();
+        toast.success(
+          `Ekspertise radiologi ${radForm.examName} berhasil diperbarui!`
+        );
+      }
+      return;
+    }
+
     const newRad: RadiologyResult = {
-      id: `RAD-${Date.now().toString().slice(-5)}`,
+      id: generatePrefixedId("rad_"),
       examCode: radForm.examCode.trim() || "MISC-RAD",
       examName: radForm.examName.trim(),
       modality: radForm.modality,
       findings: radForm.findings.trim(),
       conclusion: radForm.conclusion.trim(),
-      radiologistName: radForm.radiologistName.trim() || "dr. Hendra Pratama, Sp.Rad",
+      radiologistName:
+        radForm.radiologistName.trim() || "dr. Hendra Pratama, Sp.Rad",
       resultDate: new Date().toISOString(),
     };
 
     const updated = [...radiologyResults, newRad];
-    onUpdateEncounter({
+    const updatedEncounter: OutpatientEncounter = {
       ...encounter,
       radiologyResults: updated,
-    });
+    };
 
-    setIsAddingRad(false);
-    setRadForm({
-      examCode: PRESET_RAD_TESTS[0].code,
-      examName: PRESET_RAD_TESTS[0].name,
-      modality: PRESET_RAD_TESTS[0].modality,
-      findings: "",
-      conclusion: "",
-      radiologistName: "dr. Hendra Pratama, Sp.Rad",
-    });
-    toast.success(`Hasil ekspertise radiologi ${newRad.examName} berhasil disimpan!`);
+    if (encounter.satusehatEncounterId) {
+      setIsSyncing("rad");
+      try {
+        await syncResourceToSatusehat(
+          updatedEncounter,
+          "DiagnosticReport",
+          `Hasil Radiologi ${newRad.examName}`,
+          "radiology",
+        );
+      } finally {
+        setIsSyncing(null);
+        handleCancelEditRad();
+      }
+    } else {
+      onUpdateEncounter(updatedEncounter);
+      handleCancelEditRad();
+      toast.success(`Hasil ekspertise radiologi ${newRad.examName} berhasil disimpan`);
+    }
   };
 
   const handleDeleteRadResult = (radId: string) => {
+    if (!encounter) return;
+    const target = radiologyResults.find((r) => r.id === radId);
+    if (target?.satusehatDiagnosticReportId) {
+      toast.error("Akses Ditolak: Rekam Medis Terdaftar di Kemenkes", {
+        description: `Hasil ekspertise radiologi "${target.examName}" telah tersinkronisasi ke SATUSEHAT (DiagnosticReport ID: ${target.satusehatDiagnosticReportId}). Sesuai Permenkes No. 24/2022, arsip radiologi tidak dapat dihapus permanen. Gunakan fitur Koreksi bila ada amandemen ekspertise.`,
+      });
+      return;
+    }
     const updated = radiologyResults.filter((r) => r.id !== radId);
     onUpdateEncounter({
       ...encounter,
       radiologyResults: updated,
     });
-    toast.info("Hasil ekspertise radiologi dihapus");
+    toast.info("Draf ekspertise radiologi dihapus");
   };
+
+  if (!patient || !patient.id || !encounter) {
+    return (
+      <ModuleEmptyState
+        icon={FlaskConical}
+        title="Pemeriksaan Penunjang (Laboratorium & Radiologi)"
+        description="Silakan pilih pasien dari daftar antrean poliklinik terlebih dahulu untuk membuat order pemeriksaan laboratorium atau melihat hasil radiologi."
+        actionText="Buka Daftar Antrean Pasien"
+        onAction={onOpenRegistration}
+      />
+    );
+  }
 
   return (
     <Card className="border-border/60 bg-white shadow-sm overflow-hidden">
@@ -319,13 +701,24 @@ export function DiagnosticSupportModule({
                 <CardTitle className="text-sm font-bold text-slate-900 leading-tight">
                   Penunjang Diagnostik (Lab &amp; Radiologi)
                 </CardTitle>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-teal-50 text-teal-800 border border-teal-200/80 whitespace-nowrap shrink-0 shadow-2xs">
-                  <span className="w-1.5 h-1.5 rounded-full bg-teal-500 animate-pulse" />
-                  Terintegrasi Lab &amp; Radiologi
-                </span>
+                {encounter.satusehatEncounterId ? (
+                  <span
+                    title={`ID Kunjungan SATUSEHAT: ${encounter.satusehatEncounterId}`}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 whitespace-nowrap shrink-0 shadow-2xs cursor-help"
+                  >
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    SATUSEHAT Aktif
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap shrink-0 shadow-2xs">
+                    <Clock className="w-3 h-3 text-slate-500" />
+                    Draf Internal
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Permintaan dan pencatatan hasil pemeriksaan terstandar LOINC Kemenkes RI
+                Permintaan dan pencatatan hasil pemeriksaan terstandar LOINC
+                Kemenkes RI
               </p>
             </div>
           </div>
@@ -407,21 +800,28 @@ export function DiagnosticSupportModule({
               <div>
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
                   <Plus className="h-3.5 w-3.5 text-teal-600" />
-                  <span>Daftar & Permintaan Pemeriksaan Penunjang (Order Elektronik)</span>
+                  <span>
+                    Daftar &amp; Permintaan Pemeriksaan Penunjang
+                  </span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Permintaan pemeriksaan laboratorium dan radiologi terstandar LOINC & SATUSEHAT (FHIR ServiceRequest)
+                  Permintaan pemeriksaan laboratorium dan radiologi terstandar
+                  LOINC &amp; SATUSEHAT
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="outline" className="text-[10px] bg-teal-50 text-teal-800 border-teal-200">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-teal-50 text-teal-800 border-teal-200"
+                >
                   {diagnosticOrders.length} Order Aktif
                 </Badge>
                 <Button
                   type="button"
                   size="sm"
+                  disabled={!!isSyncing}
                   onClick={() => setIsAddingOrder(!isAddingOrder)}
-                  className="h-8 text-xs font-bold gap-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg shadow-2xs btn-press cursor-pointer"
+                  className="h-8 text-xs font-bold gap-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg shadow-2xs btn-press cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isAddingOrder ? (
                     <>
@@ -447,7 +847,7 @@ export function DiagnosticSupportModule({
                 <div className="flex items-center justify-between pb-2 border-b border-teal-200/60">
                   <span className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-teal-600" />
-                    Formulir Permintaan Pemeriksaan Penunjang (ServiceRequest)
+                    Formulir Permintaan Pemeriksaan Penunjang
                   </span>
                   <span className="text-[10px] text-teal-700 font-mono">
                     DPJP: {encounter.doctorName}
@@ -503,16 +903,18 @@ export function DiagnosticSupportModule({
                         <Label className="text-xs font-bold text-slate-800">
                           Pilih Pemeriksaan Penunjang:
                         </Label>
-                        {"category" in (currentActivePreset || {}) && (currentActivePreset as any)?.category && (
-                          <span className="text-[10px] font-semibold text-teal-800 bg-teal-100/70 px-2 py-0.5 rounded-md border border-teal-200 shadow-2xs whitespace-nowrap shrink-0">
-                            {(currentActivePreset as any).category}
-                          </span>
-                        )}
-                        {"modality" in (currentActivePreset || {}) && (currentActivePreset as any)?.modality && (
-                          <span className="text-[10px] font-semibold text-blue-800 bg-blue-100/70 px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs whitespace-nowrap shrink-0">
-                            Modalitas: {(currentActivePreset as any).modality}
-                          </span>
-                        )}
+                        {"category" in (currentActivePreset || {}) &&
+                          (currentActivePreset as any)?.category && (
+                            <span className="text-[10px] font-semibold text-teal-800 bg-teal-100/70 px-2 py-0.5 rounded-md border border-teal-200 shadow-2xs whitespace-nowrap shrink-0">
+                              {(currentActivePreset as any).category}
+                            </span>
+                          )}
+                        {"modality" in (currentActivePreset || {}) &&
+                          (currentActivePreset as any)?.modality && (
+                            <span className="text-[10px] font-semibold text-blue-800 bg-blue-100/70 px-2 py-0.5 rounded-md border border-blue-200 shadow-2xs whitespace-nowrap shrink-0">
+                              Modalitas: {(currentActivePreset as any).modality}
+                            </span>
+                          )}
                       </div>
 
                       <button
@@ -548,7 +950,9 @@ export function DiagnosticSupportModule({
                                 <input
                                   type="text"
                                   value={searchTest}
-                                  onChange={(e) => setSearchTest(e.target.value)}
+                                  onChange={(e) =>
+                                    setSearchTest(e.target.value)
+                                  }
                                   placeholder="Cari nama tes atau kode LOINC..."
                                   className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-500 focus:bg-white"
                                   onClick={(e) => e.stopPropagation()}
@@ -596,7 +1000,10 @@ export function DiagnosticSupportModule({
                                   type="button"
                                   onClick={() => {
                                     const code = `CUSTOM-${Date.now().toString().slice(-4)}`;
-                                    setCustomTest({ code, name: searchTest.trim() });
+                                    setCustomTest({
+                                      code,
+                                      name: searchTest.trim(),
+                                    });
                                     setSelectedPreset(code);
                                     setIsDropdownOpen(false);
                                     setSearchTest("");
@@ -605,7 +1012,10 @@ export function DiagnosticSupportModule({
                                 >
                                   <div className="flex items-center gap-1.5 truncate">
                                     <Plus className="h-3.5 w-3.5 text-teal-700 shrink-0" />
-                                    <span className="truncate">Gunakan: &quot;{searchTest.trim()}&quot; (Kustom)</span>
+                                    <span className="truncate">
+                                      Gunakan: &quot;{searchTest.trim()}&quot;
+                                      (Kustom)
+                                    </span>
                                   </div>
                                   <span className="text-[10px] font-mono font-bold bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200 shrink-0">
                                     Order Baru
@@ -623,12 +1033,32 @@ export function DiagnosticSupportModule({
                   <div className="space-y-3.5">
                     {/* Priority */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-700">Tingkat Prioritas:</Label>
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Tingkat Prioritas:
+                      </Label>
                       <div className="grid grid-cols-3 gap-2 text-xs">
                         {[
-                          { id: "routine", label: "Rutin", desc: "Sesuai Antrean", activeClass: "bg-slate-900 text-white border-slate-900 shadow-2xs font-bold" },
-                          { id: "urgent", label: "Cito", desc: "Segera", activeClass: "bg-amber-600 text-white border-amber-700 shadow-2xs font-bold" },
-                          { id: "stat", label: "Emergensi", desc: "Gawat Darurat", activeClass: "bg-rose-600 text-white border-rose-700 shadow-2xs font-bold" },
+                          {
+                            id: "routine",
+                            label: "Rutin",
+                            desc: "Sesuai Antrean",
+                            activeClass:
+                              "bg-slate-900 text-white border-slate-900 shadow-2xs font-bold",
+                          },
+                          {
+                            id: "urgent",
+                            label: "Cito",
+                            desc: "Segera",
+                            activeClass:
+                              "bg-amber-600 text-white border-amber-700 shadow-2xs font-bold",
+                          },
+                          {
+                            id: "stat",
+                            label: "Emergensi",
+                            desc: "Gawat Darurat",
+                            activeClass:
+                              "bg-rose-600 text-white border-rose-700 shadow-2xs font-bold",
+                          },
                         ].map((p) => (
                           <button
                             key={p.id}
@@ -641,7 +1071,9 @@ export function DiagnosticSupportModule({
                             }`}
                           >
                             <span className="font-bold">{p.label}</span>
-                            <span className={`text-[9.5px] ${priority === p.id ? "text-white/80" : "text-slate-400"}`}>
+                            <span
+                              className={`text-[9.5px] ${priority === p.id ? "text-white/80" : "text-slate-400"}`}
+                            >
                               {p.desc}
                             </span>
                           </button>
@@ -655,9 +1087,11 @@ export function DiagnosticSupportModule({
                         <Label className="text-xs font-semibold text-slate-700">
                           Indikasi Klinis / Catatan Petugas:
                         </Label>
-                        <span className="text-[10px] text-slate-400">Opsional</span>
+                        <span className="text-[10px] text-slate-400">
+                          Opsional
+                        </span>
                       </div>
-                      
+
                       <Input
                         value={clinicalNotes}
                         onChange={(e) => setClinicalNotes(e.target.value)}
@@ -693,6 +1127,7 @@ export function DiagnosticSupportModule({
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={isSyncing === "order"}
                     onClick={() => setIsAddingOrder(false)}
                     className="text-xs rounded-xl cursor-pointer"
                   >
@@ -702,10 +1137,20 @@ export function DiagnosticSupportModule({
                     type="submit"
                     variant="medical"
                     size="sm"
+                    disabled={isSyncing === "order"}
                     className="text-xs font-bold gap-1.5 rounded-xl shadow-2xs btn-press cursor-pointer"
                   >
-                    <Plus className="h-3.5 w-3.5" />
-                    <span>Kirim Order Pemeriksaan</span>
+                    {isSyncing === "order" ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Menyinkronkan ke SATUSEHAT...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-3.5 w-3.5" />
+                        <span>Kirim Order Pemeriksaan</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
@@ -713,89 +1158,172 @@ export function DiagnosticSupportModule({
 
             {/* List of Active Orders (Full Width 2-Column Cards Grid) */}
             {diagnosticOrders.length === 0 ? (
-              <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl space-y-2 bg-slate-50/50">
-                <FlaskConical className="h-8 w-8 text-slate-400 mx-auto" />
-                <p className="text-xs text-slate-500 font-medium">
-                  Belum ada permintaan laboratorium atau radiologi yang dibuat pada kunjungan ini.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsAddingOrder(true)}
-                  className="text-xs font-semibold text-teal-700 border-teal-200 hover:bg-teal-50 rounded-lg cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Buat Permintaan Pertama
-                </Button>
-              </div>
+              !isAddingOrder && (
+                <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl space-y-2 bg-slate-50/50">
+                  <FlaskConical className="h-8 w-8 text-slate-400 mx-auto" />
+                  <p className="text-xs text-slate-500 font-medium">
+                    Belum ada permintaan laboratorium atau radiologi yang dibuat
+                    pada kunjungan ini.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAddingOrder(true)}
+                    className="text-xs font-semibold text-teal-700 border-teal-200 hover:bg-teal-50 rounded-lg cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Buat Permintaan Pertama
+                  </Button>
+                </div>
+              )
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {diagnosticOrders.map((ord) => (
                   <div
                     key={ord.id}
-                    className="p-3.5 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-start justify-between gap-3 hover:border-slate-300 hover:shadow-xs transition-all"
+                    className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:border-slate-300 hover:shadow-xs transition-all flex flex-col justify-between gap-3"
                   >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div
-                        className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${
-                          ord.category === "laboratory"
-                            ? "bg-teal-50 text-teal-700 border border-teal-200"
-                            : "bg-blue-50 text-blue-700 border border-blue-200"
-                        }`}
-                      >
-                        {ord.category === "laboratory" ? (
-                          <FlaskConical className="h-4.5 w-4.5" />
-                        ) : (
-                          <Radio className="h-4.5 w-4.5" />
-                        )}
+                    {/* Header: Icon, Test Info, Status & Actions */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div
+                          className={`h-10 w-10 rounded-xl flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${
+                            ord.category === "laboratory"
+                              ? "bg-teal-50 text-teal-700 border border-teal-200"
+                              : "bg-blue-50 text-blue-700 border border-blue-200"
+                          }`}
+                        >
+                          {ord.category === "laboratory" ? (
+                            <FlaskConical className="h-5 w-5" />
+                          ) : (
+                            <Radio className="h-5 w-5" />
+                          )}
+                        </div>
+
+                        <div className="space-y-1.5 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-sm text-slate-900 leading-snug">
+                              {ord.testName}
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
+                                ord.priority === "stat"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : ord.priority === "urgent"
+                                    ? "bg-amber-50 text-amber-700 border-amber-200"
+                                    : "bg-slate-100 text-slate-700 border-slate-200"
+                              }`}
+                            >
+                              {ord.priority === "stat"
+                                ? "Emergensi"
+                                : ord.priority === "urgent"
+                                  ? "Cito"
+                                  : "Rutin"}
+                            </Badge>
+                          </div>
+
+                          {/* Metadata: Clean LOINC Badge & Order ID */}
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80 font-mono text-[10px]">
+                              <span className="text-[9px] font-bold text-slate-400 font-sans uppercase">
+                                LOINC
+                              </span>
+                              <span className="font-semibold text-slate-800">
+                                {ord.testCode}
+                              </span>
+                            </span>
+                            <span
+                              title={`ID Order: ${ord.id}`}
+                              className="text-[10px] font-mono text-slate-400 hover:text-slate-600 transition-colors cursor-default"
+                            >
+                              #{ord.id.startsWith("ord_") ? ord.id.slice(4, 12) : ord.id.slice(0, 8)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-bold text-xs text-slate-900 truncate">
-                            {ord.testName}
-                          </span>
+
+                      {/* Actions: Sync Status & Delete */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {ord.satusehatServiceRequestId ? (
                           <Badge
                             variant="outline"
-                            className={`text-[9px] font-bold ${
-                              ord.priority === "stat"
-                                ? "bg-rose-50 text-rose-700 border-rose-200"
-                                : ord.priority === "urgent"
-                                ? "bg-amber-50 text-amber-700 border-amber-200"
-                                : "bg-slate-100 text-slate-700 border-slate-200"
-                            }`}
+                            title={`ID ServiceRequest SATUSEHAT: ${ord.satusehatServiceRequestId}`}
+                            className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold flex items-center gap-1 py-1 cursor-help"
                           >
-                            {ord.priority === "stat" ? "Emergensi" : ord.priority === "urgent" ? "Cito" : "Rutin"}
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                            <span>SATUSEHAT</span>
                           </Badge>
-                        </div>
-                        <p className="text-[11px] text-slate-500 font-mono flex items-center gap-1.5">
-                          <span>Kode: {ord.testCode}</span>
-                          <span>•</span>
-                          <span>ID: {ord.id}</span>
-                        </p>
-                        {ord.clinicalNotes && (
-                          <p className="text-[11px] text-slate-600 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
-                            &quot;{ord.clinicalNotes}&quot;
-                          </p>
+                        ) : encounter.satusehatEncounterId ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isSyncing === ord.id}
+                            onClick={async () => {
+                              setIsSyncing(ord.id);
+                              await syncResourceToSatusehat(
+                                encounter,
+                                "ServiceRequest",
+                                `Order ${ord.testName}`,
+                                ord.category,
+                              );
+                              setIsSyncing(null);
+                            }}
+                            className="h-7 text-[10px] px-2.5 font-bold text-teal-700 border-teal-300 hover:bg-teal-50 rounded-lg cursor-pointer flex items-center gap-1 shadow-2xs"
+                          >
+                            {isSyncing === ord.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <CloudUpload className="h-3 w-3" />
+                            )}
+                            <span>Sinkronkan</span>
+                          </Button>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-slate-100 text-slate-600 border-slate-200 font-medium py-1"
+                          >
+                            Draf Internal
+                          </Badge>
+                        )}
+
+                        {ord.satusehatServiceRequestId ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-300 bg-slate-50 border border-slate-200/60 cursor-not-allowed"
+                            title={`Order terdaftar di SATUSEHAT (ID: ${ord.satusehatServiceRequestId}). Sesuai Permenkes No. 24/2022, rekam medis yang telah terbit tidak dapat dihapus.`}
+                          >
+                            <Lock className="h-3 w-3 text-slate-400" />
+                          </button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteOrder(ord.id)}
+                            className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer transition-colors"
+                            title="Batalkan / Hapus Draf Order"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                      <Badge variant="secondary" className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200 font-medium">
-                        Terkirim (FHIR)
-                      </Badge>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDeleteOrder(ord.id)}
-                        className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
-                        title="Batalkan / Hapus Order"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
+                    {/* Footer: Clinical Notes (Full Width) */}
+                    {ord.clinicalNotes && (
+                      <div className="bg-slate-50/90 rounded-xl p-2.5 border border-slate-200/70 flex items-start gap-2">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide shrink-0 mt-0.5">
+                          Catatan:
+                        </span>
+                        <p className="text-[11px] text-slate-700 leading-relaxed font-medium">
+                          &quot;{ord.clinicalNotes}&quot;
+                        </p>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -817,19 +1345,29 @@ export function DiagnosticSupportModule({
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[10px] bg-teal-50 text-teal-800 border-teal-200">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-teal-50 text-teal-800 border-teal-200"
+                >
                   Standar LOINC / Kemenkes
                 </Badge>
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => setIsAddingLab(!isAddingLab)}
-                  className="h-8 text-xs font-bold gap-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg shadow-2xs btn-press cursor-pointer"
+                  disabled={!!isSyncing}
+                  onClick={() => {
+                    if (isAddingLab) {
+                      handleCancelEditLab();
+                    } else {
+                      setIsAddingLab(true);
+                    }
+                  }}
+                  className="h-8 text-xs font-bold gap-1.5 bg-teal-700 hover:bg-teal-800 text-white rounded-lg shadow-2xs btn-press cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isAddingLab ? (
                     <>
                       <X className="h-3.5 w-3.5" />
-                      <span>Batal Input</span>
+                      <span>{editingLabId ? "Batal Edit" : "Batal Input"}</span>
                     </>
                   ) : (
                     <>
@@ -850,17 +1388,21 @@ export function DiagnosticSupportModule({
                 <div className="flex items-center justify-between pb-2 border-b border-teal-200/60">
                   <span className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-teal-600" />
-                    Formulir Pengisian Hasil Laboratorium
+                    {editingLabId
+                      ? "Mode Edit Hasil Laboratorium"
+                      : "Formulir Pengisian Hasil Laboratorium"}
                   </span>
                   <span className="text-[10px] text-teal-700 font-mono">
-                    Diinput oleh Petugas Lab / DPJP
+                    {editingLabId
+                      ? `Mengedit Hasil Lab (${editingLabId})`
+                      : "Diinput oleh Petugas Lab / DPJP"}
                   </span>
                 </div>
 
                 {/* Quick Select from Orders or Presets */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1 relative">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between h-5">
                       <Label className="text-xs font-semibold text-slate-700">
                         Pilih dari Permintaan / Preset:
                       </Label>
@@ -873,7 +1415,7 @@ export function DiagnosticSupportModule({
                     <button
                       type="button"
                       onClick={() => setIsLabPresetOpen((prev) => !prev)}
-                      className="w-full text-left text-xs rounded-xl border border-slate-300 bg-white p-2.5 text-slate-900 hover:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 focus:outline-none transition-all shadow-2xs flex items-center justify-between gap-2 cursor-pointer btn-press"
+                      className="w-full text-left text-xs h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 hover:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 focus:outline-none transition-all shadow-2xs flex items-center justify-between gap-2 cursor-pointer btn-press"
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className="font-mono text-[10px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shrink-0">
@@ -904,7 +1446,9 @@ export function DiagnosticSupportModule({
                               <input
                                 type="text"
                                 value={searchLabPreset}
-                                onChange={(e) => setSearchLabPreset(e.target.value)}
+                                onChange={(e) =>
+                                  setSearchLabPreset(e.target.value)
+                                }
                                 placeholder="Cari tes lab atau kode LOINC..."
                                 className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-500 focus:bg-white"
                                 onClick={(e) => e.stopPropagation()}
@@ -938,18 +1482,24 @@ export function DiagnosticSupportModule({
                                   }`}
                                 >
                                   <div className="min-w-0 flex-1">
-                                    <div className="font-semibold truncate">{t.name}</div>
+                                    <div className="font-semibold truncate">
+                                      {t.name}
+                                    </div>
                                     <div className="text-[10px] text-slate-500 flex items-center gap-2">
                                       <span>{t.category}</span>
                                       <span>•</span>
-                                      <span>Rujukan: {t.refRange} {t.unit}</span>
+                                      <span>
+                                        Rujukan: {t.refRange} {t.unit}
+                                      </span>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-1.5 shrink-0">
                                     <span className="font-mono text-[10px] font-bold text-teal-800 bg-white px-1.5 py-0.5 rounded border border-teal-200">
                                       {t.code}
                                     </span>
-                                    {isSelected && <Check className="h-3.5 w-3.5 text-teal-600" />}
+                                    {isSelected && (
+                                      <Check className="h-3.5 w-3.5 text-teal-600" />
+                                    )}
                                   </div>
                                 </button>
                               );
@@ -961,16 +1511,21 @@ export function DiagnosticSupportModule({
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Nama Pemeriksaan (LOINC):
-                    </Label>
+                    <div className="flex items-center justify-between h-5">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Nama Pemeriksaan (LOINC):
+                      </Label>
+                      <span className="text-[10px] text-slate-400">
+                        Wajib diisi
+                      </span>
+                    </div>
                     <Input
                       value={labForm.testName}
                       onChange={(e) =>
                         setLabForm({ ...labForm, testName: e.target.value })
                       }
                       placeholder="Contoh: Darah Lengkap (Hemoglobin)"
-                      className="text-xs bg-white border-slate-300 rounded-xl"
+                      className="h-10 text-xs bg-white border-slate-300 rounded-xl focus-visible:border-teal-500 focus-visible:ring-teal-500/20 shadow-2xs"
                       required
                     />
                   </div>
@@ -978,45 +1533,86 @@ export function DiagnosticSupportModule({
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Nilai Hasil:
-                    </Label>
+                    <div className="flex items-center justify-between h-5">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Nilai Hasil:
+                      </Label>
+                      <span className="text-[10px] text-slate-400">
+                        Wajib diisi
+                      </span>
+                    </div>
                     <Input
                       value={labForm.value}
                       onChange={(e) =>
                         setLabForm({ ...labForm, value: e.target.value })
                       }
                       placeholder="Contoh: 14.2"
-                      className="text-xs bg-white border-slate-300 rounded-xl font-mono font-bold"
+                      className="h-10 text-xs bg-white border-slate-300 rounded-xl font-mono font-bold focus-visible:border-teal-500 focus-visible:ring-teal-500/20 shadow-2xs"
                       required
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Satuan Unit:
-                    </Label>
+                    <div className="flex items-center justify-between h-5">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Satuan Unit:
+                      </Label>
+                      <span className="text-[10px] text-slate-400">
+                        Opsional
+                      </span>
+                    </div>
                     <Input
                       value={labForm.unit}
                       onChange={(e) =>
                         setLabForm({ ...labForm, unit: e.target.value })
                       }
                       placeholder="g/dL, mg/dL, /uL"
-                      className="text-xs bg-white border-slate-300 rounded-xl font-mono"
+                      className="h-10 text-xs bg-white border-slate-300 rounded-xl font-mono focus-visible:border-teal-500 focus-visible:ring-teal-500/20 shadow-2xs"
                     />
+                    <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Saran:
+                      </span>
+                      {["g/dL", "mg/dL", "/uL", "10^6/uL", "%", "U/L"].map(
+                        (u) => (
+                          <button
+                            key={u}
+                            type="button"
+                            onClick={() =>
+                              setLabForm((prev) => ({ ...prev, unit: u }))
+                            }
+                            className={`text-[9px] px-1.5 py-0.5 rounded border transition-colors cursor-pointer ${
+                              labForm.unit === u
+                                ? "bg-teal-700 text-white border-teal-800 font-bold"
+                                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:border-teal-400"
+                            }`}
+                          >
+                            {u}
+                          </button>
+                        ),
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Nilai Rujukan:
-                    </Label>
+                    <div className="flex items-center justify-between h-5">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Nilai Rujukan:
+                      </Label>
+                      <span className="text-[10px] text-slate-400">
+                        Opsional
+                      </span>
+                    </div>
                     <Input
                       value={labForm.referenceRange}
                       onChange={(e) =>
-                        setLabForm({ ...labForm, referenceRange: e.target.value })
+                        setLabForm({
+                          ...labForm,
+                          referenceRange: e.target.value,
+                        })
                       }
                       placeholder="13.0 - 17.0"
-                      className="text-xs bg-white border-slate-300 rounded-xl font-mono"
+                      className="h-10 text-xs bg-white border-slate-300 rounded-xl font-mono focus-visible:border-teal-500 focus-visible:ring-teal-500/20 shadow-2xs"
                     />
                   </div>
                 </div>
@@ -1024,28 +1620,52 @@ export function DiagnosticSupportModule({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-semibold text-slate-700">
-                      Status Flag (Interpretasi Klinis):
+                      Interpretasi Klinis:
                     </Label>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                       {[
-                        { value: "normal", label: "Normal", bg: "bg-emerald-50 text-emerald-800 border-emerald-300 ring-2 ring-emerald-500/20 shadow-2xs font-bold", dot: "bg-emerald-500" },
-                        { value: "high", label: "High", bg: "bg-amber-50 text-amber-900 border-amber-300 ring-2 ring-amber-500/20 shadow-2xs font-bold", dot: "bg-amber-500" },
-                        { value: "low", label: "Low", bg: "bg-blue-50 text-blue-900 border-blue-300 ring-2 ring-blue-500/20 shadow-2xs font-bold", dot: "bg-blue-500" },
-                        { value: "critical", label: "Critical", bg: "bg-rose-50 text-rose-900 border-rose-300 ring-2 ring-rose-500/20 shadow-2xs font-bold", dot: "bg-rose-600" },
+                        {
+                          value: "normal",
+                          label: "Normal",
+                          bg: "bg-emerald-50 text-emerald-800 border-emerald-300 ring-2 ring-emerald-500/20 shadow-2xs font-bold",
+                          dot: "bg-emerald-500",
+                        },
+                        {
+                          value: "high",
+                          label: "Tinggi",
+                          bg: "bg-amber-50 text-amber-900 border-amber-300 ring-2 ring-amber-500/20 shadow-2xs font-bold",
+                          dot: "bg-amber-500",
+                        },
+                        {
+                          value: "low",
+                          label: "Rendah",
+                          bg: "bg-blue-50 text-blue-900 border-blue-300 ring-2 ring-blue-500/20 shadow-2xs font-bold",
+                          dot: "bg-blue-500",
+                        },
+                        {
+                          value: "critical",
+                          label: "Kritis",
+                          bg: "bg-rose-50 text-rose-900 border-rose-300 ring-2 ring-rose-500/20 shadow-2xs font-bold",
+                          dot: "bg-rose-600",
+                        },
                       ].map((opt) => {
                         const isActive = labForm.flag === opt.value;
                         return (
                           <button
                             key={opt.value}
                             type="button"
-                            onClick={() => setLabForm({ ...labForm, flag: opt.value as any })}
+                            onClick={() =>
+                              setLabForm({ ...labForm, flag: opt.value as any })
+                            }
                             className={`px-2 py-2 text-xs rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer btn-press ${
                               isActive
                                 ? opt.bg
                                 : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                             }`}
                           >
-                            <span className={`w-2 h-2 rounded-full ${opt.dot} shrink-0`} />
+                            <span
+                              className={`w-2 h-2 rounded-full ${opt.dot} shrink-0`}
+                            />
                             <span className="truncate">{opt.label}</span>
                           </button>
                         );
@@ -1054,16 +1674,21 @@ export function DiagnosticSupportModule({
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Pemeriksa / Laboratorium:
-                    </Label>
+                    <div className="flex items-center justify-between h-5">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Pemeriksa / Laboratorium:
+                      </Label>
+                      <span className="text-[10px] text-slate-400">
+                        Petugas / Faskes
+                      </span>
+                    </div>
                     <Input
                       value={labForm.performer}
                       onChange={(e) =>
                         setLabForm({ ...labForm, performer: e.target.value })
                       }
                       placeholder="Laboratorium Patologi RSUD"
-                      className="text-xs bg-white border-slate-300 rounded-xl"
+                      className="h-10 text-xs bg-white border-slate-300 rounded-xl focus-visible:border-teal-500 focus-visible:ring-teal-500/20 shadow-2xs"
                     />
                   </div>
                 </div>
@@ -1073,7 +1698,8 @@ export function DiagnosticSupportModule({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setIsAddingLab(false)}
+                    disabled={isSyncing === "lab"}
+                    onClick={handleCancelEditLab}
                     className="text-xs rounded-xl cursor-pointer"
                   >
                     Batal
@@ -1082,10 +1708,24 @@ export function DiagnosticSupportModule({
                     type="submit"
                     variant="medical"
                     size="sm"
+                    disabled={isSyncing === "lab"}
                     className="text-xs font-bold rounded-xl gap-1.5 shadow-2xs cursor-pointer"
                   >
-                    <Check className="h-3.5 w-3.5" />
-                    Simpan Hasil Lab
+                    {isSyncing === "lab" ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Menyinkronkan ke SATUSEHAT...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>
+                          {editingLabId
+                            ? "Simpan Perubahan Hasil Lab"
+                            : "Simpan Hasil Lab"}
+                        </span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
@@ -1093,39 +1733,46 @@ export function DiagnosticSupportModule({
 
             {/* List / Table Hasil Lab */}
             {labResults.length === 0 ? (
-              <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
-                <FlaskConical className="h-8 w-8 text-slate-400 mx-auto" />
-                <p className="text-xs text-slate-500 font-medium">
-                  Belum ada hasil pemeriksaan laboratorium yang tercatat pada kunjungan ini.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsAddingLab(true)}
-                  className="text-xs font-semibold text-teal-700 border-teal-200 hover:bg-teal-50 rounded-lg cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Input Hasil Pertama
-                </Button>
-              </div>
+              !isAddingLab && (
+                <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
+                  <FlaskConical className="h-8 w-8 text-slate-400 mx-auto" />
+                  <p className="text-xs text-slate-500 font-medium">
+                    Belum ada hasil pemeriksaan laboratorium yang tercatat pada
+                    kunjungan ini.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAddingLab(true)}
+                    className="text-xs font-semibold text-teal-700 border-teal-200 hover:bg-teal-50 rounded-lg cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Input Hasil Pertama
+                  </Button>
+                </div>
+              )
             ) : (
               <div className="rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
                     <tr>
-                      <th className="p-3">Nama Pemeriksaan (LOINC)</th>
+                      <th className="p-3">Nama Pemeriksaan</th>
                       <th className="p-3">Kategori</th>
                       <th className="p-3 text-center">Hasil</th>
                       <th className="p-3 text-center">Nilai Rujukan</th>
-                      <th className="p-3 text-center">Status Flag</th>
+                      <th className="p-3 text-center">Interpretasi</th>
                       <th className="p-3">Petugas</th>
+                      <th className="p-3 text-center">Status Sinkronisasi</th>
                       <th className="p-3 text-right">Aksi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {labResults.map((lr) => (
-                      <tr key={lr.id} className="hover:bg-slate-50/80 transition-colors">
+                      <tr
+                        key={lr.id}
+                        className="hover:bg-slate-50/80 transition-colors"
+                      >
                         <td className="p-3 font-semibold text-slate-900">
                           {lr.testName}
                           <span className="text-[10px] font-mono text-slate-400 block">
@@ -1137,7 +1784,8 @@ export function DiagnosticSupportModule({
                           {lr.value} {lr.unit && lr.unit !== "-" ? lr.unit : ""}
                         </td>
                         <td className="p-3 text-center font-mono text-slate-600">
-                          {lr.referenceRange} {lr.unit && lr.unit !== "-" ? lr.unit : ""}
+                          {lr.referenceRange}{" "}
+                          {lr.unit && lr.unit !== "-" ? lr.unit : ""}
                         </td>
                         <td className="p-3 text-center">
                           <span
@@ -1145,33 +1793,102 @@ export function DiagnosticSupportModule({
                               lr.flag === "high"
                                 ? "bg-red-100 text-red-700 border border-red-200"
                                 : lr.flag === "low"
-                                ? "bg-amber-100 text-amber-700 border border-amber-200"
-                                : lr.flag === "critical"
-                                ? "bg-rose-100 text-rose-800 border border-rose-200"
-                                : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                  ? "bg-amber-100 text-amber-700 border border-amber-200"
+                                  : lr.flag === "critical"
+                                    ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                    : "bg-emerald-100 text-emerald-700 border border-emerald-200"
                             }`}
                           >
                             {lr.flag === "high"
                               ? "Tinggi"
                               : lr.flag === "low"
-                              ? "Rendah"
-                              : lr.flag === "critical"
-                              ? "Kritis"
-                              : "Normal"}
+                                ? "Rendah"
+                                : lr.flag === "critical"
+                                  ? "Kritis"
+                                  : "Normal"}
                           </span>
                         </td>
-                        <td className="p-3 text-slate-500 text-[11px]">{lr.performer}</td>
+                        <td className="p-3 text-slate-500 text-[11px]">
+                          {lr.performer}
+                        </td>
+                        <td className="p-3 text-center">
+                          {lr.satusehatDiagnosticReportId ? (
+                            <Badge
+                              variant="outline"
+                              title={`ID DiagnosticReport SATUSEHAT: ${lr.satusehatDiagnosticReportId}`}
+                              className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold inline-flex items-center gap-1 py-1 cursor-help"
+                            >
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                              <span>SATUSEHAT</span>
+                            </Badge>
+                          ) : encounter.satusehatEncounterId ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={isSyncing === lr.id}
+                              onClick={async () => {
+                                setIsSyncing(lr.id);
+                                await syncResourceToSatusehat(
+                                  encounter,
+                                  "DiagnosticReport",
+                                  `Hasil Lab ${lr.testName}`,
+                                  "laboratory",
+                                );
+                                setIsSyncing(null);
+                              }}
+                              className="h-6 text-[10px] px-2 font-bold text-teal-700 border-teal-300 hover:bg-teal-50 rounded-lg cursor-pointer inline-flex items-center gap-1"
+                            >
+                              {isSyncing === lr.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <CloudUpload className="h-3 w-3" />
+                              )}
+                              <span>Sinkronkan</span>
+                            </Button>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-slate-100 text-slate-600 border-slate-200 font-medium"
+                            >
+                              Draf Internal
+                            </Badge>
+                          )}
+                        </td>
                         <td className="p-3 text-right">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteLabResult(lr.id)}
-                            className="h-7 w-7 text-slate-400 hover:text-red-600 cursor-pointer"
-                            title="Hapus Hasil Lab"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleStartEditLab(lr)}
+                              className="h-7 w-7 text-slate-500 hover:text-teal-700 hover:bg-teal-50 rounded-lg cursor-pointer"
+                              title="Edit / Koreksi Hasil Lab"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            {lr.satusehatDiagnosticReportId ? (
+                              <button
+                                type="button"
+                                disabled
+                                className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-300 bg-slate-50 border border-slate-200/60 cursor-not-allowed"
+                                title={`Hasil lab terdaftar di SATUSEHAT (ID: ${lr.satusehatDiagnosticReportId}). Sesuai Permenkes No. 24/2022, arsip hasil tidak dapat dihapus. Silakan gunakan fitur Koreksi.`}
+                              >
+                                <Lock className="h-3 w-3 text-slate-400" />
+                              </button>
+                            ) : (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteLabResult(lr.id)}
+                                className="h-7 w-7 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg cursor-pointer"
+                                title="Hapus Draf Hasil Lab"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1192,23 +1909,34 @@ export function DiagnosticSupportModule({
                   <span>Ekspertise Hasil Radiologi &amp; Pencitraan</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
-                  Temuan klinis &amp; kesimpulan ekspertise dokter spesialis radiologi
+                  Temuan klinis &amp; kesimpulan ekspertise dokter spesialis
+                  radiologi
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-800 border-blue-200">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] bg-blue-50 text-blue-800 border-blue-200"
+                >
                   Ekspertise Radiologi
                 </Badge>
                 <Button
                   type="button"
                   size="sm"
-                  onClick={() => setIsAddingRad(!isAddingRad)}
-                  className="h-8 text-xs font-bold gap-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg shadow-2xs btn-press cursor-pointer"
+                  disabled={!!isSyncing}
+                  onClick={() => {
+                    if (isAddingRad) {
+                      handleCancelEditRad();
+                    } else {
+                      setIsAddingRad(true);
+                    }
+                  }}
+                  className="h-8 text-xs font-bold gap-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-lg shadow-2xs btn-press cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isAddingRad ? (
                     <>
                       <X className="h-3.5 w-3.5" />
-                      <span>Batal Input</span>
+                      <span>{editingRadId ? "Batal Edit" : "Batal Input"}</span>
                     </>
                   ) : (
                     <>
@@ -1229,16 +1957,20 @@ export function DiagnosticSupportModule({
                 <div className="flex items-center justify-between pb-2 border-b border-blue-200/60">
                   <span className="text-xs font-bold text-blue-950 flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-blue-600" />
-                    Formulir Pengisian Ekspertise Radiologi
+                    {editingRadId
+                      ? "Mode Edit Ekspertise Radiologi"
+                      : "Formulir Pengisian Ekspertise Radiologi"}
                   </span>
                   <span className="text-[10px] text-blue-700 font-mono">
-                    Diinput oleh Dokter Radiolog / DPJP
+                    {editingRadId
+                      ? `Mengedit Ekspertise (${editingRadId})`
+                      : "Diinput oleh Dokter Spesialis Radiologi / DPJP"}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1 relative">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between h-5">
                       <Label className="text-xs font-semibold text-slate-700">
                         Pilih dari Preset:
                       </Label>
@@ -1251,7 +1983,7 @@ export function DiagnosticSupportModule({
                     <button
                       type="button"
                       onClick={() => setIsRadPresetOpen((prev) => !prev)}
-                      className="w-full text-left text-xs rounded-xl border border-slate-300 bg-white p-2.5 text-slate-900 hover:border-blue-400 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all shadow-2xs flex items-center justify-between gap-2 cursor-pointer btn-press"
+                      className="w-full text-left text-xs h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 hover:border-blue-400 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all shadow-2xs flex items-center justify-between gap-2 cursor-pointer btn-press"
                     >
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <span className="font-mono text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 shrink-0">
@@ -1282,7 +2014,9 @@ export function DiagnosticSupportModule({
                               <input
                                 type="text"
                                 value={searchRadPreset}
-                                onChange={(e) => setSearchRadPreset(e.target.value)}
+                                onChange={(e) =>
+                                  setSearchRadPreset(e.target.value)
+                                }
                                 placeholder="Cari pemeriksaan radiologi..."
                                 className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
                                 onClick={(e) => e.stopPropagation()}
@@ -1314,7 +2048,9 @@ export function DiagnosticSupportModule({
                                   }`}
                                 >
                                   <div className="min-w-0 flex-1">
-                                    <div className="font-semibold truncate">{t.name}</div>
+                                    <div className="font-semibold truncate">
+                                      {t.name}
+                                    </div>
                                     <div className="text-[10px] text-slate-500 flex items-center gap-2">
                                       <span>Modalitas: {t.modality}</span>
                                     </div>
@@ -1323,7 +2059,9 @@ export function DiagnosticSupportModule({
                                     <span className="font-mono text-[10px] font-bold text-blue-800 bg-white px-1.5 py-0.5 rounded border border-blue-200">
                                       {t.code}
                                     </span>
-                                    {isSelected && <Check className="h-3.5 w-3.5 text-blue-600" />}
+                                    {isSelected && (
+                                      <Check className="h-3.5 w-3.5 text-blue-600" />
+                                    )}
                                   </div>
                                 </button>
                               );
@@ -1335,16 +2073,21 @@ export function DiagnosticSupportModule({
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Nama Pemeriksaan:
-                    </Label>
+                    <div className="flex items-center justify-between h-5">
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Nama Pemeriksaan:
+                      </Label>
+                      <span className="text-[10px] text-slate-400">
+                        Wajib diisi
+                      </span>
+                    </div>
                     <Input
                       value={radForm.examName}
                       onChange={(e) =>
                         setRadForm({ ...radForm, examName: e.target.value })
                       }
                       placeholder="Contoh: Foto Thorax PA/AP"
-                      className="text-xs bg-white border-slate-300 rounded-xl"
+                      className="h-10 text-xs bg-white border-slate-300 rounded-xl focus-visible:border-blue-500 focus-visible:ring-blue-500/20 shadow-2xs"
                       required
                     />
                   </div>
@@ -1356,30 +2099,36 @@ export function DiagnosticSupportModule({
                     Modalitas Radiologi:
                   </Label>
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-                    {(["X-Ray", "EKG", "USG", "CT-Scan", "MRI"] as const).map((m) => {
-                      const isActive = radForm.modality === m;
-                      return (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setRadForm({ ...radForm, modality: m })}
-                          className={`py-2 px-3 text-xs rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer btn-press ${
-                            isActive
-                              ? "bg-blue-700 text-white border-blue-800 shadow-2xs font-bold"
-                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          <Radio className={`h-3 w-3 ${isActive ? "text-blue-200" : "text-slate-400"}`} />
-                          <span>{m}</span>
-                        </button>
-                      );
-                    })}
+                    {(["X-Ray", "EKG", "USG", "CT-Scan", "MRI"] as const).map(
+                      (m) => {
+                        const isActive = radForm.modality === m;
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() =>
+                              setRadForm({ ...radForm, modality: m })
+                            }
+                            className={`py-2 px-3 text-xs rounded-xl border flex items-center justify-center gap-1.5 transition-all cursor-pointer btn-press ${
+                              isActive
+                                ? "bg-blue-700 text-white border-blue-800 shadow-2xs font-bold"
+                                : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                            }`}
+                          >
+                            <Radio
+                              className={`h-3 w-3 ${isActive ? "text-blue-200" : "text-slate-400"}`}
+                            />
+                            <span>{m}</span>
+                          </button>
+                        );
+                      },
+                    )}
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold text-slate-700">
-                    Deskripsi Temuan Klinis (Findings):
+                    Deskripsi Temuan Klinis:
                   </Label>
                   <textarea
                     value={radForm.findings}
@@ -1394,7 +2143,7 @@ export function DiagnosticSupportModule({
 
                 <div className="space-y-1">
                   <Label className="text-xs font-semibold text-slate-700">
-                    Kesimpulan Radiologis (Conclusion):
+                    Kesimpulan Radiologis:
                   </Label>
                   <textarea
                     value={radForm.conclusion}
@@ -1409,22 +2158,60 @@ export function DiagnosticSupportModule({
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Dokter Radiolog / Pemeriksa:
+                    <Label className="text-xs font-semibold text-slate-700 flex items-center justify-between h-5">
+                      <span>Dokter Radiolog / Pemeriksa:</span>
+                      <span className="text-[10px] text-blue-700 font-medium bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200/60">
+                        Praktisi Radiologi
+                      </span>
                     </Label>
-                    <Input
+                    <CustomSelect<string>
                       value={radForm.radiologistName}
-                      onChange={(e) =>
-                        setRadForm({ ...radForm, radiologistName: e.target.value })
+                      options={[
+                        {
+                          value: "dr. Hendra Pratama, Sp.Rad",
+                          label:
+                            "dr. Hendra Pratama, Sp.Rad (Spesialis Radiologi)",
+                        },
+                        {
+                          value: "dr. Rian Pratama, Sp.PD",
+                          label:
+                            "dr. Rian Pratama, Sp.PD (Spesialis Penyakit Dalam)",
+                        },
+                        {
+                          value: "dr. Rian Hidayat, Sp.JP",
+                          label:
+                            "dr. Rian Hidayat, Sp.JP (Spesialis Jantung / EKG)",
+                        },
+                        {
+                          value: "dr. Amanda Putri, M.Biomed",
+                          label: "dr. Amanda Putri, M.Biomed (Dokter Umum)",
+                        },
+                        {
+                          value: "dr. Maya Anggraini, Sp.A",
+                          label: "dr. Maya Anggraini, Sp.A (Spesialis Anak)",
+                        },
+                        {
+                          value: "dr. Nadia Putri, Sp.M",
+                          label: "dr. Nadia Putri, Sp.M (Spesialis Mata)",
+                        },
+                      ]}
+                      onChange={(val) =>
+                        setRadForm({ ...radForm, radiologistName: val })
                       }
-                      placeholder="dr. Hendra Pratama, Sp.Rad"
-                      className="text-xs bg-white border-slate-300 rounded-xl"
+                      placeholder="Pilih Dokter Radiolog..."
+                      size="lg"
+                      accentColor="blue"
+                      buttonClassName="h-10 rounded-xl bg-white border-slate-300 hover:border-blue-400 focus-visible:border-blue-500 focus-visible:ring-blue-500/20 shadow-2xs font-medium"
+                      className="w-full"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold text-slate-700">
-                      Kode LOINC:
+                    <Label className="text-xs font-semibold text-slate-700 flex items-center justify-between h-5">
+                      <span>Kode LOINC:</span>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        Standar LOINC
+                      </span>
                     </Label>
                     <Input
                       value={radForm.examCode}
@@ -1432,7 +2219,7 @@ export function DiagnosticSupportModule({
                         setRadForm({ ...radForm, examCode: e.target.value })
                       }
                       placeholder="Contoh: 36554-4"
-                      className="text-xs bg-white border-slate-300 rounded-xl font-mono"
+                      className="h-10 text-xs bg-white border-slate-300 rounded-xl font-mono focus-visible:border-blue-500 focus-visible:ring-blue-500/20 shadow-2xs"
                     />
                   </div>
                 </div>
@@ -1442,7 +2229,8 @@ export function DiagnosticSupportModule({
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setIsAddingRad(false)}
+                    disabled={isSyncing === "rad"}
+                    onClick={handleCancelEditRad}
                     className="text-xs rounded-xl cursor-pointer"
                   >
                     Batal
@@ -1451,10 +2239,25 @@ export function DiagnosticSupportModule({
                     type="submit"
                     variant="medical"
                     size="sm"
+                    disabled={isSyncing === "rad"}
                     className="text-xs font-bold rounded-xl gap-1.5 shadow-2xs bg-blue-700 hover:bg-blue-800 text-white cursor-pointer"
                   >
-                    <Check className="h-3.5 w-3.5" />
-                    Simpan Ekspertise Radiologi
+                    {isSyncing === "rad" ? (
+                      <>
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>Menyinkronkan ke SATUSEHAT...</span>
+                      </>
+                    ) : editingRadId ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Simpan Perubahan Ekspertise</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-3.5 w-3.5" />
+                        <span>Simpan Ekspertise Radiologi</span>
+                      </>
+                    )}
                   </Button>
                 </div>
               </form>
@@ -1462,22 +2265,25 @@ export function DiagnosticSupportModule({
 
             {/* List Hasil Radiologi */}
             {radiologyResults.length === 0 ? (
-              <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
-                <Radio className="h-8 w-8 text-slate-400 mx-auto" />
-                <p className="text-xs text-slate-500 font-medium">
-                  Belum ada hasil ekspertise radiologi atau pencitraan pada kunjungan ini.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsAddingRad(true)}
-                  className="text-xs font-semibold text-blue-700 border-blue-200 hover:bg-blue-50 rounded-lg cursor-pointer"
-                >
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  Input Ekspertise Pertama
-                </Button>
-              </div>
+              !isAddingRad && (
+                <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-2">
+                  <Radio className="h-8 w-8 text-slate-400 mx-auto" />
+                  <p className="text-xs text-slate-500 font-medium">
+                    Belum ada hasil ekspertise radiologi atau pencitraan pada
+                    kunjungan ini.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsAddingRad(true)}
+                    className="text-xs font-semibold text-blue-700 border-blue-200 hover:bg-blue-50 rounded-lg cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    Input Ekspertise Pertama
+                  </Button>
+                </div>
+              )
             ) : (
               <div className="space-y-3">
                 {radiologyResults.map((rad) => (
@@ -1491,15 +2297,73 @@ export function DiagnosticSupportModule({
                           <span className="font-extrabold text-xs text-slate-900">
                             {rad.examName}
                           </span>
-                          <Badge variant="outline" className="text-[10px] font-bold bg-blue-50 text-blue-800">
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] font-bold bg-blue-50 text-blue-800"
+                          >
                             Modalitas: {rad.modality}
                           </Badge>
                         </div>
-                        <span className="text-[10px] font-mono text-slate-500 block">
-                          Kode LOINC: {rad.examCode} • ID: {rad.id}
-                        </span>
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-slate-200/80 font-mono text-[10px] text-slate-700 shadow-2xs">
+                            <span className="text-[9px] font-bold text-slate-400 font-sans uppercase">
+                              LOINC
+                            </span>
+                            <span className="font-semibold text-slate-800">
+                              {rad.examCode}
+                            </span>
+                          </span>
+                          <span
+                            title={`ID Hasil: ${rad.id}`}
+                            className="text-[10px] font-mono text-slate-400 hover:text-slate-600 transition-colors cursor-default"
+                          >
+                            #{rad.id.startsWith("rad_") ? rad.id.slice(4, 12) : rad.id.slice(0, 8)}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
+                        {rad.satusehatDiagnosticReportId ? (
+                          <Badge
+                            variant="outline"
+                            title={`ID DiagnosticReport SATUSEHAT: ${rad.satusehatDiagnosticReportId}`}
+                            className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold flex items-center gap-1 py-1 cursor-help"
+                          >
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            <span>SATUSEHAT</span>
+                          </Badge>
+                        ) : encounter.satusehatEncounterId ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isSyncing === rad.id}
+                            onClick={async () => {
+                              setIsSyncing(rad.id);
+                              await syncResourceToSatusehat(
+                                encounter,
+                                "DiagnosticReport",
+                                `Hasil Radiologi ${rad.examName}`,
+                                "radiology",
+                              );
+                              setIsSyncing(null);
+                            }}
+                            className="h-7 text-[10px] px-2.5 font-bold text-teal-700 border-teal-300 hover:bg-teal-50 rounded-lg cursor-pointer flex items-center gap-1 shadow-2xs"
+                          >
+                            {isSyncing === rad.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <CloudUpload className="h-3 w-3" />
+                            )}
+                            <span>Sinkronkan</span>
+                          </Button>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] bg-slate-100 text-slate-600 border-slate-200 font-medium"
+                          >
+                            Draf Internal
+                          </Badge>
+                        )}
                         <span className="text-[11px] text-slate-500 font-medium">
                           {rad.radiologistName}
                         </span>
@@ -1507,19 +2371,40 @@ export function DiagnosticSupportModule({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDeleteRadResult(rad.id)}
-                          className="h-7 w-7 text-slate-400 hover:text-red-600 cursor-pointer"
-                          title="Hapus Hasil Radiologi"
+                          onClick={() => handleStartEditRad(rad)}
+                          className="h-7 w-7 text-slate-400 hover:text-amber-600 cursor-pointer"
+                          title="Edit Hasil Radiologi"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Pencil className="h-3.5 w-3.5" />
                         </Button>
+                        {rad.satusehatDiagnosticReportId ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-300 bg-slate-50 border border-slate-200/60 cursor-not-allowed"
+                            title={`Ekspertise terdaftar di SATUSEHAT (ID: ${rad.satusehatDiagnosticReportId}). Sesuai Permenkes No. 24/2022, arsip radiologi tidak dapat dihapus. Silakan gunakan fitur Koreksi.`}
+                          >
+                            <Lock className="h-3 w-3 text-slate-400" />
+                          </button>
+                        ) : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDeleteRadResult(rad.id)}
+                            className="h-7 w-7 text-slate-400 hover:text-red-600 cursor-pointer"
+                            title="Hapus Draf Hasil Radiologi"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </div>
 
                     <div className="space-y-2 text-xs">
                       <div>
                         <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                          Deskripsi Temuan Klinis (Findings):
+                          Deskripsi Temuan Klinis:
                         </span>
                         <p className="text-slate-800 leading-relaxed bg-white p-2.5 rounded border border-slate-200">
                           {rad.findings}
@@ -1528,9 +2413,9 @@ export function DiagnosticSupportModule({
 
                       <div>
                         <span className="text-[10px] font-bold text-slate-500 uppercase block">
-                          Kesimpulan Radiologis (Conclusion):
+                          Kesimpulan Radiologis:
                         </span>
-                        <p className="text-slate-900 font-semibold leading-relaxed bg-teal-50/70 p-2.5 rounded border border-teal-200 text-teal-900">
+                        <p className="text-slate-900 font-semibold leading-relaxed bg-teal-50/70 p-2.5 rounded border border-teal-200">
                           {rad.conclusion}
                         </p>
                       </div>

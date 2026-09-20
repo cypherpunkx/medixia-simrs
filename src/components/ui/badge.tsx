@@ -23,6 +23,8 @@ const badgeVariants = cva(
           "border-sky-300 bg-sky-50 text-sky-900 font-bold",
         kemenkes:
           "border-teal-300 bg-teal-50 text-teal-950 font-bold",
+        purple:
+          "border-purple-200 bg-purple-100 text-purple-800 font-bold",
       },
     },
     defaultVariants: {

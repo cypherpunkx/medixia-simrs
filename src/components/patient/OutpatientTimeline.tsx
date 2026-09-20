@@ -14,6 +14,7 @@ import {
   ClipboardList,
   FlaskConical,
   Radio,
+  Clock,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { OutpatientEncounter } from "@/lib/satusehat/types";
@@ -29,7 +30,25 @@ export function OutpatientTimeline({
   selectedEncounterId,
   onSelectEncounter,
 }: OutpatientTimelineProps) {
-  if (encounters.length === 0) {
+  // Deduplicate and filter out redundant drafts if real encounter exists
+  const uniqueEncounters = React.useMemo(() => {
+    if (!encounters || encounters.length === 0) return [];
+
+    const hasReal = encounters.some((e) => !e.id.includes("-DRAFT"));
+    const map = new Map<string, OutpatientEncounter>();
+
+    for (const enc of encounters) {
+      if (hasReal && enc.id.includes("-DRAFT")) {
+        continue;
+      }
+      if (!map.has(enc.id)) {
+        map.set(enc.id, enc);
+      }
+    }
+    return Array.from(map.values());
+  }, [encounters]);
+
+  if (uniqueEncounters.length === 0) {
     return (
       <div className="ehr-card p-6 text-center space-y-3">
         <div className="mx-auto w-12 h-12 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600">
@@ -48,7 +67,7 @@ export function OutpatientTimeline({
   }
 
   const current =
-    encounters.find((e) => e.id === selectedEncounterId) || encounters[0];
+    uniqueEncounters.find((e) => e.id === selectedEncounterId) || uniqueEncounters[0];
 
   return (
     <div className="space-y-4">
@@ -58,7 +77,7 @@ export function OutpatientTimeline({
           <Calendar className="h-3.5 w-3.5 text-teal-600" />
           <span>Riwayat Kunjungan:</span>
         </span>
-        {encounters.map((enc) => {
+        {uniqueEncounters.map((enc) => {
           const isSelected = enc.id === selectedEncounterId;
           const formattedDate = new Date(enc.visitDate).toLocaleDateString(
             "id-ID",
@@ -175,7 +194,7 @@ export function OutpatientTimeline({
             <div className="space-y-2">
               <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
                 <FileCheck className="h-4 w-4 text-teal-600" />
-                <span>Diagnosis Medis (ICD-10 Kemenkes)</span>
+                <span>Diagnosis Medis</span>
               </span>
 
               {current.diagnoses.length === 0 ? (
@@ -229,7 +248,7 @@ export function OutpatientTimeline({
               <div className="space-y-2">
                 <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
                   <HeartPulse className="h-4 w-4 text-sky-600" />
-                  <span>Tindakan & Prosedur Medis (ICD-9-CM)</span>
+                  <span>Tindakan &amp; Prosedur Medis</span>
                 </span>
 
                 <div className="space-y-1.5">
@@ -429,18 +448,46 @@ export function OutpatientTimeline({
               </p>
             </div>
 
-            {/* SATUSEHAT Interoperability Footer */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-100 text-[11px] text-slate-500 font-mono">
-              <div className="flex items-center gap-1.5">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                <span>
-                  SATUSEHAT Encounter ID:{" "}
-                  <strong className="text-teal-700 font-bold">
-                    {current.satusehatEncounterId || "Draft Lokal"}
-                  </strong>
+            {/* SATUSEHAT & SIMRS ID Interoperability Footer */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100 text-[11px] text-slate-500 font-mono">
+              <div className="flex flex-wrap items-center gap-3">
+                {current.satusehatEncounterId ? (
+                  <div className="flex items-center gap-1.5 text-emerald-800 font-semibold">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>
+                      SATUSEHAT ID:{" "}
+                      <strong className="text-teal-700 font-bold font-mono">
+                        {current.satusehatEncounterId}
+                      </strong>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1.5 text-amber-800">
+                    <Clock className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    <span>
+                      SATUSEHAT:{" "}
+                      <span className="font-sans font-bold bg-amber-100/80 text-amber-900 px-2 py-0.5 rounded text-[10px] border border-amber-200">
+                        Draf Internal (Belum Terkirim ke Kemenkes)
+                      </span>
+                    </span>
+                  </div>
+                )}
+
+                <span className="text-slate-300 hidden sm:inline">•</span>
+                <span className="text-slate-600">
+                  ID Kunjungan: <strong className="text-slate-900 font-bold">{current.id}</strong>
                 </span>
               </div>
-              <span>Disposisi: {current.dischargeDisposition || "Dalam Pelayanan Poli"}</span>
+
+              <span className="text-slate-600">
+                Disposisi:{" "}
+                <strong className="text-slate-800">
+                  {current.encounterStatus === "finished" &&
+                  (!current.dischargeDisposition || current.dischargeDisposition === "Menunggu Pelayanan Poli")
+                    ? "Pulang Berobat Jalan"
+                    : current.dischargeDisposition || "Dalam Pelayanan Poli"}
+                </strong>
+              </span>
             </div>
           </div>
         </div>

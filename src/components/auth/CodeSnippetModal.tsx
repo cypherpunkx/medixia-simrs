@@ -25,16 +25,63 @@ import {
 } from "@/lib/satusehat/types";
 import { toast } from "sonner";
 import { generateFhirBundle } from "@/lib/satusehat/fhir-transformer";
-import { MOCK_PATIENT, MOCK_ENCOUNTERS } from "@/lib/satusehat/mock-data";
 
 interface CodeSnippetModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   env: SatusehatEnvironment;
   clientId?: string;
-  patient?: PatientProfile;
-  encounter?: OutpatientEncounter;
+  patient?: PatientProfile | null;
+  encounter?: OutpatientEncounter | null;
 }
+
+const DEFAULT_PATIENT_PLACEHOLDER: PatientProfile = {
+  id: "P-TEMPLATE",
+  nik: "3171012345670001",
+  mrn: "RM-000001",
+  name: "Pasien RME Faskes",
+  gender: "male",
+  birthDate: "1985-05-15",
+  phone: "081234567890",
+  address: "Jl. Kesehatan No. 1",
+  bloodType: "O",
+  allergies: [],
+  emergencyContact: { name: "Keluarga", relation: "Keluarga", phone: "081234567890" },
+  paymentPayer: "BPJS Kesehatan",
+  satusehatConsent: "opt-in",
+};
+
+const DEFAULT_ENCOUNTER_PLACEHOLDER: OutpatientEncounter = {
+  id: "ENC-TEMPLATE",
+  patientId: "P-TEMPLATE",
+  visitDate: new Date().toISOString(),
+  clinicDepartment: "Poli Penyakit Dalam",
+  doctorName: "dr. Rian Pratama, Sp.PD",
+  doctorSip: "SIP.446/089/DS/Dinkes/2026",
+  doctorIhsId: "N10009841",
+  hospitalName: "RS Umum Daerah Sehat Sejahtera",
+  hospitalOrgId: "10000004",
+  chiefComplaint: "Pemeriksaan dan konsultasi rawat jalan",
+  anamnesis: "Anamnesis pemeriksaan rawat jalan.",
+  diagnoses: [
+    {
+      code: "I10",
+      display: "Essential (primary) hypertension",
+      patientFriendlyName: "Hipertensi Primer (Darah Tinggi)",
+      type: "primary",
+      clinicalStatus: "active",
+    },
+  ],
+  procedures: [
+    { code: "89.07", display: "General medical consultation", category: "Konsultasi" },
+  ],
+  prescriptions: [],
+  followUpPlan: { instruction: "Kontrol rutin bila keluhan berlanjut." },
+  dischargeDisposition: "Pulang Berobat Jalan",
+  encounterStatus: "finished",
+  consentStatus: "opt-in",
+  syncStatus: "synced",
+};
 
 export function CodeSnippetModal({
   isOpen,
@@ -49,8 +96,8 @@ export function CodeSnippetModal({
   const authUrl = getSatusehatAuthUrl(env);
   const client_id = clientId || "YOUR_CLIENT_ID";
 
-  const activePat = patient || MOCK_PATIENT;
-  const activeEnc = encounter || MOCK_ENCOUNTERS[0];
+  const activePat = patient || DEFAULT_PATIENT_PLACEHOLDER;
+  const activeEnc = encounter || DEFAULT_ENCOUNTER_PLACEHOLDER;
 
   const sampleFhirBundle = JSON.stringify(
     generateFhirBundle(activePat, activeEnc),
@@ -169,7 +216,7 @@ func GetSatusehatToken(clientID, clientSecret string) (string, error) {
 }`,
 
     php: `<?php
-// PHP / Laravel SIMRS Integration
+// PHP / Laravel Integration
 function getSatusehatToken($clientId, $clientSecret) {
     $url = "${authUrl}";
     $postData = http_build_query([
@@ -214,7 +261,7 @@ function getSatusehatToken($clientId, $clientSecret) {
                 Payload FHIR & Snippet Integrasi SATUSEHAT
               </DialogTitle>
               <DialogDescription className="text-xs">
-                Spesifikasi Bundle FHIR R4 & Kode siap pakai untuk SIMRS / Backend Faskes
+                Spesifikasi Bundle FHIR R4 & Kode siap pakai untuk Backend Faskes
               </DialogDescription>
             </div>
           </div>

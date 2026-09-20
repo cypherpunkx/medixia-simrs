@@ -34,6 +34,7 @@ import {
   VoiceProfileId,
   playHospitalChime,
 } from "@/lib/audio/queueVoiceAnnouncer";
+import { useAuth } from "@/lib/auth/auth-context";
 import { toast } from "sonner";
 
 interface PublicQueueDisplayModalProps {
@@ -46,7 +47,12 @@ interface PublicQueueDisplayModalProps {
     status: "arrived" | "in-progress" | "finished",
     silent?: boolean
   ) => void;
-  onSelectPatient?: (patient: PatientProfile) => void;
+  onSelectPatient?: (
+    patient: PatientProfile,
+    targetModule?: string,
+    targetQueueItem?: ClinicQueuePatientItem,
+    targetDepartment?: string
+  ) => void;
 }
 
 interface DepartmentConfig {
@@ -103,6 +109,21 @@ export function PublicQueueDisplayModal({
   onUpdateStatus,
   onSelectPatient,
 }: PublicQueueDisplayModalProps) {
+  const { departments: authDepartments } = useAuth();
+
+  const activeDepartmentsList: DepartmentConfig[] = React.useMemo(() => {
+    if (authDepartments && authDepartments.length > 0) {
+      const codeLetters = ["A", "B", "C", "D", "E", "F", "G", "H"];
+      return authDepartments.map((d, idx) => ({
+        code: codeLetters[idx % codeLetters.length],
+        department: d.name,
+        room: d.room || `Ruang ${idx + 1}`,
+        defaultDoctor: d.defaultDoctorName || "dr. Dokter DPJP",
+      }));
+    }
+    return DEPARTMENTS;
+  }, [authDepartments]);
+
   const [timeString, setTimeString] = useState("");
   const [dateString, setDateString] = useState("");
   const [liveWorklist, setLiveWorklist] = useState<ClinicQueuePatientItem[]>(worklist);
@@ -114,6 +135,7 @@ export function PublicQueueDisplayModal({
     department: string;
     room: string;
     doctor: string;
+    queueItemId?: string;
   } | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [selectedVoiceProfile, setSelectedVoiceProfile] = useState<VoiceProfileId>("jokowi");
@@ -184,6 +206,7 @@ export function PublicQueueDisplayModal({
           department: activeItem.department,
           room: activeItem.room,
           doctor: activeItem.doctor,
+          queueItemId: activeItem.id,
         });
       }
     }
@@ -195,9 +218,36 @@ export function PublicQueueDisplayModal({
     department: string;
     room: string;
     doctor: string;
+    queueItemId?: string;
   }) => {
     setLastCalled(data);
     setIsSpeaking(true);
+
+    // Persist call action and timestamp to DB
+    if (data.queueItemId) {
+      fetch(`/api/queue/${data.queueItemId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "call" }),
+      })
+        .then((res) => res.json())
+        .then((resJson) => {
+          if (resJson.success && resJson.data) {
+            setLiveWorklist((prev) =>
+              prev.map((w) =>
+                w.id === data.queueItemId
+                  ? {
+                      ...w,
+                      callCount: resJson.data.callCount,
+                      calledAt: resJson.data.calledAt,
+                    }
+                  : w
+              )
+            );
+          }
+        })
+        .catch((err) => console.error("Gagal update call count ke DB:", err));
+    }
 
     const profileInfo = VOICE_PROFILES[selectedVoiceProfile] || VOICE_PROFILES.jokowi;
 
@@ -222,10 +272,8 @@ export function PublicQueueDisplayModal({
   };
 
   const handleCallClinicPatient = (dept: DepartmentConfig) => {
-    const deptWorklist = liveWorklist.filter(
-      (w) =>
-        w.department === dept.department ||
-        w.queueNumber.startsWith(dept.code + "-")
+    const deptWorklist = facilityScopedLiveWorklist.filter(
+      (w) => w.department === dept.department
     );
 
     const inProgress = deptWorklist.find((w) => w.status === "in-progress");
@@ -240,7 +288,7 @@ export function PublicQueueDisplayModal({
         onUpdateStatus(target.id, "in-progress");
       }
       if (onSelectPatient) {
-        onSelectPatient(target.patient);
+        onSelectPatient(target.patient, "entry", target, target.department);
       }
       speakQueueCall({
         queueNumber: target.queueNumber,
@@ -248,24 +296,16 @@ export function PublicQueueDisplayModal({
         department: target.department,
         room: target.room,
         doctor: target.doctor,
+        queueItemId: target.id,
       });
     } else {
-      const callData = {
-        queueNumber: `${dept.code}-001`,
-        patientName: "Pasien Umum",
-        department: dept.department,
-        room: dept.room,
-        doctor: dept.defaultDoctor,
-      };
-      speakQueueCall(callData);
+      toast.info(`Belum ada antrean pasien hari ini di ${dept.department}.`);
     }
   };
 
   const handleAdvanceClinicQueue = (dept: DepartmentConfig) => {
-    const deptWorklist = liveWorklist.filter(
-      (w) =>
-        w.department === dept.department ||
-        w.queueNumber.startsWith(dept.code + "-")
+    const deptWorklist = facilityScopedLiveWorklist.filter(
+      (w) => w.department === dept.department
     );
 
     const inProgress = deptWorklist.find((w) => w.status === "in-progress");
@@ -281,7 +321,7 @@ export function PublicQueueDisplayModal({
         onUpdateStatus(nextWaiting.id, "in-progress", false);
       }
       if (onSelectPatient) {
-        onSelectPatient(nextWaiting.patient);
+        onSelectPatient(nextWaiting.patient, "entry", nextWaiting, nextWaiting.department);
       }
       speakQueueCall({
         queueNumber: nextWaiting.queueNumber,
@@ -289,6 +329,7 @@ export function PublicQueueDisplayModal({
         department: nextWaiting.department,
         room: nextWaiting.room,
         doctor: nextWaiting.doctor,
+        queueItemId: nextWaiting.id,
       });
     } else {
       toast.info(
@@ -301,15 +342,25 @@ export function PublicQueueDisplayModal({
           department: inProgress.department,
           room: inProgress.room,
           doctor: inProgress.doctor,
+          queueItemId: inProgress.id,
         });
       }
     }
   };
 
-  const totalHariIni = liveWorklist.length;
-  const sedangDiperiksa = liveWorklist.filter((w) => w.status === "in-progress").length;
-  const menungguHariIni = liveWorklist.filter((w) => w.status === "arrived").length;
-  const selesaiHariIni = liveWorklist.filter((w) => w.status === "finished").length;
+  const allowedDeptNames = React.useMemo(() => {
+    return activeDepartmentsList.map((d) => d.department);
+  }, [activeDepartmentsList]);
+
+  const facilityScopedLiveWorklist = React.useMemo(() => {
+    if (allowedDeptNames.length === 0) return liveWorklist;
+    return liveWorklist.filter((w) => allowedDeptNames.includes(w.department));
+  }, [liveWorklist, allowedDeptNames]);
+
+  const totalHariIni = facilityScopedLiveWorklist.length;
+  const sedangDiperiksa = facilityScopedLiveWorklist.filter((w) => w.status === "in-progress").length;
+  const menungguHariIni = facilityScopedLiveWorklist.filter((w) => w.status === "arrived").length;
+  const selesaiHariIni = facilityScopedLiveWorklist.filter((w) => w.status === "finished").length;
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -507,7 +558,7 @@ export function PublicQueueDisplayModal({
                   if (testItem) {
                     speakQueueCall(testItem);
                   } else {
-                    toast.info("Belum ada data antrean hari ini untuk simulasi suara.");
+                    toast.info("Belum ada data antrean hari ini untuk pemanggilan suara.");
                   }
                 }}
                 disabled={isSpeaking}
@@ -582,11 +633,9 @@ export function PublicQueueDisplayModal({
 
           {/* Grid of Clinic Queue Boxes */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {DEPARTMENTS.map((dept) => {
-              const deptWorklist = liveWorklist.filter(
-                (w) =>
-                  w.department === dept.department ||
-                  w.queueNumber.startsWith(dept.code + "-")
+            {activeDepartmentsList.map((dept) => {
+              const deptWorklist = facilityScopedLiveWorklist.filter(
+                (w) => w.department === dept.department
               );
 
               const inProgress = deptWorklist.find((w) => w.status === "in-progress");
@@ -601,9 +650,9 @@ export function PublicQueueDisplayModal({
                 finishedList[finishedList.length - 1];
 
               const currentNumber =
-                activeDisplayItem?.queueNumber || `${dept.code}-001`;
+                activeDisplayItem?.queueNumber || "-";
               const patientName =
-                activeDisplayItem?.patient.name || "Belum Ada Pasien Hari Ini";
+                activeDisplayItem?.patient.name || "Belum Ada Antrean";
               const doctorName =
                 activeDisplayItem?.doctor || dept.defaultDoctor;
               const waitingCount = waitingList.length;
@@ -648,7 +697,7 @@ export function PublicQueueDisplayModal({
                           ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
                           : statusBadge === "finished"
                           ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                          : "bg-slate-700 text-slate-400 border-slate-600"
+                          : "bg-slate-700/60 text-slate-400 border-slate-600"
                       }`}
                     >
                       {statusBadge === "serving"
@@ -657,7 +706,7 @@ export function PublicQueueDisplayModal({
                         ? "Ada Antrean"
                         : statusBadge === "finished"
                         ? "Semua Selesai"
-                        : "Standby"}
+                        : "Kosong"}
                     </Badge>
                   </div>
 
@@ -671,7 +720,7 @@ export function PublicQueueDisplayModal({
                           ? "TERAKHIR SELESAI"
                           : waitingList.length > 0
                           ? "NOMOR BERIKUTNYA"
-                          : "NOMOR AKTIF"}
+                          : "STATUS ANTREAN"}
                       </span>
                       <span className="text-2xl font-black text-white font-mono tracking-tight">
                         {currentNumber}

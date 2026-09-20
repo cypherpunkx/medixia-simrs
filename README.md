@@ -59,7 +59,7 @@
 +-----------------------------------------------------------------------------------+
 | FRONTEND & UI     : Next.js 15 (App Router), React 19, Tailwind CSS, GSAP, Radix UI|
 | BACKEND & API     : Next.js API Route Handlers, TypeScript 5.7                   |
-| DATABASE & ORM    : Drizzle ORM, better-sqlite3 (Edge Local) / PostgreSQL Ready  |
+| DATABASE & ORM    : PostgreSQL (Postgres.js Pool), Drizzle ORM (pg-core)          |
 | STANDAR DATA      : HL7 FHIR R4, ICD-10, ICD-9-CM, LOINC, KFA Kemenkes RI         |
 | AUDIO & MULTIMEDIA: Web Speech Synthesis API (TTS Bahasa Indonesia)               |
 | DOKUMENTASI       : Docs-as-Code (Mermaid, Markdown, Headless PDF Compiler)        |
@@ -72,14 +72,14 @@
 
 ```
 medixia-simrs-satusehat/
-├── data/                       # Penyimpanan database lokal SQLite (local-simrs.db)
 ├── docs/                       # Dokumentasi PDF resmi (Backlog, FSD/BPMN, Juknis, Pitch)
 │   ├── User_Stories_and_Product_Backlog_SIMRS_SATUSEHAT.pdf
 │   ├── BPMN_FSD_Alur_Kerja_Klinis_SIMRS_SATUSEHAT.pdf
 │   ├── User_Manual_Juknis_Operasional_SIMRS_SATUSEHAT.pdf
 │   └── Investment_Deck_and_Executive_Overview_SIMRS_SATUSEHAT.pdf
-├── scripts/                    # Script seeding database & build utilities
-│   └── seed.ts                 # Seeder master pasien, poli, antrean, dan rekam medis
+├── scripts/                    # Script seeding database & benchmark utilities
+│   ├── seed.ts                 # Seeder master pasien, poli, antrean, dan rekam medis PostgreSQL
+│   └── benchmark-performance.ts# Benchmark suite performa query & cache
 ├── src/
 │   ├── app/                    # Next.js App Router (Halaman Utama & API Endpoints)
 │   │   ├── api/

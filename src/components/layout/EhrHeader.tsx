@@ -5,7 +5,6 @@ import {
   Search,
   Building2,
   ShieldCheck,
-  Printer,
   ChevronDown,
   X,
   UserPlus,
@@ -14,6 +13,12 @@ import {
   FlaskConical,
   UserCheck,
   Loader2,
+  LogOut,
+  Hospital,
+  Sparkles,
+  Stethoscope,
+  Shield,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,34 +26,63 @@ import {
   ClinicQueuePatientItem,
   PatientProfile,
   SatusehatEnvironment,
+  UserRole,
 } from "@/lib/satusehat/types";
 import { EhrModule } from "@/components/layout/EhrLeftSidebar";
+import { useAuth } from "@/lib/auth/auth-context";
+import { StaffManagementModal } from "@/components/admin/StaffManagementModal";
 import { toast } from "sonner";
 
 interface EhrHeaderProps {
   currentEnv: SatusehatEnvironment;
   onEnvChange?: (env: SatusehatEnvironment) => void;
-  hospitalName: string;
+  hospitalName?: string;
   department: string;
   onDepartmentChange?: (dept: string) => void;
-  onOpenPrintModal: () => void;
-  doctorName: string;
+  onOpenPrintModal?: () => void;
+  doctorName?: string;
   worklist?: ClinicQueuePatientItem[];
-  onSelectPatient?: (patient: PatientProfile, targetModule?: EhrModule) => void;
+  onSelectPatient?: (
+    patient: PatientProfile,
+    targetModule?: EhrModule,
+    targetQueueItemOrNumber?: ClinicQueuePatientItem | string,
+    targetDepartment?: string
+  ) => void;
   onOpenRegistration?: () => void;
   isDbSyncing?: boolean;
   isBridgingActive?: boolean;
 }
 
-const DEPARTMENTS = [
-  "Semua Poli",
-  "Poli Penyakit Dalam",
-  "Poli Umum",
-  "Poli Anak (Pediatri)",
-  "Poli Gigi & Mulut",
-  "Poli Jantung & Pembuluh Darah",
-  "Poli Mata",
-];
+const ROLE_LABELS: Record<
+  UserRole,
+  { label: string; color: string; icon: React.ElementType }
+> = {
+  doctor: {
+    label: "Dokter DPJP",
+    color: "bg-teal-50 text-teal-700 border-teal-200",
+    icon: Stethoscope,
+  },
+  nurse: {
+    label: "Perawat Poli",
+    color: "bg-cyan-50 text-cyan-700 border-cyan-200",
+    icon: UserCheck,
+  },
+  registration: {
+    label: "Petugas Pendaftaran",
+    color: "bg-amber-50 text-amber-700 border-amber-200",
+    icon: UserPlus,
+  },
+  pharmacy: {
+    label: "Apoteker / Farmasi",
+    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    icon: Sparkles,
+  },
+  admin: {
+    label: "Administrator",
+    color: "bg-purple-50 text-purple-700 border-purple-200",
+    icon: Shield,
+  },
+};
 
 export function EhrHeader({
   currentEnv,
@@ -63,11 +97,20 @@ export function EhrHeader({
   isDbSyncing = false,
   isBridgingActive = false,
 }: EhrHeaderProps) {
-  // Search State
+  const {
+    user,
+    facility,
+    departments: dynamicDepartments,
+    logout,
+  } = useAuth();
+
+  // Search & Dropdowns State
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isDeptDropdownOpen, setIsDeptDropdownOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
 
   // Clinical Notifications State (Derived dynamically from live worklist)
   const [notifications, setNotifications] = useState<
@@ -100,7 +143,8 @@ export function EhrHeader({
 
     // 1. Geriatric / High-priority patients
     const geriatric = worklist.filter(
-      (w) => w.triagePriority === "geriatric" || getAge(w.patient.birthDate) >= 60
+      (w) =>
+        w.triagePriority === "geriatric" || getAge(w.patient.birthDate) >= 60,
     );
     geriatric.forEach((g, idx) => {
       const age = getAge(g.patient.birthDate);
@@ -129,7 +173,7 @@ export function EhrHeader({
 
     // 3. Arrived / waiting queue patients
     const arrived = worklist.filter(
-      (w) => w.status === "arrived" && getAge(w.patient.birthDate) < 60
+      (w) => w.status === "arrived" && getAge(w.patient.birthDate) < 60,
     );
     arrived.slice(0, 3).forEach((w, idx) => {
       list.push({
@@ -146,11 +190,13 @@ export function EhrHeader({
     list.push({
       id: "notif-satusehat-gateway",
       type: "sync",
-      title: isBridgingActive ? "Gateway SATUSEHAT Kemenkes RI" : "Mode Simulasi Lokal SIMRS",
+      title: isBridgingActive
+        ? "Gateway SATUSEHAT Kemenkes RI"
+        : "Penyimpanan Basis Data Internal",
       desc: isBridgingActive
         ? `Layanan interoperabilitas FHIR R4 terhubung aktif pada server ${currentEnv.toUpperCase()} Kemenkes RI.`
-        : `Sistem beroperasi dalam mode simulasi lokal. Kredensial SATUSEHAT belum dihubungkan ke server Kemenkes.`,
-      time: isBridgingActive ? "Live Online" : "Simulasi",
+        : `Sistem beroperasi dalam mode penyimpanan basis data internal RS. Kredensial SATUSEHAT belum dihubungkan.`,
+      time: isBridgingActive ? "Live Online" : "Internal (Offline)",
       read: true,
     });
 
@@ -161,6 +207,7 @@ export function EhrHeader({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const deptDropdownRef = useRef<HTMLDivElement>(null);
   const notifDropdownRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   // Keyboard shortcut Ctrl+K / Cmd+K & Escape for Live Search
   useEffect(() => {
@@ -200,6 +247,12 @@ export function EhrHeader({
       ) {
         setIsNotifOpen(false);
       }
+      if (
+        userMenuRef.current &&
+        !userMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsUserMenuOpen(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutside);
@@ -227,15 +280,18 @@ export function EhrHeader({
 
   const handlePatientClick = (item: ClinicQueuePatientItem) => {
     // If encounter is finished, open 'resume' (Resume Medis), otherwise open 'entry' (SOAP DPJP Pemeriksaan)
-    const targetModule: EhrModule = item.status === "finished" ? "resume" : "entry";
+    const targetModule: EhrModule =
+      item.status === "finished" ? "resume" : "entry";
     if (onSelectPatient) {
-      onSelectPatient(item.patient, targetModule);
+      onSelectPatient(item.patient, targetModule, item, item.department);
     }
     setIsSearchOpen(false);
     setSearchQuery("");
     toast.success(`Membuka Rekam Medis: ${item.patient.name}`, {
       description: `No. RM: ${item.patient.mrn} • Status: ${
-        item.status === "finished" ? "Selesai Berobat" : "Pemeriksaan Dokter (SOAP)"
+        item.status === "finished"
+          ? "Selesai Berobat"
+          : "Pemeriksaan Dokter (SOAP)"
       }`,
     });
   };
@@ -245,9 +301,10 @@ export function EhrHeader({
       onDepartmentChange(dept);
     }
     setIsDeptDropdownOpen(false);
-    const count = dept === "Semua Poli"
-      ? worklist.length
-      : worklist.filter((w) => w.department === dept).length;
+    const count =
+      dept === "Semua Poli"
+        ? worklist.length
+        : worklist.filter((w) => w.department === dept).length;
     toast.info(`Poli aktif beralih ke: ${dept}`, {
       description: `${count} pasien antrean terdaftar di poli ini`,
     });
@@ -260,26 +317,59 @@ export function EhrHeader({
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
+  const fallbackDepts = [
+    "Poli Penyakit Dalam",
+    "Poli Umum",
+    "Poli Anak (Pediatri)",
+    "Poli Gigi & Mulut",
+    "Poli Jantung & Pembuluh Darah",
+    "Poli Mata",
+  ];
+
   const availableDepartments = Array.from(
     new Set([
-      ...DEPARTMENTS,
+      "Semua Poli",
+      ...(dynamicDepartments && dynamicDepartments.length > 0
+        ? dynamicDepartments.map((d) => d.name)
+        : fallbackDepts),
       ...worklist.map((w) => w.department).filter(Boolean),
-    ])
+    ]),
   );
+
+  const activeFacilityName =
+    facility?.name || hospitalName || "RS Umum Daerah Sehat Sejahtera";
+  const activeRoleConfig = user?.role
+    ? ROLE_LABELS[user.role]
+    : ROLE_LABELS.doctor;
+  const RoleIcon = activeRoleConfig?.icon || Stethoscope;
 
   return (
     <header className="sticky top-0 z-50 h-16 w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between shadow-2xs gap-3">
-      {/* 1. Left: Brand & Hospital Identity (Clean, without redundant badge) */}
+      {/* 1. Left: Brand & Hospital Identity */}
       <div className="flex items-center gap-2.5 shrink-0">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-600 text-white shadow-xs shrink-0">
-          <Building2 className="h-4.5 w-4.5" />
+          <Hospital className="h-4.5 w-4.5" />
         </div>
         <div className="min-w-0">
-          <div className="font-extrabold text-sm text-slate-900 tracking-tight whitespace-nowrap">
-            {hospitalName || "RSUD Sehat Sejahtera"}
+          <div className="flex items-center gap-1.5">
+            <span className="font-extrabold text-sm text-slate-900 tracking-tight whitespace-nowrap truncate max-w-[200px] sm:max-w-[260px]">
+              {activeFacilityName}
+            </span>
+            <Badge
+              variant="outline"
+              className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-50 text-teal-800 border-teal-200 shrink-0 hidden sm:inline-flex"
+            >
+              {facility?.type === "rumah_sakit"
+                ? "RS"
+                : facility?.type === "klinik_pratama"
+                  ? "Klinik Pratama"
+                  : facility?.type === "klinik_utama"
+                    ? "Klinik Utama"
+                    : "Puskesmas"}
+            </Badge>
           </div>
           <p className="text-[10px] text-slate-400 font-medium truncate">
-            SIMRS Rawat Jalan • Terintegrasi SATUSEHAT
+            Org ID: {facility?.satusehatOrgId || "10000004"} • SATUSEHAT RME
           </p>
         </div>
       </div>
@@ -329,10 +419,10 @@ export function EhrHeader({
                   {searchQuery.trim()
                     ? `Hasil Pencarian (${filteredPatients.length})`
                     : department === "Semua Poli"
-                    ? `Daftar Pasien Semua Poli (${filteredPatients.length})`
-                    : `Daftar Pasien ${department} (${filteredPatients.length})`}
+                      ? `Daftar Pasien Semua Poli (${filteredPatients.length})`
+                      : `Daftar Pasien ${department} (${filteredPatients.length})`}
                 </span>
-                {onOpenRegistration && (
+                {onOpenRegistration && filteredPatients.length > 0 && (
                   <button
                     type="button"
                     onClick={() => {
@@ -377,7 +467,11 @@ export function EhrHeader({
                               </span>
                             </div>
                             <div className="text-[10px] text-slate-500 font-mono truncate">
-                              No. RM <strong className="text-slate-700">{item.patient.mrn.replace(/^RM-?/i, "")}</strong> • NIK: {item.patient.nik}
+                              No. RM{" "}
+                              <strong className="text-slate-700">
+                                {item.patient.mrn.replace(/^RM-?/i, "")}
+                              </strong>{" "}
+                              • NIK: {item.patient.nik}
                             </div>
                           </div>
                         </div>
@@ -389,15 +483,15 @@ export function EhrHeader({
                               isInProgress
                                 ? "bg-teal-50 text-teal-700 border-teal-300 animate-pulse"
                                 : isFinished
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                                : "bg-amber-50 text-amber-700 border-amber-300"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                                  : "bg-amber-50 text-amber-700 border-amber-300"
                             }`}
                           >
                             {isInProgress
                               ? "Sedang Diperiksa"
                               : isFinished
-                              ? "Selesai"
-                              : "Menunggu"}
+                                ? "Selesai"
+                                : "Menunggu"}
                           </Badge>
                           <span className="text-[9px] text-slate-400 font-medium truncate max-w-[110px]">
                             {item.department}
@@ -412,7 +506,10 @@ export function EhrHeader({
                       {searchQuery.trim() ? (
                         <>
                           Tidak ditemukan pasien dengan kata kunci &quot;
-                          <strong className="text-slate-800">{searchQuery}</strong>&quot;.
+                          <strong className="text-slate-800">
+                            {searchQuery}
+                          </strong>
+                          &quot;.
                         </>
                       ) : (
                         <>Belum ada antrean terdaftar di {department}.</>
@@ -448,7 +545,9 @@ export function EhrHeader({
             title="Klik untuk mengganti filter Poli aktif"
           >
             <Building2 className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-            <span className="truncate max-w-[110px] sm:max-w-[140px]">{department}</span>
+            <span className="truncate max-w-[110px] sm:max-w-[140px]">
+              {department}
+            </span>
             <ChevronDown className="h-3 w-3 text-slate-400 shrink-0" />
           </button>
 
@@ -554,8 +653,8 @@ export function EhrHeader({
                         notif.type === "lab"
                           ? "bg-teal-100 text-teal-700"
                           : notif.type === "queue"
-                          ? "bg-amber-100 text-amber-800"
-                          : "bg-emerald-100 text-emerald-700"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-emerald-100 text-emerald-700"
                       }`}
                     >
                       {notif.type === "lab" ? (
@@ -616,13 +715,13 @@ export function EhrHeader({
           )}
         </div>
 
-        {/* Compact SATUSEHAT Connection / Simulation Badge */}
+        {/* Compact SATUSEHAT Connection / Offline Badge */}
         <div
           className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 text-xs font-medium whitespace-nowrap shrink-0 shadow-2xs"
           title={
             isBridgingActive
               ? `Bridging SATUSEHAT Aktif (${currentEnv === "production" ? "Server Utama Production" : "Server Uji Coba Staging"})`
-              : "Bridging SATUSEHAT Belum Terhubung (Mode Simulasi Lokal). Masuk ke menu Bridging untuk menghubungkan."
+              : "Bridging SATUSEHAT Belum Terhubung (Penyimpanan Internal RS). Buka modul Bridging untuk menghubungkan kredensial Kemenkes."
           }
         >
           <span
@@ -639,44 +738,181 @@ export function EhrHeader({
               ? currentEnv === "production"
                 ? "SATUSEHAT Live (Prod)"
                 : "SATUSEHAT Live (Staging)"
-              : "Simulasi Lokal (Offline)"}
+              : "Internal RS (Offline)"}
           </span>
         </div>
 
-        {/* Quick Print Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onOpenPrintModal}
-          className="h-9 px-3 text-xs font-semibold gap-1.5 bg-white border-slate-200 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-300 shrink-0 whitespace-nowrap rounded-full shadow-2xs"
+        {/* User Account & Faskes Switcher Dropdown */}
+        <div
+          ref={userMenuRef}
+          className="relative shrink-0 pl-1 sm:pl-2 border-l border-slate-200"
         >
-          <Printer className="h-3.5 w-3.5 text-teal-600" />
-          <span className="hidden sm:inline">Cetak Resume</span>
-        </Button>
+          <button
+            type="button"
+            onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+            className="flex items-center gap-2 p-1 sm:px-2 sm:py-1 rounded-full hover:bg-slate-100 transition-all cursor-pointer border border-transparent hover:border-slate-200 group text-left"
+            title="Klik untuk membuka menu profil nakes & ganti faskes"
+          >
+            <div className="h-8 w-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs border border-teal-200 shrink-0 group-hover:ring-2 group-hover:ring-teal-500/20 transition-all">
+              {user?.name
+                ? user.name
+                    .replace(/^(dr\.|drg\.|Ns\.|apt\.)\s*/i, "")
+                    .split(" ")
+                    .map((n) => n[0])
+                    .slice(0, 2)
+                    .join("")
+                : "US"}
+            </div>
 
-        {/* DPJP Doctor Profile */}
-        <div className="flex items-center gap-2 pl-2 border-l border-slate-200 shrink-0">
-          <div className="h-8 w-8 rounded-full bg-teal-100 text-teal-800 flex items-center justify-center font-bold text-xs border border-teal-200 shrink-0">
-            {doctorName
-              .replace("dr. ", "")
-              .split(" ")
-              .map((n) => n[0])
-              .slice(0, 2)
-              .join("")}
-          </div>
-          <div className="hidden xl:flex flex-col text-left shrink-0">
-            <span className="text-xs font-bold text-slate-900 truncate max-w-[120px]">
-              {doctorName}
-            </span>
-            <span className="text-[10px] text-emerald-600 font-medium flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              DPJP Online
-            </span>
-          </div>
+            <div className="hidden lg:flex flex-col text-left shrink-0 max-w-[130px]">
+              <span className="text-xs font-bold text-slate-900 truncate leading-tight">
+                {user?.name || doctorName || "Dokter DPJP"}
+              </span>
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />
+                <span className="text-[10px] text-teal-700 font-semibold truncate">
+                  {activeRoleConfig.label}
+                </span>
+              </div>
+            </div>
+
+            <ChevronDown className="h-3 w-3 text-slate-400 shrink-0 group-hover:text-slate-600 transition-colors" />
+          </button>
+
+          {/* Popover Dropdown Menu */}
+          {isUserMenuOpen && (
+            <div className="absolute top-full mt-2 right-0 w-80 sm:w-88 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+              {/* 1. User Info Header */}
+              <div className="p-4 bg-gradient-to-br from-teal-500/10 via-slate-50 to-slate-100/60 border-b border-slate-100">
+                <div className="flex items-start gap-3">
+                  <div className="h-11 w-11 rounded-2xl bg-teal-600 text-white flex items-center justify-center font-bold text-sm shadow-md shrink-0">
+                    <RoleIcon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-extrabold text-sm text-slate-900 truncate">
+                        {user?.name || "Pengguna Sistem"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <Badge
+                        variant="outline"
+                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${activeRoleConfig.color}`}
+                      >
+                        {activeRoleConfig.label}
+                      </Badge>
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        @{user?.username || "user"}
+                      </span>
+                    </div>
+                    {user?.sip && (
+                      <p className="text-[10px] text-slate-500 font-mono mt-1 truncate">
+                        SIP: {user.sip}
+                      </p>
+                    )}
+                    {user?.ihsPractitionerId && (
+                      <p className="text-[10px] text-teal-700 font-mono truncate">
+                        IHS Nakes: <strong>{user.ihsPractitionerId}</strong>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Single-Tenant Active Facility Information Card (Read-Only & Secure) */}
+              <div className="p-3 border-b border-slate-100">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <Hospital className="h-3 w-3 text-teal-600" />
+                    <span>Fasilitas Pelayanan Terdaftar</span>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="text-[9px] font-bold px-1.5 py-0.2 rounded border bg-teal-50 text-teal-800 border-teal-200"
+                  >
+                    {facility?.type === "rumah_sakit"
+                      ? "Rumah Sakit"
+                      : facility?.type === "puskesmas"
+                        ? "Puskesmas"
+                        : "Klinik Pratama"}
+                  </Badge>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50/80 border border-slate-200 text-xs space-y-2">
+                  <div className="flex items-start gap-2.5">
+                    <div className="h-8 w-8 rounded-lg bg-teal-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs mt-0.5">
+                      <Building2 className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-extrabold text-xs text-slate-900 leading-tight">
+                        {facility?.name || "RS Umum Daerah Sehat Sejahtera"}
+                      </h4>
+                      <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                        Org ID SATUSEHAT: <strong className="text-teal-700 font-bold">{facility?.satusehatOrgId || "10000004"}</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  {facility?.address && (
+                    <div className="text-[10px] text-slate-600 border-t border-slate-200/60 pt-1.5 leading-relaxed">
+                      <span>{facility.address}</span>
+                      {facility.phone && <span> • Telp: {facility.phone}</span>}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono border-t border-slate-200/60 pt-1.5">
+                    <span>Poliklinik Terdaftar:</span>
+                    <strong className="text-slate-800 font-sans font-bold">
+                      {dynamicDepartments?.length || facility?.departments?.length || 6} Unit Pelayanan
+                    </strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Admin Staff & User Management (Hanya untuk Admin Mitra) */}
+              {user?.role === "admin" && (
+                <div className="p-2.5 border-b border-slate-100 bg-slate-50/70">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsStaffModalOpen(true);
+                    }}
+                    className="w-full p-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                  >
+                    <Users className="h-3.5 w-3.5 text-teal-700" />
+                    <span>Kelola SDM Nakes & Poliklinik</span>
+                  </button>
+                </div>
+              )}
+
+              {/* 4. Action Footer: Clean Minimalist Logout */}
+              <div className="p-2 border-t border-slate-100 bg-slate-50/40">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setIsUserMenuOpen(false);
+                    await logout();
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2">
+                    <LogOut className="h-3.5 w-3.5 text-rose-500 group-hover:-translate-x-0.5 transition-transform" />
+                    <span>Keluar dari Aplikasi</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-mono group-hover:text-rose-400">Logout</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Modal Dialog Manajemen SDM Nakes */}
+      <StaffManagementModal
+        isOpen={isStaffModalOpen}
+        onClose={() => setIsStaffModalOpen(false)}
+      />
     </header>
   );
 }
-
-

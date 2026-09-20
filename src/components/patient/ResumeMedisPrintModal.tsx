@@ -13,12 +13,13 @@ import { Button } from "@/components/ui/button";
 import { Printer, Download, QrCode, ShieldCheck, Activity } from "lucide-react";
 import { OutpatientEncounter, PatientProfile } from "@/lib/satusehat/types";
 import { printHtmlElement } from "@/lib/print/print-service";
+import { useAuth } from "@/lib/auth/auth-context";
 
 interface ResumeMedisPrintModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  patient: PatientProfile;
-  encounter: OutpatientEncounter;
+  patient?: PatientProfile | null;
+  encounter?: OutpatientEncounter | null;
 }
 
 export function ResumeMedisPrintModal({
@@ -27,7 +28,70 @@ export function ResumeMedisPrintModal({
   patient,
   encounter,
 }: ResumeMedisPrintModalProps) {
+  const { facility, user } = useAuth();
   const printAreaRef = useRef<HTMLDivElement>(null);
+
+  if (!patient || !encounter) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md p-6 bg-white rounded-2xl text-center space-y-4">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-teal-50 text-teal-600 flex items-center justify-center border border-teal-200">
+            <Printer className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <DialogTitle className="text-base font-bold text-slate-900">
+              Belum Ada Pasien Terpilih
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-600 leading-relaxed">
+              Silakan pilih atau daftarkan pasien dari antrean poliklinik untuk melihat dan mencetak lembar resume medis rawat jalan.
+            </DialogDescription>
+          </div>
+          <DialogFooter className="sm:justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="text-xs font-semibold px-5"
+            >
+              Tutup
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  const activeHospitalName =
+    facility?.name || encounter.hospitalName || "RS Umum Daerah Sehat Sejahtera";
+  const activeOrgId =
+    facility?.satusehatOrgId || encounter.hospitalOrgId || "10000004";
+  const activeAddress =
+    facility?.address || "Jl. Kesehatan Medika No. 45, Jakarta Pusat";
+  const activePhone = facility?.phone || "021-5550199";
+  const activeLicense =
+    facility?.licenseNumber || "440/012/Dinkes/RS-B/2024";
+  const isKlinik =
+    facility?.type === "klinik_pratama" ||
+    facility?.type === "klinik_utama" ||
+    activeHospitalName.toLowerCase().includes("klinik");
+  const isPuskesmas =
+    facility?.type === "puskesmas" ||
+    activeHospitalName.toLowerCase().includes("puskesmas");
+  const facilityTypeLabel = isPuskesmas
+    ? "PUSKESMAS"
+    : isKlinik
+    ? (facility?.type === "klinik_utama" ? "KLINIK UTAMA" : "KLINIK PRATAMA")
+    : "RUMAH SAKIT UMUM";
+
+  const activeDoctorName =
+    encounter.doctorName ||
+    (user?.role === "doctor" ? user.name : null) ||
+    "Dokter DPJP";
+  const activeDoctorSip =
+    encounter.doctorSip ||
+    (user?.role === "doctor" ? user.sip : null) ||
+    "";
 
   const handlePrint = () => {
     if (printAreaRef.current) {
@@ -66,30 +130,53 @@ export function ResumeMedisPrintModal({
           ref={printAreaRef}
           className="printable-area flex-1 overflow-y-auto pr-2 bg-white text-slate-900 p-6 sm:p-8 rounded-xl border border-slate-200 font-sans space-y-6 print:p-0 print:border-0 print:shadow-none"
         >
-          {/* Hospital Letterhead (KOP SURAT) */}
+          {/* Hospital Letterhead (KOP SURAT DINAMIS) */}
           <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
-                <Activity className="h-7 w-7" />
+            <div className="flex items-start gap-3.5">
+              <div
+                className={`h-14 w-14 rounded-xl ${
+                  isKlinik ? "bg-emerald-600" : "bg-teal-600"
+                } text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0`}
+              >
+                <Activity className="h-8 w-8" />
               </div>
-              <div>
-                <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-tight">
-                  {encounter.hospitalName}
-                </h2>
-                <p className="text-[11px] text-slate-600">
-                  Pelayanan Rekam Medis Elektronik Terintegrasi SATUSEHAT Kemenkes RI
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-extrabold text-slate-900 uppercase tracking-tight">
+                    {activeHospitalName}
+                  </h2>
+                  <span
+                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                      isKlinik
+                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                        : "bg-blue-100 text-blue-800 border border-blue-300"
+                    }`}
+                  >
+                    {facilityTypeLabel}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-700">
+                  {activeAddress} • Telp: {activePhone}
                 </p>
-                <p className="text-[10px] text-slate-500 font-mono">
-                  Kode Organisasi Faskes: {encounter.hospitalOrgId}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500 font-mono">
+                  <span>No. Izin Faskes: {activeLicense}</span>
+                  <span>•</span>
+                  <span>Kode Org SATUSEHAT: {activeOrgId}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 italic">
+                  Pelayanan Rekam Medis Elektronik Terintegrasi SATUSEHAT Kemenkes RI
                 </p>
               </div>
             </div>
 
-            <div className="text-right">
+            <div className="text-right shrink-0">
               <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded border border-teal-200 uppercase tracking-wider block">
                 RESUME RAWAT JALAN
               </span>
-              <span className="text-[10px] text-slate-500 font-mono mt-1 block">
+              <span className="text-[10px] text-blue-800 font-mono font-bold mt-1 block">
+                No. Reg: {encounter.registrationNumber || `RJ-${encounter.visitDate.split("T")[0].replace(/-/g, "")}-0001`}
+              </span>
+              <span className="text-[9px] text-slate-400 font-mono block">
                 ID: {encounter.id}
               </span>
             </div>
@@ -105,6 +192,12 @@ export function ResumeMedisPrintModal({
               <span className="text-[10px] text-slate-500 block">No. Rekam Medis:</span>
               <strong className="text-slate-900 font-mono font-bold">
                 {patient.mrn}
+              </strong>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 block">No. Registrasi:</span>
+              <strong className="text-blue-800 font-mono font-bold">
+                {encounter.registrationNumber || `RJ-${encounter.visitDate.split("T")[0].replace(/-/g, "")}-0001`}
               </strong>
             </div>
             <div>
@@ -126,10 +219,10 @@ export function ResumeMedisPrintModal({
               <span className="text-[10px] text-slate-500 block">Gol. Darah:</span>
               <span className="text-red-700 font-bold">Tipe {patient.bloodType}</span>
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <span className="text-[10px] text-slate-500 block">Alergi:</span>
-              <span className="text-amber-800 font-semibold">
-                {patient.allergies.join(", ") || "Tidak ada riwayat alergi"}
+              <span className="text-amber-800 font-semibold truncate block" title={patient.allergies.join(", ") || "Tidak ada riwayat alergi"}>
+                {patient.allergies.join(", ") || "Tidak ada"}
               </span>
             </div>
           </div>
@@ -150,10 +243,10 @@ export function ResumeMedisPrintModal({
                   Dokter Penanggung Jawab (DPJP):
                 </span>
                 <span className="font-bold text-slate-900">
-                  {encounter.doctorName}
+                  {activeDoctorName}
                 </span>
                 <span className="text-[10px] text-slate-500 block font-mono">
-                  {encounter.doctorSip}
+                  {activeDoctorSip}
                 </span>
               </div>
             </div>
@@ -458,11 +551,11 @@ export function ResumeMedisPrintModal({
               </span>
               <div className="h-12 flex items-center justify-center">
                 <span className="font-serif italic text-teal-800 text-sm font-bold border-b border-slate-400 px-4">
-                  {encounter.doctorName}
+                  {activeDoctorName}
                 </span>
               </div>
               <span className="text-[10px] text-slate-600 block font-mono">
-                {encounter.doctorSip}
+                {activeDoctorSip}
               </span>
             </div>
           </div>

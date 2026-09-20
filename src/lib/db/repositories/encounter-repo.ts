@@ -11,9 +11,13 @@ import {
   satusehatSyncLogs,
   medicalAddendums,
   patients,
+  departments,
+  users,
+  facilities,
 } from "../schema";
-import { eq, desc, sql, inArray } from "drizzle-orm";
+import { eq, desc, sql, inArray, and } from "drizzle-orm";
 import { MemoryCache, CACHE_CONFIG, InvalidationService } from "@/lib/cache";
+import { generatePrefixedId } from "@/lib/id-generator";
 import {
   OutpatientEncounter,
   VitalSigns,
@@ -28,11 +32,33 @@ import {
   SyncStatusType,
 } from "@/lib/satusehat/types";
 
-function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounter {
+async function buildEncounter(row: typeof encounters.$inferSelect): Promise<OutpatientEncounter> {
   const encounterId = row.id;
 
-  // 1. Fetch Vitals
-  const vitRow = db.select().from(vitals).where(eq(vitals.encounterId, encounterId)).get();
+  // Run child queries concurrently
+  const [
+    vitRows,
+    diagRows,
+    procRows,
+    rxRows,
+    orderRows,
+    labRows,
+    radRows,
+    syncRows,
+    addendumRows,
+  ] = await Promise.all([
+    db.select().from(vitals).where(eq(vitals.encounterId, encounterId)).limit(1),
+    db.select().from(diagnoses).where(eq(diagnoses.encounterId, encounterId)),
+    db.select().from(procedures).where(eq(procedures.encounterId, encounterId)),
+    db.select().from(prescriptions).where(eq(prescriptions.encounterId, encounterId)),
+    db.select().from(diagnosticOrders).where(eq(diagnosticOrders.encounterId, encounterId)),
+    db.select().from(labResults).where(eq(labResults.encounterId, encounterId)),
+    db.select().from(radiologyResults).where(eq(radiologyResults.encounterId, encounterId)),
+    db.select().from(satusehatSyncLogs).where(eq(satusehatSyncLogs.encounterId, encounterId)),
+    db.select().from(medicalAddendums).where(eq(medicalAddendums.encounterId, encounterId)),
+  ]);
+
+  const vitRow = vitRows[0];
   const vitalsData: VitalSigns | undefined = vitRow
     ? {
         systolic: vitRow.systolic,
@@ -45,11 +71,17 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
         heightCm: vitRow.heightCm,
         bmi: vitRow.bmi || undefined,
         physicalExamNotes: vitRow.physicalExamNotes || undefined,
+        satusehatBpId: vitRow.satusehatBpId || undefined,
+        satusehatHrId: vitRow.satusehatHrId || undefined,
+        satusehatTempId: vitRow.satusehatTempId || undefined,
+        satusehatRrId: vitRow.satusehatRrId || undefined,
+        satusehatSpo2Id: vitRow.satusehatSpo2Id || undefined,
+        satusehatWeightId: vitRow.satusehatWeightId || undefined,
+        satusehatHeightId: vitRow.satusehatHeightId || undefined,
+        satusehatBmiId: vitRow.satusehatBmiId || undefined,
       }
     : undefined;
 
-  // 2. Fetch Diagnoses
-  const diagRows = db.select().from(diagnoses).where(eq(diagnoses.encounterId, encounterId)).all();
   const diagnosesData: DiagnosisItem[] = diagRows.map((d: typeof diagnoses.$inferSelect) => ({
     id: d.id,
     type: d.type as "primary" | "secondary",
@@ -58,20 +90,18 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
     patientFriendlyName: d.patientFriendlyName,
     system: d.system || "http://hl7.org/fhir/sid/icd-10",
     clinicalStatus: (d.clinicalStatus as DiagnosisItem["clinicalStatus"]) || "active",
+    satusehatConditionId: d.satusehatConditionId || undefined,
   }));
 
-  // 3. Fetch Procedures
-  const procRows = db.select().from(procedures).where(eq(procedures.encounterId, encounterId)).all();
   const proceduresData: ProcedureItem[] = procRows.map((p: typeof procedures.$inferSelect) => ({
     id: p.id,
     code: p.code,
     display: p.display,
     category: p.category,
     notes: p.notes || undefined,
+    satusehatProcedureId: p.satusehatProcedureId || undefined,
   }));
 
-  // 4. Fetch Prescriptions
-  const rxRows = db.select().from(prescriptions).where(eq(prescriptions.encounterId, encounterId)).all();
   const prescriptionsData: PrescriptionItem[] = rxRows.map((rx: typeof prescriptions.$inferSelect) => ({
     id: rx.id,
     kfaCode: rx.kfaCode,
@@ -90,14 +120,10 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
     unit: rx.unit,
     durationDays: rx.durationDays,
     instructions: rx.instructions,
+    satusehatMedicationRequestId: rx.satusehatMedicationRequestId || undefined,
+    satusehatMedicationId: rx.satusehatMedicationId || undefined,
   }));
 
-  // 5. Fetch Diagnostic Orders
-  const orderRows = db
-    .select()
-    .from(diagnosticOrders)
-    .where(eq(diagnosticOrders.encounterId, encounterId))
-    .all();
   const diagnosticOrdersData: DiagnosticOrder[] = orderRows.map((o: typeof diagnosticOrders.$inferSelect) => ({
     id: o.id,
     testCode: o.testCode,
@@ -108,10 +134,9 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
     orderDate: o.orderDate,
     doctorName: o.doctorName,
     clinicalNotes: o.clinicalNotes || undefined,
+    satusehatServiceRequestId: o.satusehatServiceRequestId || undefined,
   }));
 
-  // 6. Fetch Lab Results
-  const labRows = db.select().from(labResults).where(eq(labResults.encounterId, encounterId)).all();
   const labResultsData: LabResult[] = labRows.map((lr: typeof labResults.$inferSelect) => ({
     id: lr.id,
     testCode: lr.testCode,
@@ -124,14 +149,10 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
     resultDate: lr.resultDate,
     performer: lr.performer,
     notes: lr.notes || undefined,
+    satusehatObservationId: lr.satusehatObservationId || undefined,
+    satusehatDiagnosticReportId: lr.satusehatDiagnosticReportId || undefined,
   }));
 
-  // 7. Fetch Radiology Results
-  const radRows = db
-    .select()
-    .from(radiologyResults)
-    .where(eq(radiologyResults.encounterId, encounterId))
-    .all();
   const radiologyResultsData: RadiologyResult[] = radRows.map((rad: typeof radiologyResults.$inferSelect) => ({
     id: rad.id,
     examCode: rad.examCode,
@@ -141,14 +162,10 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
     conclusion: rad.conclusion,
     radiologistName: rad.radiologistName,
     resultDate: rad.resultDate,
+    satusehatObservationId: rad.satusehatObservationId || undefined,
+    satusehatDiagnosticReportId: rad.satusehatDiagnosticReportId || undefined,
   }));
 
-  // 8. Fetch Sync Logs (Breakdown)
-  const syncRows = db
-    .select()
-    .from(satusehatSyncLogs)
-    .where(eq(satusehatSyncLogs.encounterId, encounterId))
-    .all();
   const syncBreakdownData: ResourceSyncItem[] = syncRows.map((sb: typeof satusehatSyncLogs.$inferSelect) => ({
     resourceType: sb.resourceType,
     label: sb.label,
@@ -163,12 +180,6 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
     details: sb.details ? JSON.parse(sb.details) : undefined,
   }));
 
-  // 9. Fetch Medical Addendums
-  const addendumRows = db
-    .select()
-    .from(medicalAddendums)
-    .where(eq(medicalAddendums.encounterId, encounterId))
-    .all();
   const addendumsData: MedicalAddendum[] = addendumRows.map((a: typeof medicalAddendums.$inferSelect) => ({
     id: a.id,
     timestamp: a.timestamp,
@@ -180,14 +191,17 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
   return {
     id: row.id,
     patientId: row.patientId || undefined,
+    facilityId: row.facilityId || undefined,
+    departmentId: row.departmentId || undefined,
+    doctorId: row.doctorId || undefined,
     satusehatEncounterId: row.satusehatEncounterId || undefined,
     visitDate: row.visitDate,
     clinicDepartment: row.clinicDepartment,
     doctorName: row.doctorName,
     doctorSip: row.doctorSip,
     doctorIhsId: row.doctorIhsId || undefined,
-    hospitalName: row.hospitalName,
-    hospitalOrgId: row.hospitalOrgId,
+    hospitalName: process.env.NEXT_PUBLIC_HOSPITAL_NAME || "RS Umum Daerah Sehat Sejahtera",
+    hospitalOrgId: process.env.SATUSEHAT_ORG_ID || "b15a7ae7-f366-4a84-8385-0b8196c05002",
     chiefComplaint: row.chiefComplaint,
     anamnesis: row.anamnesis,
     vitals: vitalsData,
@@ -205,6 +219,7 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
     dischargeDisposition: row.dischargeDisposition || "Pulang Berobat Jalan",
     encounterStatus: (row.encounterStatus as OutpatientEncounter["encounterStatus"]) || "finished",
     queueNumber: row.queueNumber || undefined,
+    registrationNumber: row.registrationNumber || undefined,
     consentStatus: (row.consentStatus as "opt-in" | "opt-out") || "opt-in",
     syncStatus: (row.syncStatus as SyncStatusType) || "synced",
     syncedAt: row.syncedAt || undefined,
@@ -217,16 +232,15 @@ function buildEncounter(row: typeof encounters.$inferSelect): OutpatientEncounte
 }
 
 /**
- * High-Performance Batch Eager Loading:
- * Eliminates N*9+1 query explosion by running 10 collective queries total for N encounters.
+ * High-Performance Batch Eager Loading for multiple encounters
  */
-function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[]): OutpatientEncounter[] {
+async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[]): Promise<OutpatientEncounter[]> {
   if (!encounterRows || encounterRows.length === 0) return [];
-  if (encounterRows.length === 1) return [buildEncounter(encounterRows[0])];
+  if (encounterRows.length === 1) return [await buildEncounter(encounterRows[0])];
 
   const encounterIds = encounterRows.map((r) => r.id);
 
-  // Run 9 batch queries using inArray
+  // Run 9 batch queries concurrently using inArray
   const [
     allVitals,
     allDiagnoses,
@@ -237,17 +251,17 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
     allRadResults,
     allSyncLogs,
     allAddendums,
-  ] = [
-    db.select().from(vitals).where(inArray(vitals.encounterId, encounterIds)).all(),
-    db.select().from(diagnoses).where(inArray(diagnoses.encounterId, encounterIds)).all(),
-    db.select().from(procedures).where(inArray(procedures.encounterId, encounterIds)).all(),
-    db.select().from(prescriptions).where(inArray(prescriptions.encounterId, encounterIds)).all(),
-    db.select().from(diagnosticOrders).where(inArray(diagnosticOrders.encounterId, encounterIds)).all(),
-    db.select().from(labResults).where(inArray(labResults.encounterId, encounterIds)).all(),
-    db.select().from(radiologyResults).where(inArray(radiologyResults.encounterId, encounterIds)).all(),
-    db.select().from(satusehatSyncLogs).where(inArray(satusehatSyncLogs.encounterId, encounterIds)).all(),
-    db.select().from(medicalAddendums).where(inArray(medicalAddendums.encounterId, encounterIds)).all(),
-  ];
+  ] = await Promise.all([
+    db.select().from(vitals).where(inArray(vitals.encounterId, encounterIds)),
+    db.select().from(diagnoses).where(inArray(diagnoses.encounterId, encounterIds)),
+    db.select().from(procedures).where(inArray(procedures.encounterId, encounterIds)),
+    db.select().from(prescriptions).where(inArray(prescriptions.encounterId, encounterIds)),
+    db.select().from(diagnosticOrders).where(inArray(diagnosticOrders.encounterId, encounterIds)),
+    db.select().from(labResults).where(inArray(labResults.encounterId, encounterIds)),
+    db.select().from(radiologyResults).where(inArray(radiologyResults.encounterId, encounterIds)),
+    db.select().from(satusehatSyncLogs).where(inArray(satusehatSyncLogs.encounterId, encounterIds)),
+    db.select().from(medicalAddendums).where(inArray(medicalAddendums.encounterId, encounterIds)),
+  ]);
 
   // Group in O(N) Maps
   const vitalsMap = new Map<string, VitalSigns>();
@@ -263,6 +277,14 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
       heightCm: vitRow.heightCm,
       bmi: vitRow.bmi || undefined,
       physicalExamNotes: vitRow.physicalExamNotes || undefined,
+      satusehatBpId: vitRow.satusehatBpId || undefined,
+      satusehatHrId: vitRow.satusehatHrId || undefined,
+      satusehatTempId: vitRow.satusehatTempId || undefined,
+      satusehatRrId: vitRow.satusehatRrId || undefined,
+      satusehatSpo2Id: vitRow.satusehatSpo2Id || undefined,
+      satusehatWeightId: vitRow.satusehatWeightId || undefined,
+      satusehatHeightId: vitRow.satusehatHeightId || undefined,
+      satusehatBmiId: vitRow.satusehatBmiId || undefined,
     });
   }
 
@@ -277,6 +299,7 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
       patientFriendlyName: d.patientFriendlyName,
       system: d.system || "http://hl7.org/fhir/sid/icd-10",
       clinicalStatus: (d.clinicalStatus as DiagnosisItem["clinicalStatus"]) || "active",
+      satusehatConditionId: d.satusehatConditionId || undefined,
     });
     diagnosesMap.set(d.encounterId, list);
   }
@@ -290,6 +313,7 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
       display: p.display,
       category: p.category,
       notes: p.notes || undefined,
+      satusehatProcedureId: p.satusehatProcedureId || undefined,
     });
     proceduresMap.set(p.encounterId, list);
   }
@@ -315,6 +339,8 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
       unit: rx.unit,
       durationDays: rx.durationDays,
       instructions: rx.instructions,
+      satusehatMedicationRequestId: rx.satusehatMedicationRequestId || undefined,
+      satusehatMedicationId: rx.satusehatMedicationId || undefined,
     });
     prescriptionsMap.set(rx.encounterId, list);
   }
@@ -332,6 +358,7 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
       orderDate: o.orderDate,
       doctorName: o.doctorName,
       clinicalNotes: o.clinicalNotes || undefined,
+      satusehatServiceRequestId: o.satusehatServiceRequestId || undefined,
     });
     ordersMap.set(o.encounterId, list);
   }
@@ -351,6 +378,8 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
       resultDate: lr.resultDate,
       performer: lr.performer,
       notes: lr.notes || undefined,
+      satusehatObservationId: lr.satusehatObservationId || undefined,
+      satusehatDiagnosticReportId: lr.satusehatDiagnosticReportId || undefined,
     });
     labMap.set(lr.encounterId, list);
   }
@@ -367,6 +396,8 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
       conclusion: rad.conclusion,
       radiologistName: rad.radiologistName,
       resultDate: rad.resultDate,
+      satusehatObservationId: rad.satusehatObservationId || undefined,
+      satusehatDiagnosticReportId: rad.satusehatDiagnosticReportId || undefined,
     });
     radMap.set(rad.encounterId, list);
   }
@@ -403,7 +434,7 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
     addendumMap.set(a.encounterId, list);
   }
 
-  // Construct OutpatientEncounter objects in memory in O(N)
+  // Construct OutpatientEncounter objects in memory
   return encounterRows.map((row) => {
     const encId = row.id;
     const diagList = diagnosesMap.get(encId) || [];
@@ -418,14 +449,17 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
     return {
       id: row.id,
       patientId: row.patientId || undefined,
+      facilityId: row.facilityId || undefined,
+      departmentId: row.departmentId || undefined,
+      doctorId: row.doctorId || undefined,
       satusehatEncounterId: row.satusehatEncounterId || undefined,
       visitDate: row.visitDate,
       clinicDepartment: row.clinicDepartment,
       doctorName: row.doctorName,
       doctorSip: row.doctorSip,
       doctorIhsId: row.doctorIhsId || undefined,
-      hospitalName: row.hospitalName,
-      hospitalOrgId: row.hospitalOrgId,
+      hospitalName: process.env.NEXT_PUBLIC_HOSPITAL_NAME || "RS Umum Daerah Sehat Sejahtera",
+      hospitalOrgId: process.env.SATUSEHAT_ORG_ID || "b15a7ae7-f366-4a84-8385-0b8196c05002",
       chiefComplaint: row.chiefComplaint,
       anamnesis: row.anamnesis,
       vitals: vitalsMap.get(encId),
@@ -443,6 +477,7 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
       dischargeDisposition: row.dischargeDisposition || "Pulang Berobat Jalan",
       encounterStatus: (row.encounterStatus as OutpatientEncounter["encounterStatus"]) || "finished",
       queueNumber: row.queueNumber || undefined,
+      registrationNumber: row.registrationNumber || undefined,
       consentStatus: (row.consentStatus as "opt-in" | "opt-out") || "opt-in",
       syncStatus: (row.syncStatus as SyncStatusType) || "synced",
       syncedAt: row.syncedAt || undefined,
@@ -456,127 +491,232 @@ function buildEncountersBatch(encounterRows: (typeof encounters.$inferSelect)[])
 }
 
 export const EncounterRepository = {
-  getAll(): OutpatientEncounter[] {
-    return MemoryCache.getOrSet(
+  async getAll(): Promise<OutpatientEncounter[]> {
+    return MemoryCache.getOrSetAsync(
       CACHE_CONFIG.KEYS.ENCOUNTER_ALL,
-      () => {
-        const rows = db.select().from(encounters).orderBy(desc(encounters.visitDate)).all();
-        return buildEncountersBatch(rows);
+      async () => {
+        const rows = await db.select().from(encounters).orderBy(desc(encounters.visitDate));
+        return await buildEncountersBatch(rows);
       },
       CACHE_CONFIG.TTL.MEDIUM
     );
   },
 
-  getById(id: string): OutpatientEncounter | null {
+  async getById(id: string): Promise<OutpatientEncounter | null> {
     if (!id) return null;
-    return MemoryCache.getOrSet(
+    return MemoryCache.getOrSetAsync(
       CACHE_CONFIG.KEYS.ENCOUNTER_SINGLE(id),
-      () => {
-        const row = db.select().from(encounters).where(eq(encounters.id, id)).get();
-        return row ? buildEncounter(row) : null;
+      async () => {
+        const rows = await db.select().from(encounters).where(eq(encounters.id, id)).limit(1);
+        return rows[0] ? await buildEncounter(rows[0]) : null;
       },
       CACHE_CONFIG.TTL.MEDIUM
     );
   },
 
-  getByPatientId(patientId: string): OutpatientEncounter[] {
+  async getByPatientId(patientId: string): Promise<OutpatientEncounter[]> {
     if (!patientId) return [];
-    return MemoryCache.getOrSet(
+    return MemoryCache.getOrSetAsync(
       CACHE_CONFIG.KEYS.ENCOUNTER_PATIENT(patientId),
-      () => {
-        const rows = db
+      async () => {
+        const rows = await db
           .select()
           .from(encounters)
           .where(eq(encounters.patientId, patientId))
-          .orderBy(desc(encounters.visitDate))
-          .all();
-        return buildEncountersBatch(rows);
+          .orderBy(desc(encounters.visitDate));
+        return await buildEncountersBatch(rows);
       },
       CACHE_CONFIG.TTL.MEDIUM
     );
   },
 
-  create(enc: OutpatientEncounter, patientId: string): OutpatientEncounter {
-    const encounterId = enc.id || `ENC-${Date.now().toString(36).toUpperCase()}`;
+  async create(enc: OutpatientEncounter, patientId: string): Promise<OutpatientEncounter> {
+    const encounterId = enc.id || generatePrefixedId("enc_");
     const now = new Date().toISOString();
 
-    const existing = db.select().from(encounters).where(eq(encounters.id, encounterId)).get();
+    const existingRows = await db.select().from(encounters).where(eq(encounters.id, encounterId)).limit(1);
+    const existing = existingRows[0];
 
-    if (existing) {
-      // 1. Delete previous child rows for this encounter to ensure clean upsert
-      db.delete(vitals).where(eq(vitals.encounterId, encounterId)).run();
-      db.delete(diagnoses).where(eq(diagnoses.encounterId, encounterId)).run();
-      db.delete(procedures).where(eq(procedures.encounterId, encounterId)).run();
-      db.delete(prescriptions).where(eq(prescriptions.encounterId, encounterId)).run();
-      db.delete(diagnosticOrders).where(eq(diagnosticOrders.encounterId, encounterId)).run();
-      db.delete(labResults).where(eq(labResults.encounterId, encounterId)).run();
-      db.delete(radiologyResults).where(eq(radiologyResults.encounterId, encounterId)).run();
-      db.delete(satusehatSyncLogs).where(eq(satusehatSyncLogs.encounterId, encounterId)).run();
-      if (enc.addendums && enc.addendums.length > 0) {
-        db.delete(medicalAddendums).where(eq(medicalAddendums.encounterId, encounterId)).run();
+    // 1. Resolve facilityId strictly (from encounter -> existing encounter -> facilities table lookup by org/name -> active default)
+    let resolvedFacilityId = enc.facilityId || existing?.facilityId || null;
+    if (!resolvedFacilityId && (enc.hospitalOrgId || enc.hospitalName)) {
+      if (enc.hospitalOrgId) {
+        const facByOrg = await db
+          .select({ id: facilities.id })
+          .from(facilities)
+          .where(eq(facilities.satusehatOrgId, enc.hospitalOrgId))
+          .limit(1);
+        if (facByOrg.length > 0) resolvedFacilityId = facByOrg[0].id;
       }
+      if (!resolvedFacilityId && enc.hospitalName) {
+        const facByName = await db
+          .select({ id: facilities.id })
+          .from(facilities)
+          .where(eq(facilities.name, enc.hospitalName))
+          .limit(1);
+        if (facByName.length > 0) resolvedFacilityId = facByName[0].id;
+      }
+    }
+    if (!resolvedFacilityId) {
+      const activeFac = await db
+        .select({ id: facilities.id })
+        .from(facilities)
+        .where(eq(facilities.isActive, true))
+        .limit(1);
+      resolvedFacilityId = activeFac[0]?.id || null;
+    }
 
-      // 2. Update Encounter Master
-      db.update(encounters)
-        .set({
-          patientId,
-          satusehatEncounterId:
-            enc.satusehatEncounterId !== undefined
-              ? enc.satusehatEncounterId
-              : existing.satusehatEncounterId,
-          visitDate: enc.visitDate || existing.visitDate,
-          clinicDepartment: enc.clinicDepartment || existing.clinicDepartment,
-          doctorName: enc.doctorName || existing.doctorName,
-          doctorSip: enc.doctorSip || existing.doctorSip,
-          doctorIhsId: enc.doctorIhsId || existing.doctorIhsId,
-          hospitalName: enc.hospitalName || existing.hospitalName,
-          hospitalOrgId: enc.hospitalOrgId || existing.hospitalOrgId,
-          chiefComplaint: enc.chiefComplaint || existing.chiefComplaint,
-          anamnesis: enc.anamnesis || existing.anamnesis,
-          followUpInstruction:
-            enc.followUpPlan?.instruction || existing.followUpInstruction,
-          nextVisitDate:
-            enc.followUpPlan?.nextVisitDate !== undefined
-              ? enc.followUpPlan?.nextVisitDate
-              : existing.nextVisitDate,
-          referredTo:
-            enc.followUpPlan?.referredTo !== undefined
-              ? enc.followUpPlan?.referredTo
-              : existing.referredTo,
-          dischargeDisposition:
-            enc.dischargeDisposition || existing.dischargeDisposition,
-          encounterStatus: enc.encounterStatus || existing.encounterStatus,
-          queueNumber:
-            enc.queueNumber !== undefined ? enc.queueNumber : existing.queueNumber,
-          consentStatus: enc.consentStatus || existing.consentStatus,
-          syncStatus: enc.syncStatus || existing.syncStatus,
-          syncedAt: enc.syncedAt !== undefined ? enc.syncedAt : existing.syncedAt,
-          isLocked:
-            enc.isLocked !== undefined
-              ? Boolean(enc.isLocked)
-              : Boolean(existing.isLocked),
-          lockedAt:
-            enc.lockedAt !== undefined ? enc.lockedAt : existing.lockedAt,
-          lockedBy:
-            enc.lockedBy !== undefined ? enc.lockedBy : existing.lockedBy,
-          updatedAt: now,
-        })
-        .where(eq(encounters.id, encounterId))
-        .run();
-    } else {
-      // Insert fresh master row
-      db.insert(encounters)
-        .values({
+    // 2. Resolve departmentId strictly within resolvedFacilityId
+    let resolvedDepartmentId = enc.departmentId || existing?.departmentId || null;
+    const targetDeptName = enc.clinicDepartment || existing?.clinicDepartment;
+    if (!resolvedDepartmentId && targetDeptName && resolvedFacilityId) {
+      const deptRows = await db
+        .select({ id: departments.id })
+        .from(departments)
+        .where(
+          and(
+            eq(departments.name, targetDeptName),
+            eq(departments.facilityId, resolvedFacilityId)
+          )
+        )
+        .limit(1);
+      if (deptRows.length > 0) {
+        resolvedDepartmentId = deptRows[0].id;
+      }
+    }
+
+    // 3. Resolve doctorId strictly within resolvedFacilityId and/or valid credentials
+    let resolvedDoctorId = enc.doctorId || existing?.doctorId || null;
+    const targetDocName = enc.doctorName || existing?.doctorName;
+    if (!resolvedDoctorId && (targetDocName || enc.doctorSip || enc.doctorIhsId)) {
+      if (targetDocName && resolvedFacilityId) {
+        const docCleanName = targetDocName.split(" (")[0].trim();
+        const userRows = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            and(
+              eq(users.name, docCleanName),
+              eq(users.facilityId, resolvedFacilityId)
+            )
+          )
+          .limit(1);
+        if (userRows.length > 0) {
+          resolvedDoctorId = userRows[0].id;
+        }
+      }
+      if (!resolvedDoctorId && enc.doctorSip) {
+        const userBySip = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            resolvedFacilityId
+              ? and(eq(users.sip, enc.doctorSip), eq(users.facilityId, resolvedFacilityId))
+              : eq(users.sip, enc.doctorSip)
+          )
+          .limit(1);
+        if (userBySip.length > 0) {
+          resolvedDoctorId = userBySip[0].id;
+        }
+      }
+      if (!resolvedDoctorId && enc.doctorIhsId) {
+        const userByIhs = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(
+            resolvedFacilityId
+              ? and(eq(users.ihsPractitionerId, enc.doctorIhsId), eq(users.facilityId, resolvedFacilityId))
+              : eq(users.ihsPractitionerId, enc.doctorIhsId)
+          )
+          .limit(1);
+        if (userByIhs.length > 0) {
+          resolvedDoctorId = userByIhs[0].id;
+        }
+      }
+    }
+
+    // Wrap all writes in an atomic database transaction to prevent orphan records on partial failure
+    await db.transaction(async (tx) => {
+      if (existing) {
+        // 1. Delete previous child rows for this encounter to ensure clean upsert
+        await Promise.all([
+          tx.delete(vitals).where(eq(vitals.encounterId, encounterId)),
+          tx.delete(diagnoses).where(eq(diagnoses.encounterId, encounterId)),
+          tx.delete(procedures).where(eq(procedures.encounterId, encounterId)),
+          tx.delete(prescriptions).where(eq(prescriptions.encounterId, encounterId)),
+          tx.delete(diagnosticOrders).where(eq(diagnosticOrders.encounterId, encounterId)),
+          tx.delete(labResults).where(eq(labResults.encounterId, encounterId)),
+          tx.delete(radiologyResults).where(eq(radiologyResults.encounterId, encounterId)),
+          tx.delete(satusehatSyncLogs).where(eq(satusehatSyncLogs.encounterId, encounterId)),
+          enc.addendums && enc.addendums.length > 0
+            ? tx.delete(medicalAddendums).where(eq(medicalAddendums.encounterId, encounterId))
+            : Promise.resolve(),
+        ]);
+
+        // 2. Update Encounter Master
+        await tx
+          .update(encounters)
+          .set({
+            patientId,
+            facilityId: resolvedFacilityId,
+            departmentId: resolvedDepartmentId,
+            doctorId: resolvedDoctorId,
+            satusehatEncounterId:
+              enc.satusehatEncounterId !== undefined
+                ? enc.satusehatEncounterId
+                : existing.satusehatEncounterId,
+            visitDate: enc.visitDate || existing.visitDate,
+            clinicDepartment: enc.clinicDepartment || existing.clinicDepartment,
+            doctorName: enc.doctorName || existing.doctorName,
+            doctorSip: enc.doctorSip || existing.doctorSip,
+            doctorIhsId: enc.doctorIhsId || existing.doctorIhsId,
+            chiefComplaint: enc.chiefComplaint || existing.chiefComplaint,
+            anamnesis: enc.anamnesis || existing.anamnesis,
+            followUpInstruction:
+              enc.followUpPlan?.instruction || existing.followUpInstruction,
+            nextVisitDate:
+              enc.followUpPlan?.nextVisitDate !== undefined
+                ? enc.followUpPlan?.nextVisitDate
+                : existing.nextVisitDate,
+            referredTo:
+              enc.followUpPlan?.referredTo !== undefined
+                ? enc.followUpPlan?.referredTo
+                : existing.referredTo,
+            dischargeDisposition:
+              enc.dischargeDisposition || existing.dischargeDisposition,
+            encounterStatus: enc.encounterStatus || existing.encounterStatus,
+            queueNumber:
+              enc.queueNumber !== undefined ? enc.queueNumber : existing.queueNumber,
+            registrationNumber:
+              enc.registrationNumber !== undefined ? enc.registrationNumber : existing.registrationNumber,
+            consentStatus: enc.consentStatus || existing.consentStatus,
+            syncStatus: enc.syncStatus || existing.syncStatus,
+            syncedAt: enc.syncedAt !== undefined ? enc.syncedAt : existing.syncedAt,
+            isLocked:
+              enc.isLocked !== undefined
+                ? Boolean(enc.isLocked)
+                : Boolean(existing.isLocked),
+            lockedAt:
+              enc.lockedAt !== undefined ? enc.lockedAt : existing.lockedAt,
+            lockedBy:
+              enc.lockedBy !== undefined ? enc.lockedBy : existing.lockedBy,
+            updatedAt: now,
+          })
+          .where(eq(encounters.id, encounterId));
+      } else {
+        // Insert fresh master row
+        await tx.insert(encounters).values({
           id: encounterId,
           patientId,
+          facilityId: resolvedFacilityId,
+          departmentId: resolvedDepartmentId,
+          doctorId: resolvedDoctorId,
           satusehatEncounterId: enc.satusehatEncounterId || null,
           visitDate: enc.visitDate || now,
           clinicDepartment: enc.clinicDepartment || "Poli Umum",
           doctorName: enc.doctorName || "dr. Dokter Pemeriksa",
           doctorSip: enc.doctorSip || "SIP-DEFAULT-01",
           doctorIhsId: enc.doctorIhsId || "N10009841",
-          hospitalName: enc.hospitalName || "RS Umum Daerah Sehat Sejahtera",
-          hospitalOrgId: enc.hospitalOrgId || "10000004",
           chiefComplaint: enc.chiefComplaint || "-",
           anamnesis: enc.anamnesis || "-",
           followUpInstruction:
@@ -587,6 +727,7 @@ export const EncounterRepository = {
             enc.dischargeDisposition || "Pulang Berobat Jalan",
           encounterStatus: enc.encounterStatus || "finished",
           queueNumber: enc.queueNumber || null,
+          registrationNumber: enc.registrationNumber || null,
           consentStatus: enc.consentStatus || "opt-in",
           syncStatus: enc.syncStatus || "synced",
           syncedAt: enc.syncedAt || now,
@@ -595,15 +736,13 @@ export const EncounterRepository = {
           lockedBy: enc.lockedBy || null,
           createdAt: now,
           updatedAt: now,
-        })
-        .run();
-    }
+        });
+      }
 
-    // 2. Insert Vitals
-    if (enc.vitals) {
-      db.insert(vitals)
-        .values({
-          id: `vit-${encounterId}-${Date.now().toString(36)}`,
+      // Insert Vitals
+      if (enc.vitals) {
+        await tx.insert(vitals).values({
+          id: generatePrefixedId("vit_"),
           encounterId,
           systolic: enc.vitals.systolic ?? 120,
           diastolic: enc.vitals.diastolic ?? 80,
@@ -615,20 +754,26 @@ export const EncounterRepository = {
           heightCm: enc.vitals.heightCm ?? 165,
           bmi: enc.vitals.bmi || null,
           physicalExamNotes: enc.vitals.physicalExamNotes || null,
-        })
-        .run();
-    }
+          satusehatBpId: enc.vitals.satusehatBpId || null,
+          satusehatHrId: enc.vitals.satusehatHrId || null,
+          satusehatTempId: enc.vitals.satusehatTempId || null,
+          satusehatRrId: enc.vitals.satusehatRrId || null,
+          satusehatSpo2Id: enc.vitals.satusehatSpo2Id || null,
+          satusehatWeightId: enc.vitals.satusehatWeightId || null,
+          satusehatHeightId: enc.vitals.satusehatHeightId || null,
+          satusehatBmiId: enc.vitals.satusehatBmiId || null,
+        });
+      }
 
-    // 3. Insert Diagnoses
-    if (enc.diagnoses && enc.diagnoses.length > 0) {
-      for (let i = 0; i < enc.diagnoses.length; i++) {
-        const d = enc.diagnoses[i];
-        const diagId =
-          d.id && !d.id.startsWith("diag-")
-            ? d.id
-            : `diag-${encounterId}-${i}-${Date.now().toString(36)}`;
-        db.insert(diagnoses)
-          .values({
+      // Insert Diagnoses
+      if (enc.diagnoses && enc.diagnoses.length > 0) {
+        for (let i = 0; i < enc.diagnoses.length; i++) {
+          const d = enc.diagnoses[i];
+          const diagId =
+            d.id && !d.id.startsWith("diag-") && !d.id.startsWith("diag_")
+              ? d.id
+              : generatePrefixedId("diag_");
+          await tx.insert(diagnoses).values({
             id: diagId,
             encounterId,
             type: d.type || "primary",
@@ -637,42 +782,40 @@ export const EncounterRepository = {
             patientFriendlyName: d.patientFriendlyName || d.display || d.code,
             system: d.system || "http://hl7.org/fhir/sid/icd-10",
             clinicalStatus: d.clinicalStatus || "active",
-          })
-          .run();
+            satusehatConditionId: d.satusehatConditionId || null,
+          });
+        }
       }
-    }
 
-    // 4. Insert Procedures
-    if (enc.procedures && enc.procedures.length > 0) {
-      for (let i = 0; i < enc.procedures.length; i++) {
-        const p = enc.procedures[i];
-        const procId =
-          p.id && !p.id.startsWith("proc-")
-            ? p.id
-            : `proc-${encounterId}-${i}-${Date.now().toString(36)}`;
-        db.insert(procedures)
-          .values({
+      // Insert Procedures
+      if (enc.procedures && enc.procedures.length > 0) {
+        for (let i = 0; i < enc.procedures.length; i++) {
+          const p = enc.procedures[i];
+          const procId =
+            p.id && !p.id.startsWith("proc-") && !p.id.startsWith("proc_")
+              ? p.id
+              : generatePrefixedId("proc_");
+          await tx.insert(procedures).values({
             id: procId,
             encounterId,
             code: p.code,
             display: p.display || p.code,
             category: p.category || "Tindakan Medis",
             notes: p.notes || null,
-          })
-          .run();
+            satusehatProcedureId: p.satusehatProcedureId || null,
+          });
+        }
       }
-    }
 
-    // 5. Insert Prescriptions
-    if (enc.prescriptions && enc.prescriptions.length > 0) {
-      for (let i = 0; i < enc.prescriptions.length; i++) {
-        const rx = enc.prescriptions[i];
-        const rxId =
-          rx.id && !rx.id.startsWith("rx-")
-            ? rx.id
-            : `rx-${encounterId}-${i}-${Date.now().toString(36)}`;
-        db.insert(prescriptions)
-          .values({
+      // Insert Prescriptions
+      if (enc.prescriptions && enc.prescriptions.length > 0) {
+        for (let i = 0; i < enc.prescriptions.length; i++) {
+          const rx = enc.prescriptions[i];
+          const rxId =
+            rx.id && !rx.id.startsWith("rx-") && !rx.id.startsWith("rx_")
+              ? rx.id
+              : generatePrefixedId("rx_");
+          await tx.insert(prescriptions).values({
             id: rxId,
             encounterId,
             kfaCode: rx.kfaCode || "93000182",
@@ -689,21 +832,21 @@ export const EncounterRepository = {
             unit: rx.unit || "tablet",
             durationDays: rx.durationDays ?? 3,
             instructions: rx.instructions || "Minum teratur",
-          })
-          .run();
+            satusehatMedicationRequestId: rx.satusehatMedicationRequestId || null,
+            satusehatMedicationId: rx.satusehatMedicationId || null,
+          });
+        }
       }
-    }
 
-    // 6. Insert Diagnostic Orders
-    if (enc.diagnosticOrders && enc.diagnosticOrders.length > 0) {
-      for (let i = 0; i < enc.diagnosticOrders.length; i++) {
-        const o = enc.diagnosticOrders[i];
-        const ordId =
-          o.id && !o.id.startsWith("ord-")
-            ? o.id
-            : `ord-${encounterId}-${i}-${Date.now().toString(36)}`;
-        db.insert(diagnosticOrders)
-          .values({
+      // Insert Diagnostic Orders
+      if (enc.diagnosticOrders && enc.diagnosticOrders.length > 0) {
+        for (let i = 0; i < enc.diagnosticOrders.length; i++) {
+          const o = enc.diagnosticOrders[i];
+          const ordId =
+            o.id && !o.id.startsWith("ord-") && !o.id.startsWith("ord_")
+              ? o.id
+              : generatePrefixedId("ord_");
+          await tx.insert(diagnosticOrders).values({
             id: ordId,
             encounterId,
             testCode: o.testCode,
@@ -714,21 +857,20 @@ export const EncounterRepository = {
             orderDate: o.orderDate || now,
             doctorName: o.doctorName || enc.doctorName || "dr. Dokter Pemeriksa",
             clinicalNotes: o.clinicalNotes || null,
-          })
-          .run();
+            satusehatServiceRequestId: o.satusehatServiceRequestId || null,
+          });
+        }
       }
-    }
 
-    // 7. Insert Lab Results
-    if (enc.labResults && enc.labResults.length > 0) {
-      for (let i = 0; i < enc.labResults.length; i++) {
-        const lr = enc.labResults[i];
-        const labId =
-          lr.id && !lr.id.startsWith("lab-")
-            ? lr.id
-            : `lab-${encounterId}-${i}-${Date.now().toString(36)}`;
-        db.insert(labResults)
-          .values({
+      // Insert Lab Results
+      if (enc.labResults && enc.labResults.length > 0) {
+        for (let i = 0; i < enc.labResults.length; i++) {
+          const lr = enc.labResults[i];
+          const labId =
+            lr.id && !lr.id.startsWith("lab-") && !lr.id.startsWith("lab_")
+              ? lr.id
+              : generatePrefixedId("lab_");
+          await tx.insert(labResults).values({
             id: labId,
             encounterId,
             testCode: lr.testCode,
@@ -741,21 +883,21 @@ export const EncounterRepository = {
             resultDate: lr.resultDate || now,
             performer: lr.performer || "Laboratorium RS",
             notes: lr.notes || null,
-          })
-          .run();
+            satusehatObservationId: lr.satusehatObservationId || null,
+            satusehatDiagnosticReportId: lr.satusehatDiagnosticReportId || null,
+          });
+        }
       }
-    }
 
-    // 8. Insert Radiology Results
-    if (enc.radiologyResults && enc.radiologyResults.length > 0) {
-      for (let i = 0; i < enc.radiologyResults.length; i++) {
-        const rad = enc.radiologyResults[i];
-        const radId =
-          rad.id && !rad.id.startsWith("rad-")
-            ? rad.id
-            : `rad-${encounterId}-${i}-${Date.now().toString(36)}`;
-        db.insert(radiologyResults)
-          .values({
+      // Insert Radiology Results
+      if (enc.radiologyResults && enc.radiologyResults.length > 0) {
+        for (let i = 0; i < enc.radiologyResults.length; i++) {
+          const rad = enc.radiologyResults[i];
+          const radId =
+            rad.id && !rad.id.startsWith("rad-") && !rad.id.startsWith("rad_")
+              ? rad.id
+              : generatePrefixedId("rad_");
+          await tx.insert(radiologyResults).values({
             id: radId,
             encounterId,
             examCode: rad.examCode,
@@ -765,18 +907,18 @@ export const EncounterRepository = {
             conclusion: rad.conclusion || "-",
             radiologistName: rad.radiologistName || "dr. Radiologi, Sp.Rad",
             resultDate: rad.resultDate || now,
-          })
-          .run();
+            satusehatObservationId: rad.satusehatObservationId || null,
+            satusehatDiagnosticReportId: rad.satusehatDiagnosticReportId || null,
+          });
+        }
       }
-    }
 
-    // 9. Insert Sync Logs
-    if (enc.syncBreakdown && enc.syncBreakdown.length > 0) {
-      for (let i = 0; i < enc.syncBreakdown.length; i++) {
-        const sb = enc.syncBreakdown[i];
-        db.insert(satusehatSyncLogs)
-          .values({
-            id: `sync-${encounterId}-${i}-${Date.now().toString(36)}`,
+      // Insert Sync Logs
+      if (enc.syncBreakdown && enc.syncBreakdown.length > 0) {
+        for (let i = 0; i < enc.syncBreakdown.length; i++) {
+          const sb = enc.syncBreakdown[i];
+          await tx.insert(satusehatSyncLogs).values({
+            id: generatePrefixedId("sync_"),
             encounterId,
             resourceType: sb.resourceType,
             label: sb.label,
@@ -789,69 +931,66 @@ export const EncounterRepository = {
             retryCount: sb.retryCount || 0,
             lastAttempt: sb.lastAttempt || now,
             details: sb.details ? JSON.stringify(sb.details) : null,
-          })
-          .run();
+          });
+        }
       }
-    }
 
-    // 10. Insert Medical Addendums (if any)
-    if (enc.addendums && enc.addendums.length > 0) {
-      for (let i = 0; i < enc.addendums.length; i++) {
-        const ad = enc.addendums[i];
-        const adId =
-          ad.id && !ad.id.startsWith("add-")
-            ? ad.id
-            : `add-${encounterId}-${i}-${Date.now().toString(36)}`;
-        db.insert(medicalAddendums)
-          .values({
+      // Insert Medical Addendums (if any)
+      if (enc.addendums && enc.addendums.length > 0) {
+        for (let i = 0; i < enc.addendums.length; i++) {
+          const ad = enc.addendums[i];
+          const adId =
+            ad.id && !ad.id.startsWith("add-") && !ad.id.startsWith("add_")
+              ? ad.id
+              : generatePrefixedId("add_");
+          await tx.insert(medicalAddendums).values({
             id: adId,
             encounterId,
             timestamp: ad.timestamp || now,
             authorName: ad.authorName,
             authorRole: ad.authorRole,
             noteText: ad.noteText,
-          })
-          .run();
+          });
+        }
       }
-    }
 
-    // 11. Update Patient Last Visit Metadata
-    const primaryDiag = enc.diagnoses?.find((d) => d.type === "primary");
-    const visitDatePart = (enc.visitDate || now).split("T")[0];
-    db.update(patients)
-      .set({
-        lastVisitDate: visitDatePart,
-        lastVisitDepartment: enc.clinicDepartment || "Poli Umum",
-        lastVisitDoctor: enc.doctorName || "dr. Dokter Pemeriksa",
-        lastVisitDiagnosis: primaryDiag
-          ? `${primaryDiag.patientFriendlyName} (${primaryDiag.code})`
-          : undefined,
-        totalVisitsCount: sql`total_visits_count + 1`,
-        updatedAt: now,
-      })
-      .where(eq(patients.id, patientId))
-      .run();
+      // Update Patient Last Visit Metadata
+      const primaryDiag = enc.diagnoses?.find((d) => d.type === "primary");
+      const visitDatePart = (enc.visitDate || now).split("T")[0];
+      await tx
+        .update(patients)
+        .set({
+          lastVisitDate: visitDatePart,
+          lastVisitDepartment: enc.clinicDepartment || "Poli Umum",
+          lastVisitDoctor: enc.doctorName || "dr. Dokter Pemeriksa",
+          lastVisitDiagnosis: primaryDiag
+            ? `${primaryDiag.patientFriendlyName} (${primaryDiag.code})`
+            : undefined,
+          totalVisitsCount: sql`total_visits_count + 1`,
+          updatedAt: now,
+        })
+        .where(eq(patients.id, patientId));
+    });
 
     InvalidationService.invalidateEncounter(encounterId, patientId);
-    return this.getById(encounterId)!;
+    const result = await this.getById(encounterId);
+    return result!;
   },
 
-  addAddendum(
+  async addAddendum(
     encounterId: string,
     addendum: { authorName: string; authorRole: string; noteText: string }
-  ): MedicalAddendum | null {
+  ): Promise<MedicalAddendum | null> {
     const now = new Date().toISOString();
-    const id = `add-${encounterId}-${Date.now().toString(36)}`;
-    db.insert(medicalAddendums)
-      .values({
-        id,
-        encounterId,
-        timestamp: now,
-        authorName: addendum.authorName,
-        authorRole: addendum.authorRole,
-        noteText: addendum.noteText,
-      })
-      .run();
+    const id = generatePrefixedId("add_");
+    await db.insert(medicalAddendums).values({
+      id,
+      encounterId,
+      timestamp: now,
+      authorName: addendum.authorName,
+      authorRole: addendum.authorRole,
+      noteText: addendum.noteText,
+    });
 
     InvalidationService.invalidateEncounter(encounterId);
 
@@ -864,14 +1003,25 @@ export const EncounterRepository = {
     };
   },
 
-  update(id: string, partial: Partial<OutpatientEncounter>): OutpatientEncounter | null {
-    const existing = this.getById(id);
-    if (!existing) return null;
+  async update(id: string, partial: Partial<OutpatientEncounter>): Promise<OutpatientEncounter | null> {
+    const existing = await this.getById(id);
+    if (!existing) {
+      if (partial.patientId) {
+        return await this.create(
+          { ...partial, id } as OutpatientEncounter,
+          partial.patientId
+        );
+      }
+      return null;
+    }
 
     const valuesToUpdate: Partial<typeof encounters.$inferInsert> = {
       updatedAt: new Date().toISOString(),
     };
 
+    if (partial.facilityId !== undefined) valuesToUpdate.facilityId = partial.facilityId;
+    if (partial.departmentId !== undefined) valuesToUpdate.departmentId = partial.departmentId;
+    if (partial.doctorId !== undefined) valuesToUpdate.doctorId = partial.doctorId;
     if (partial.satusehatEncounterId !== undefined)
       valuesToUpdate.satusehatEncounterId = partial.satusehatEncounterId;
     if (partial.syncStatus !== undefined) valuesToUpdate.syncStatus = partial.syncStatus;
@@ -882,52 +1032,78 @@ export const EncounterRepository = {
     if (partial.lockedAt !== undefined) valuesToUpdate.lockedAt = partial.lockedAt;
     if (partial.lockedBy !== undefined) valuesToUpdate.lockedBy = partial.lockedBy;
 
-    db.update(encounters).set(valuesToUpdate).where(eq(encounters.id, id)).run();
+    await db.update(encounters).set(valuesToUpdate).where(eq(encounters.id, id));
 
     // Handle diagnostic orders if provided
     if (partial.diagnosticOrders && partial.diagnosticOrders.length > 0) {
-      const existingOrders = db
+      const existingOrders = await db
         .select()
         .from(diagnosticOrders)
-        .where(eq(diagnosticOrders.encounterId, id))
-        .all();
+        .where(eq(diagnosticOrders.encounterId, id));
       const existingIds = new Set(existingOrders.map((o) => o.id));
 
       for (const ord of partial.diagnosticOrders) {
         if (!existingIds.has(ord.id)) {
-          db.insert(diagnosticOrders)
-            .values({
-              id: ord.id,
-              encounterId: id,
+          await db.insert(diagnosticOrders).values({
+            id: ord.id,
+            encounterId: id,
+            testCode: ord.testCode,
+            testName: ord.testName,
+            category: ord.category,
+            status: ord.status,
+            priority: ord.priority,
+            orderDate: ord.orderDate,
+            doctorName: ord.doctorName,
+            clinicalNotes: ord.clinicalNotes || null,
+            satusehatServiceRequestId: ord.satusehatServiceRequestId || null,
+          });
+        } else {
+          await db
+            .update(diagnosticOrders)
+            .set({
               testCode: ord.testCode,
               testName: ord.testName,
               category: ord.category,
               status: ord.status,
               priority: ord.priority,
-              orderDate: ord.orderDate,
-              doctorName: ord.doctorName,
               clinicalNotes: ord.clinicalNotes || null,
+              satusehatServiceRequestId: ord.satusehatServiceRequestId || undefined,
             })
-            .run();
+            .where(eq(diagnosticOrders.id, ord.id));
         }
       }
     }
 
     // Handle lab results if provided
     if (partial.labResults && partial.labResults.length > 0) {
-      const existingLab = db
+      const existingLab = await db
         .select()
         .from(labResults)
-        .where(eq(labResults.encounterId, id))
-        .all();
+        .where(eq(labResults.encounterId, id));
       const existingIds = new Set(existingLab.map((l) => l.id));
 
       for (const lr of partial.labResults) {
         if (!existingIds.has(lr.id)) {
-          db.insert(labResults)
-            .values({
-              id: lr.id,
-              encounterId: id,
+          await db.insert(labResults).values({
+            id: lr.id,
+            encounterId: id,
+            testCode: lr.testCode,
+            testName: lr.testName,
+            category: lr.category,
+            value: String(lr.value),
+            unit: lr.unit,
+            referenceRange: lr.referenceRange,
+            flag: lr.flag,
+            resultDate: lr.resultDate,
+            performer: lr.performer,
+            notes: lr.notes || null,
+            satusehatObservationId: lr.satusehatObservationId || null,
+            satusehatDiagnosticReportId: lr.satusehatDiagnosticReportId || null,
+          });
+        } else {
+          await db
+            .update(labResults)
+            .set({
               testCode: lr.testCode,
               testName: lr.testName,
               category: lr.category,
@@ -938,27 +1114,41 @@ export const EncounterRepository = {
               resultDate: lr.resultDate,
               performer: lr.performer,
               notes: lr.notes || null,
+              satusehatObservationId: lr.satusehatObservationId || undefined,
+              satusehatDiagnosticReportId: lr.satusehatDiagnosticReportId || undefined,
             })
-            .run();
+            .where(eq(labResults.id, lr.id));
         }
       }
     }
 
     // Handle radiology results if provided
     if (partial.radiologyResults && partial.radiologyResults.length > 0) {
-      const existingRad = db
+      const existingRad = await db
         .select()
         .from(radiologyResults)
-        .where(eq(radiologyResults.encounterId, id))
-        .all();
+        .where(eq(radiologyResults.encounterId, id));
       const existingIds = new Set(existingRad.map((r) => r.id));
 
       for (const rad of partial.radiologyResults) {
         if (!existingIds.has(rad.id)) {
-          db.insert(radiologyResults)
-            .values({
-              id: rad.id,
-              encounterId: id,
+          await db.insert(radiologyResults).values({
+            id: rad.id,
+            encounterId: id,
+            examCode: rad.examCode,
+            examName: rad.examName,
+            modality: rad.modality,
+            findings: rad.findings,
+            conclusion: rad.conclusion,
+            radiologistName: rad.radiologistName,
+            resultDate: rad.resultDate,
+            satusehatObservationId: rad.satusehatObservationId || null,
+            satusehatDiagnosticReportId: rad.satusehatDiagnosticReportId || null,
+          });
+        } else {
+          await db
+            .update(radiologyResults)
+            .set({
               examCode: rad.examCode,
               examName: rad.examName,
               modality: rad.modality,
@@ -966,19 +1156,43 @@ export const EncounterRepository = {
               conclusion: rad.conclusion,
               radiologistName: rad.radiologistName,
               resultDate: rad.resultDate,
+              satusehatObservationId: rad.satusehatObservationId || undefined,
+              satusehatDiagnosticReportId: rad.satusehatDiagnosticReportId || undefined,
             })
-            .run();
+            .where(eq(radiologyResults.id, rad.id));
+        }
+      }
+    }
+
+    // Handle addendums if provided (append-only immutability Permenkes 24/2022)
+    if (partial.addendums && partial.addendums.length > 0) {
+      const existingAddendums = await db
+        .select()
+        .from(medicalAddendums)
+        .where(eq(medicalAddendums.encounterId, id));
+      const existingIds = new Set(existingAddendums.map((a) => a.id));
+
+      for (const add of partial.addendums) {
+        if (!existingIds.has(add.id)) {
+          await db.insert(medicalAddendums).values({
+            id: add.id || generatePrefixedId("add_"),
+            encounterId: id,
+            timestamp: add.timestamp || new Date().toISOString(),
+            authorName: add.authorName,
+            authorRole: add.authorRole,
+            noteText: add.noteText,
+          });
         }
       }
     }
 
     InvalidationService.invalidateEncounter(id, existing.patientId);
-    return this.getById(id);
+    return await this.getById(id);
   },
 
-  lock(id: string, lockedBy: string): OutpatientEncounter | null {
+  async lock(id: string, lockedBy: string): Promise<OutpatientEncounter | null> {
     const now = new Date().toISOString();
-    return this.update(id, {
+    return await this.update(id, {
       isLocked: true,
       lockedAt: now,
       lockedBy,

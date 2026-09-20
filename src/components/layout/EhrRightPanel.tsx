@@ -2,50 +2,38 @@
 
 import React, { useState } from "react";
 import {
-  Heart,
-  Activity,
-  Thermometer,
-  Percent,
   ShieldCheck,
-  CheckCircle2,
   Printer,
-  Code2,
   RefreshCw,
-  Copy,
-  ExternalLink,
-  Sparkles,
   AlertTriangle,
-  Send,
   Lock,
-  AlertCircle,
   Layers,
   ChevronRight,
   Pill,
+  User,
+  Building2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import {
   AuthSession,
   OutpatientEncounter,
   PatientProfile,
   VitalSigns,
 } from "@/lib/satusehat/types";
-import { toast } from "sonner";
 import { SatusehatFhirDetailModal } from "@/components/compliance/SatusehatFhirDetailModal";
 
 interface EhrRightPanelProps {
   vitals?: VitalSigns;
-  encounter: OutpatientEncounter;
+  encounter?: OutpatientEncounter | null;
   session: AuthSession | null;
-  patient?: PatientProfile;
+  patient?: PatientProfile | null;
   onOpenPrintModal: () => void;
   onOpenPrescriptionPrint?: () => void;
   onOpenLockModal?: () => void;
-  onOpenCodeSnippet?: () => void;
   onRefreshToken?: () => void;
   isRefreshing?: boolean;
   onSelectiveRetry?: (targetTypes?: string[]) => Promise<void> | void;
-  onSimulatePartialDrop?: () => void;
   isRetrying?: boolean;
 }
 
@@ -57,11 +45,9 @@ export function EhrRightPanel({
   onOpenPrintModal,
   onOpenPrescriptionPrint,
   onOpenLockModal,
-  onOpenCodeSnippet,
   onRefreshToken,
   isRefreshing = false,
   onSelectiveRetry,
-  onSimulatePartialDrop,
   isRetrying = false,
 }: EhrRightPanelProps) {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -71,16 +57,129 @@ export function EhrRightPanel({
       (vitals.systolic >= 130 || vitals.diastolic >= 85)
   );
 
-  const isSynced = encounter.syncStatus === "synced";
-  const isPartialFailed = encounter.syncStatus === "partial_failed";
-  const isOptOut = encounter.consentStatus === "opt-out";
+  const hasSelectedPatient = Boolean(patient && patient.id);
+  const hasSelectedEncounter = Boolean(encounter && encounter.id);
 
-  const totalBreakdown = encounter.syncBreakdown || [];
-  const syncedCount = totalBreakdown.filter((i) => i.status === "synced").length || (isSynced ? 9 : isOptOut ? 2 : 7);
-  const failedCount = totalBreakdown.filter((i) => i.status === "failed").length || (isPartialFailed ? 2 : 0);
-  const totalCount = totalBreakdown.length > 0 ? totalBreakdown.length : 9;
+  const handlePrintResumeMedis = () => {
+    if (!hasSelectedPatient) {
+      toast.warning("Belum Ada Pasien Terpilih", {
+        description:
+          "Silakan pilih pasien dari daftar antrean terlebih dahulu untuk melihat dan mencetak lembar resume medis rawat jalan.",
+        duration: 4500,
+      });
+      return;
+    }
+    if (!hasSelectedEncounter) {
+      toast.warning("Belum Ada Rekam Medis Kunjungan", {
+        description:
+          "Pasien ini belum memiliki data pemeriksaan kunjungan aktif untuk dicetak sebagai resume medis.",
+        duration: 4500,
+      });
+      return;
+    }
+    onOpenPrintModal();
+  };
 
-  const allergies = patient?.allergies && patient.allergies.length > 0 ? patient.allergies : [];
+  const handlePrintPrescription = () => {
+    if (!hasSelectedPatient) {
+      toast.warning("Belum Ada Pasien Terpilih", {
+        description:
+          "Silakan pilih pasien dari daftar antrean terlebih dahulu untuk mencetak lembar e-resep farmasi.",
+        duration: 4500,
+      });
+      return;
+    }
+    if (
+      !hasSelectedEncounter ||
+      !encounter?.prescriptions ||
+      encounter.prescriptions.length === 0
+    ) {
+      toast.warning("Resep Obat Masih Kosong", {
+        description:
+          "Belum ada item obat yang diresepkan dokter pada rekam medis kunjungan pasien ini.",
+        duration: 4500,
+      });
+      return;
+    }
+    if (onOpenPrescriptionPrint) {
+      onOpenPrescriptionPrint();
+    }
+  };
+
+  const handleOpenLockModal = () => {
+    if (!hasSelectedPatient) {
+      toast.warning("Belum Ada Pasien Terpilih", {
+        description:
+          "Silakan pilih pasien dari antrean terlebih dahulu untuk mengunci atau mencatat addendum rekam medis.",
+        duration: 4500,
+      });
+      return;
+    }
+    if (!hasSelectedEncounter) {
+      toast.warning("Belum Ada Rekam Medis Kunjungan", {
+        description:
+          "Pilih kunjungan pasien terlebih dahulu untuk mengunci atau mencatat addendum rekam medis.",
+        duration: 4500,
+      });
+      return;
+    }
+    if (onOpenLockModal) {
+      onOpenLockModal();
+    }
+  };
+
+  const isSynced = encounter?.syncStatus === "synced";
+  const isPartialFailed = encounter?.syncStatus === "partial_failed";
+  const isOptOut = encounter?.consentStatus === "opt-out";
+
+  const totalBreakdown = encounter?.syncBreakdown || [];
+  const totalResources = totalBreakdown.length > 0 ? totalBreakdown.length : 18;
+  const syncedResources = totalBreakdown.filter((i) => i.status === "synced").length || (isSynced ? 18 : 0);
+  const failedResources = totalBreakdown.filter((i) => i.status === "failed").length || (isPartialFailed ? 2 : 0);
+
+  // 9 Canonical Categories calculation
+  const canonicalTypes = [
+    "Consent",
+    "Encounter",
+    "Observation",
+    "Condition",
+    "Procedure",
+    "AllergyIntolerance",
+    "MedicationRequest",
+    "CarePlan",
+    "Composition",
+  ];
+  const failedCategoriesCount =
+    totalBreakdown.length > 0
+      ? canonicalTypes.filter((t) => {
+          const matched = totalBreakdown.filter((i) => {
+            if (t === "MedicationRequest") {
+              return (
+                i.resourceType === "MedicationRequest" ||
+                i.resourceType === "Medication" ||
+                i.resourceType === "MedicationDispense"
+              );
+            }
+            if (t === "Observation") {
+              return (
+                i.resourceType === "Observation" ||
+                i.resourceType === "DiagnosticReport" ||
+                i.resourceType === "ServiceRequest"
+              );
+            }
+            return i.resourceType === t;
+          });
+          return matched.some((i) => i.status === "failed");
+        }).length
+      : isPartialFailed
+      ? 1
+      : 0;
+
+  const syncedCategoriesCount = isSynced
+    ? 9
+    : isPartialFailed
+    ? Math.max(0, 9 - failedCategoriesCount)
+    : 0;
 
   const handleQuickRetry = async () => {
     if (!onSelectiveRetry) return;
@@ -98,8 +197,14 @@ export function EhrRightPanel({
           <h4 className="font-bold text-xs uppercase tracking-wider text-slate-400">
             Aksi Cepat Pelayanan
           </h4>
-          <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-            Klinik DPJP
+          <span
+            className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${
+              hasSelectedPatient
+                ? "text-teal-700 bg-teal-50 border-teal-200"
+                : "text-slate-500 bg-slate-100 border-slate-200"
+            }`}
+          >
+            {hasSelectedPatient ? "Klinik DPJP" : "Pilih Pasien"}
           </span>
         </div>
 
@@ -107,8 +212,15 @@ export function EhrRightPanel({
           <Button
             type="button"
             variant="medical"
-            onClick={onOpenPrintModal}
-            className="w-full justify-center text-xs font-bold gap-2 h-9 shadow-sm btn-press transition-all duration-200 hover:shadow-md cursor-pointer"
+            onClick={handlePrintResumeMedis}
+            className={`w-full justify-center text-xs font-bold gap-2 h-9 shadow-sm btn-press transition-all duration-200 hover:shadow-md cursor-pointer ${
+              !hasSelectedPatient ? "opacity-90 hover:opacity-100" : ""
+            }`}
+            title={
+              !hasSelectedPatient
+                ? "Pilih pasien terlebih dahulu dari antrean untuk mencetak resume medis"
+                : "Cetak Lembar Resume Medis"
+            }
           >
             <Printer className="h-4 w-4 transition-transform duration-200 group-hover:scale-105" />
             <span>Cetak Lembar Resume Medis</span>
@@ -119,8 +231,15 @@ export function EhrRightPanel({
               type="button"
               variant="outline"
               size="sm"
-              onClick={onOpenPrescriptionPrint}
-              className="text-[11px] font-semibold h-8 bg-white border-slate-200 hover:bg-teal-50 hover:text-teal-700 gap-1.5 btn-press transition-all duration-150 cursor-pointer"
+              onClick={handlePrintPrescription}
+              className={`text-[11px] font-semibold h-8 bg-white border-slate-200 hover:bg-teal-50 hover:text-teal-700 gap-1.5 btn-press transition-all duration-150 cursor-pointer ${
+                !hasSelectedPatient ? "opacity-90" : ""
+              }`}
+              title={
+                !hasSelectedPatient
+                  ? "Pilih pasien terlebih dahulu untuk mencetak e-resep"
+                  : "Cetak E-Resep"
+              }
             >
               <Pill className="h-3.5 w-3.5 text-teal-600" />
               <span>Cetak E-Resep</span>
@@ -130,8 +249,15 @@ export function EhrRightPanel({
               type="button"
               variant="outline"
               size="sm"
-              onClick={onOpenLockModal}
-              className="text-[11px] font-semibold h-8 bg-white border-slate-200 hover:bg-slate-100 gap-1.5 btn-press transition-all duration-150 cursor-pointer"
+              onClick={handleOpenLockModal}
+              className={`text-[11px] font-semibold h-8 bg-white border-slate-200 hover:bg-slate-100 gap-1.5 btn-press transition-all duration-150 cursor-pointer ${
+                !hasSelectedPatient ? "opacity-90" : ""
+              }`}
+              title={
+                !hasSelectedPatient
+                  ? "Pilih pasien terlebih dahulu untuk mengunci rekam medis"
+                  : "Kunci / Addendum"
+              }
             >
               <Lock className="h-3.5 w-3.5 text-slate-700" />
               <span>Kunci / Addendum</span>
@@ -140,213 +266,25 @@ export function EhrRightPanel({
         </div>
       </div>
 
-      {/* 2. Quick Vitals Summary */}
-      <div className="ehr-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
-            <Activity className="h-3.5 w-3.5 text-teal-600 animate-heartbeat" />
-            <span>Ringkasan TTV Pasien</span>
-          </div>
-          <span className="text-[10px] text-slate-400 font-mono">Hari Ini</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          {/* BP */}
-          <div
-            className={`p-2.5 rounded-lg border card-interactive ${
-              (vitals?.systolic ?? 0) >= 140 || (vitals?.diastolic ?? 0) >= 90
-                ? "bg-rose-50/80 border-rose-200 text-rose-900"
-                : isBpWarning
-                ? "bg-amber-50/80 border-amber-200 text-amber-900"
-                : "bg-slate-50 border-slate-200"
-            }`}
-          >
-            <span className="text-[10px] text-slate-500 font-semibold block">
-              Tensi (BP)
-            </span>
-            <span className="text-base font-extrabold font-mono text-slate-900">
-              {vitals?.systolic && vitals?.diastolic
-                ? `${vitals.systolic}/${vitals.diastolic}`
-                : "-"}
-            </span>
-            <span
-              className={`text-[10px] font-bold block mt-0.5 ${
-                (vitals?.systolic ?? 0) >= 140 || (vitals?.diastolic ?? 0) >= 90
-                  ? "text-rose-800 font-extrabold"
-                  : isBpWarning
-                  ? "text-amber-800 font-extrabold"
-                  : vitals?.systolic
-                  ? "text-emerald-700"
-                  : "text-slate-400"
-              }`}
-            >
-              {(vitals?.systolic ?? 0) >= 140 || (vitals?.diastolic ?? 0) >= 90
-                ? "Hipertensi"
-                : isBpWarning
-                ? "Pre-Hipertensi"
-                : (vitals?.systolic ?? 0) > 0
-                ? "Normal / Optimal"
-                : "Belum Diukur"}
-            </span>
-          </div>
-
-          {/* Heart Rate */}
-          <div
-            className={`p-2.5 rounded-lg border card-interactive ${
-              (vitals?.heartRate ?? 0) > 100
-                ? "bg-rose-50/80 border-rose-200"
-                : (vitals?.heartRate ?? 0) > 0 && (vitals?.heartRate ?? 0) < 60
-                ? "bg-amber-50/80 border-amber-200"
-                : "bg-slate-50 border-slate-200"
-            }`}
-          >
-            <span className="text-[10px] text-slate-500 font-semibold block flex items-center justify-between">
-              <span>Nadi (HR)</span>
-              <Heart className="h-2.5 w-2.5 text-rose-500 animate-heartbeat" />
-            </span>
-            <span className="text-base font-extrabold font-mono text-slate-900">
-              {vitals?.heartRate || "-"}
-            </span>
-            <span
-              className={`text-[10px] font-bold block mt-0.5 ${
-                (vitals?.heartRate ?? 0) > 100
-                  ? "text-rose-700 font-extrabold"
-                  : (vitals?.heartRate ?? 0) > 0 && (vitals?.heartRate ?? 0) < 60
-                  ? "text-amber-800"
-                  : vitals?.heartRate
-                  ? "text-emerald-700"
-                  : "text-slate-400"
-              }`}
-            >
-              {(vitals?.heartRate ?? 0) > 100
-                ? "Takikardia"
-                : (vitals?.heartRate ?? 0) > 0 && (vitals?.heartRate ?? 0) < 60
-                ? "Bradikardia"
-                : (vitals?.heartRate ?? 0) > 0
-                ? "bpm (Reguler)"
-                : "Belum Diukur"}
-            </span>
-          </div>
-
-          {/* Temp */}
-          <div
-            className={`p-2.5 rounded-lg border card-interactive ${
-              (vitals?.temperature ?? 0) > 37.5
-                ? "bg-rose-50/80 border-rose-200"
-                : (vitals?.temperature ?? 0) > 0 && (vitals?.temperature ?? 0) < 36.0
-                ? "bg-sky-50/80 border-sky-200"
-                : "bg-slate-50 border-slate-200"
-            }`}
-          >
-            <span className="text-[10px] text-slate-500 font-semibold block">
-              Suhu Tubuh
-            </span>
-            <span className="text-base font-extrabold font-mono text-slate-900">
-              {vitals?.temperature ? `${vitals.temperature}°C` : "-"}
-            </span>
-            <span
-              className={`text-[10px] font-bold block mt-0.5 ${
-                (vitals?.temperature ?? 0) > 37.5
-                  ? "text-rose-700 font-extrabold"
-                  : (vitals?.temperature ?? 0) > 0 && (vitals?.temperature ?? 0) < 36.0
-                  ? "text-sky-800"
-                  : vitals?.temperature
-                  ? "text-emerald-700"
-                  : "text-slate-400"
-              }`}
-            >
-              {(vitals?.temperature ?? 0) > 37.5
-                ? "Febris (Demam)"
-                : (vitals?.temperature ?? 0) > 0 && (vitals?.temperature ?? 0) < 36.0
-                ? "Hipotermia"
-                : (vitals?.temperature ?? 0) > 0
-                ? "Afebris (Normal)"
-                : "Belum Diukur"}
-            </span>
-          </div>
-
-          {/* SpO2 */}
-          <div
-            className={`p-2.5 rounded-lg border card-interactive ${
-              (vitals?.oxygenSaturation ?? 0) > 0 && (vitals?.oxygenSaturation ?? 0) < 95
-                ? "bg-rose-50/80 border-rose-200"
-                : "bg-slate-50 border-slate-200"
-            }`}
-          >
-            <span className="text-[10px] text-slate-500 font-semibold block">
-              SpO2 Oksigen
-            </span>
-            <span className="text-base font-extrabold font-mono text-slate-900">
-              {vitals?.oxygenSaturation ? `${vitals.oxygenSaturation}%` : "-"}
-            </span>
-            <span
-              className={`text-[10px] font-bold block mt-0.5 ${
-                (vitals?.oxygenSaturation ?? 0) > 0 && (vitals?.oxygenSaturation ?? 0) < 95
-                  ? "text-rose-700 font-extrabold"
-                  : vitals?.oxygenSaturation
-                  ? "text-emerald-700"
-                  : "text-slate-400"
-              }`}
-            >
-              {(vitals?.oxygenSaturation ?? 0) > 0 && (vitals?.oxygenSaturation ?? 0) < 95
-                ? "Hipoksia Ringan"
-                : (vitals?.oxygenSaturation ?? 0) >= 95
-                ? "Saturasi Baik"
-                : "Belum Diukur"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Patient Safety & Clinical Alerts (High Clinical Value for Doctors) */}
-      <div className="ehr-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
-            <AlertCircle className="h-3.5 w-3.5 text-rose-500" />
-            <span>Kewaspadaan & Alergi</span>
-          </div>
-          <span className="text-[9px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
-            Safety First
-          </span>
-        </div>
-
-        <div className="space-y-2 text-xs">
-          {allergies.length > 0 ? (
-            <div className="p-2.5 rounded-lg bg-rose-50/70 border border-rose-200 space-y-1">
-              <span className="text-[10px] font-bold uppercase text-rose-800 tracking-wider block">
-                Alergi Terdata:
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {allergies.map((allergy, i) => (
-                  <Badge
-                    key={i}
-                    variant="outline"
-                    className="bg-white text-rose-700 border-rose-300 font-bold text-[11px] shadow-2xs transition-transform duration-150 hover:scale-105"
-                  >
-                    ⚠️ {allergy}
-                  </Badge>
-                ))}
-              </div>
+      {/* 2. Clinical Alert (Only displayed when abnormal vitals or alerts exist) */}
+      {isBpWarning && (
+        <div className="ehr-card p-3.5 space-y-2 border-amber-200 bg-amber-50/50 animate-fade-in-up">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-bold text-xs text-amber-900">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+              <span>Peringatan Klinis TTV</span>
             </div>
-          ) : (
-            <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 text-[11px] flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-              <span>Tidak ada riwayat alergi obat dilaporkan.</span>
-            </div>
-          )}
-
-          {isBpWarning && (
-            <div className="p-2.5 rounded-lg bg-amber-50/80 border border-amber-200 text-amber-900 text-[11px] flex items-start gap-2 animate-fade-in-up">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
-              <span>
-                <strong>Perhatian:</strong> Tekanan darah sistolik di atas batas optimal (130 mmHg). Disarankan konfirmasi ulang sebelum tindakan.
-              </span>
-            </div>
-          )}
+            <span className="text-[9px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-300">
+              Perhatian
+            </span>
+          </div>
+          <p className="text-[11px] text-amber-900 leading-relaxed">
+            Tekanan darah sistolik di atas batas optimal ({vitals?.systolic}/{vitals?.diastolic} mmHg). Disarankan evaluasi sebelum tindakan.
+          </p>
         </div>
-      </div>
+      )}
 
-      {/* 4. SATUSEHAT Cloud Integration Summary (With Selective Retry Trigger) */}
+      {/* 4. SATUSEHAT Cloud Integration Summary (State-Aware & Clear Patient Context) */}
       <div className="ehr-card p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
@@ -359,7 +297,9 @@ export function EhrRightPanel({
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                 : isPartialFailed
                 ? "bg-rose-50 text-rose-700 border-rose-300"
-                : "bg-amber-50 text-amber-700 border-amber-200"
+                : isOptOut
+                ? "bg-slate-100 text-slate-700 border-slate-200"
+                : "bg-blue-50 text-blue-700 border-blue-200"
             }`}
           >
             <span className="relative flex h-2 w-2">
@@ -375,26 +315,60 @@ export function EhrRightPanel({
                     ? "bg-emerald-500"
                     : isPartialFailed
                     ? "bg-rose-500"
-                    : "bg-amber-500"
+                    : isOptOut
+                    ? "bg-slate-400"
+                    : "bg-blue-500"
                 }`}
               />
             </span>
             <span>
               {isSynced
-                ? "Terhubung"
+                ? "Tersinkron 100%"
                 : isPartialFailed
-                ? "Gangguan Parsial"
+                ? "Perlu Kirim Ulang"
                 : isOptOut
-                ? "Opt-Out (Lokal)"
-                : "Draf Lokal"}
+                ? "Internal (Opt-Out)"
+                : "Konsultasi Berlangsung"}
             </span>
           </span>
         </div>
 
+        {/* Konteks Identitas Pasien & Poliklinik Aktif */}
+        {patient ? (
+          <div className="p-2.5 rounded-lg bg-teal-50/70 border border-teal-200/80 space-y-1">
+            <div className="flex items-center justify-between gap-1.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <User className="h-3.5 w-3.5 text-teal-700 shrink-0" />
+                <span className="text-xs font-black text-slate-900 truncate">
+                  {patient.name}
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-200 shrink-0">
+                RM: {patient.mrn.replace(/^RM-?/i, "")}
+              </span>
+            </div>
+            <div className="text-[11px] text-teal-800 font-medium truncate flex items-center gap-1">
+              <Building2 className="h-3 w-3 text-teal-600 shrink-0" />
+              <span className="truncate">{encounter?.clinicDepartment || "Poli Rawat Jalan"}</span>
+              {encounter?.doctorName && (
+                <>
+                  <span className="text-teal-400">•</span>
+                  <span className="text-slate-600 truncate">{encounter.doctorName}</span>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 italic">
+            Pilih salah satu pasien di antrean untuk mengelola data SATUSEHAT.
+          </div>
+        )}
+
+        {/* State-Aware Content Box */}
         <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-medium text-slate-700">
-              Bundle Resource FHIR:
+              Dokumen Rekam Medis:
             </span>
             <span
               className={`text-[11px] font-bold transition-all duration-300 ${
@@ -402,19 +376,35 @@ export function EhrRightPanel({
                   ? "text-rose-700"
                   : isSynced
                   ? "text-emerald-700"
-                  : "text-amber-700"
+                  : "text-blue-700"
               }`}
             >
               {isPartialFailed
-                ? `${syncedCount}/${totalCount} Terkirim (${failedCount} Gagal)`
+                ? `${syncedCategoriesCount}/9 Kategori (${syncedResources}/${totalResources} Resource)`
                 : isSynced
-                ? `${syncedCount}/${totalCount} Terverifikasi`
-                : "Draf Rekam Medis"}
+                ? `9/9 Kategori Lengkap`
+                : isOptOut
+                ? "Disimpan Internal"
+                : "9 Kategori Disiapkan"}
             </span>
           </div>
-          <p className="text-[10px] text-slate-500 font-mono truncate">
-            Encounter ID: {encounter.satusehatEncounterId || "ss-enc-89210-9941a"}
+
+          <p className="text-[11px] text-slate-600 leading-relaxed">
+            {isSynced
+              ? "Seluruh resume medis dan intervensi telah tervalidasi di SATUSEHAT Kemenkes."
+              : isPartialFailed
+              ? `${failedResources} resource tertunda. Sistem akan mengulang pengiriman otomatis via Outbox Queue.`
+              : isOptOut
+              ? "Pasien memilih tidak membagikan data ke platform nasional. Rekam medis tersimpan aman di sistem faskes."
+              : "Data pemeriksaan otomatis dikonversi ke standar Kemenkes saat tombol Selesaikan ditekan."}
           </p>
+
+          <div className="pt-1 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500 font-mono">
+            <span>ID Kunjungan Kemenkes:</span>
+            <span className="font-bold text-slate-700 truncate max-w-[140px]">
+              {encounter?.satusehatEncounterId || "Terbit Saat Finalisasi"}
+            </span>
+          </div>
         </div>
 
         {/* Quick Selective Retry Button if partial failure exists */}
@@ -430,7 +420,7 @@ export function EhrRightPanel({
             <RefreshCw
               className={`h-3.5 w-3.5 ${isRetrying ? "animate-spin" : "transition-transform duration-200 group-hover:rotate-180"}`}
             />
-            <span>{isRetrying ? "Mengirim Ulang..." : `Kirim Ulang ${failedCount} Resource Gagal`}</span>
+            <span>{isRetrying ? "Mengirim Ulang..." : `Kirim Ulang ${failedResources} Resource Gagal`}</span>
           </Button>
         )}
 
@@ -443,7 +433,7 @@ export function EhrRightPanel({
         >
           <span className="flex items-center gap-1.5">
             <Layers className="h-3.5 w-3.5 text-teal-600" />
-            <span>Detail Interoperabilitas FHIR</span>
+            <span>Rincian Rekam Medis Kemenkes (FHIR)</span>
           </span>
           <ChevronRight className="h-3.5 w-3.5 text-slate-400 transition-transform duration-150 group-hover:translate-x-0.5" />
         </Button>
@@ -454,12 +444,11 @@ export function EhrRightPanel({
         isOpen={isDetailModalOpen}
         onOpenChange={setIsDetailModalOpen}
         encounter={encounter}
+        patient={patient}
         session={session}
-        onOpenCodeSnippet={onOpenCodeSnippet}
         onRefreshToken={onRefreshToken}
         isRefreshing={isRefreshing}
         onSelectiveRetry={onSelectiveRetry}
-        onSimulatePartialDrop={onSimulatePartialDrop}
         isRetrying={isRetrying}
       />
     </aside>

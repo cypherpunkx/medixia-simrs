@@ -2,14 +2,14 @@ import { db } from "../index";
 import { satusehatSyncLogs } from "../schema";
 import { eq, and } from "drizzle-orm";
 import { ResourceSyncItem } from "@/lib/satusehat/types";
+import { generatePrefixedId } from "@/lib/id-generator";
 
 export const SyncLogRepository = {
-  getByEncounterId(encounterId: string): ResourceSyncItem[] {
-    const rows = db
+  async getByEncounterId(encounterId: string): Promise<ResourceSyncItem[]> {
+    const rows = await db
       .select()
       .from(satusehatSyncLogs)
-      .where(eq(satusehatSyncLogs.encounterId, encounterId))
-      .all();
+      .where(eq(satusehatSyncLogs.encounterId, encounterId));
 
     return rows.map((r: typeof satusehatSyncLogs.$inferSelect) => ({
       resourceType: r.resourceType,
@@ -26,43 +26,41 @@ export const SyncLogRepository = {
     }));
   },
 
-  saveBreakdown(encounterId: string, breakdown: ResourceSyncItem[]): void {
+  async saveBreakdown(encounterId: string, breakdown: ResourceSyncItem[]): Promise<void> {
     // Delete existing logs for this encounter and re-insert
-    db.delete(satusehatSyncLogs).where(eq(satusehatSyncLogs.encounterId, encounterId)).run();
+    await db.delete(satusehatSyncLogs).where(eq(satusehatSyncLogs.encounterId, encounterId));
 
     const now = new Date().toISOString();
     for (let i = 0; i < breakdown.length; i++) {
       const item = breakdown[i];
-      db.insert(satusehatSyncLogs)
-        .values({
-          id: `sync-${encounterId}-${i}-${Date.now().toString(36)}`,
-          encounterId,
-          resourceType: item.resourceType,
-          label: item.label,
-          category: item.category || null,
-          standard: item.standard,
-          status: item.status,
-          httpStatus: item.httpStatus || null,
-          fhirId: item.fhirId || null,
-          errorMessage: item.errorMessage || null,
-          retryCount: item.retryCount || 0,
-          lastAttempt: item.lastAttempt || now,
-          details: item.details ? JSON.stringify(item.details) : null,
-        })
-        .run();
+      await db.insert(satusehatSyncLogs).values({
+        id: generatePrefixedId("sync_"),
+        encounterId,
+        resourceType: item.resourceType,
+        label: item.label,
+        category: item.category || null,
+        standard: item.standard,
+        status: item.status,
+        httpStatus: item.httpStatus || null,
+        fhirId: item.fhirId || null,
+        errorMessage: item.errorMessage || null,
+        retryCount: item.retryCount || 0,
+        lastAttempt: item.lastAttempt || now,
+        details: item.details ? JSON.stringify(item.details) : null,
+      });
     }
   },
 
-  updateResourceStatus(
+  async updateResourceStatus(
     encounterId: string,
     resourceType: string,
     status: "synced" | "failed" | "pending",
     httpStatus?: number,
     fhirId?: string,
     errorMessage?: string
-  ): void {
+  ): Promise<void> {
     const now = new Date().toISOString();
-    const existing = db
+    const rows = await db
       .select()
       .from(satusehatSyncLogs)
       .where(
@@ -71,10 +69,12 @@ export const SyncLogRepository = {
           eq(satusehatSyncLogs.resourceType, resourceType)
         )
       )
-      .get();
+      .limit(1);
 
+    const existing = rows[0];
     if (existing) {
-      db.update(satusehatSyncLogs)
+      await db
+        .update(satusehatSyncLogs)
         .set({
           status,
           httpStatus: httpStatus || existing.httpStatus,
@@ -88,8 +88,7 @@ export const SyncLogRepository = {
             eq(satusehatSyncLogs.encounterId, encounterId),
             eq(satusehatSyncLogs.resourceType, resourceType)
           )
-        )
-        .run();
+        );
     }
   },
 };

@@ -13,14 +13,16 @@ import { Button } from "@/components/ui/button";
 import { Printer, Ticket, QrCode, Clock, ShieldCheck, Activity } from "lucide-react";
 import { PatientProfile, OutpatientEncounter, ClinicQueuePatientItem } from "@/lib/satusehat/types";
 import { printHtmlElement } from "@/lib/print/print-service";
+import { useAuth } from "@/lib/auth/auth-context";
 
 interface QueueTicketPrintModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  patient: PatientProfile;
-  encounter: OutpatientEncounter;
+  patient?: PatientProfile | null;
+  encounter?: OutpatientEncounter | null;
   worklist?: ClinicQueuePatientItem[];
   queueNumber?: string;
+  queueItem?: ClinicQueuePatientItem | null;
   estimatedWaitMinutes?: number;
 }
 
@@ -31,16 +33,71 @@ export function QueueTicketPrintModal({
   encounter,
   worklist,
   queueNumber,
+  queueItem,
   estimatedWaitMinutes = 15,
 }: QueueTicketPrintModalProps) {
+  const { facility, user } = useAuth();
   const printAreaRef = useRef<HTMLDivElement>(null);
 
-  const matchingQueueItem = worklist?.find(
-    (w) => w.patient.id === patient.id || w.patient.mrn === patient.mrn
-  );
+  if (!patient) return null;
+
+  // Prioritize explicit queueItem, then matching by queueNumber, encounter, or active waiting queue
+  const matchingQueueItem =
+    queueItem ||
+    (queueNumber
+      ? worklist?.find((w) => w.queueNumber === queueNumber)
+      : null) ||
+    (encounter?.queueNumber
+      ? worklist?.find((w) => w.queueNumber === encounter.queueNumber)
+      : null) ||
+    (encounter?.clinicDepartment
+      ? worklist?.find(
+          (w) =>
+            (w.patient.id === patient.id || w.patient.mrn === patient.mrn) &&
+            w.department === encounter.clinicDepartment
+        )
+      : null) ||
+    // Active waiting/in-progress queue
+    worklist?.find(
+      (w) =>
+        (w.patient.id === patient.id || w.patient.mrn === patient.mrn) &&
+        w.status !== "finished"
+    ) ||
+    // Fallback: most recent item in worklist for this patient
+    [...(worklist || [])]
+      .reverse()
+      .find((w) => w.patient.id === patient.id || w.patient.mrn === patient.mrn);
+
+  const effectiveRegistrationNumber =
+    queueItem?.registrationNumber ||
+    matchingQueueItem?.registrationNumber ||
+    encounter?.registrationNumber ||
+    `RJ-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-0001`;
 
   const effectiveQueueNumber =
-    queueNumber || matchingQueueItem?.queueNumber || encounter.queueNumber || "A-001";
+    queueNumber ||
+    queueItem?.queueNumber ||
+    matchingQueueItem?.queueNumber ||
+    encounter?.queueNumber ||
+    "A-001";
+
+  const effectiveDepartment =
+    queueItem?.department ||
+    matchingQueueItem?.department ||
+    encounter?.clinicDepartment ||
+    "Poliklinik Rawat Jalan";
+
+  const effectiveDoctor =
+    queueItem?.doctor ||
+    matchingQueueItem?.doctor ||
+    encounter?.doctorName ||
+    (user?.role === "doctor" ? user.name : null) ||
+    "Dokter DPJP";
+
+  const effectiveRoom =
+    queueItem?.room ||
+    matchingQueueItem?.room ||
+    "Ruang Periksa";
 
   const handlePrint = () => {
     if (printAreaRef.current) {
@@ -52,12 +109,12 @@ export function QueueTicketPrintModal({
   };
 
   const fifoRank =
-    worklist && worklist.length > 0
+    worklist && worklist.length > 0 && effectiveQueueNumber
       ? Math.max(
           1,
           [...worklist]
             .sort((a, b) => (a.arrivalTimestamp || 0) - (b.arrivalTimestamp || 0))
-            .findIndex((w) => w.patient.id === patient.id || w.patient.mrn === patient.mrn) + 1
+            .findIndex((w) => w.queueNumber === effectiveQueueNumber) + 1
         )
       : 1;
 
@@ -79,6 +136,8 @@ export function QueueTicketPrintModal({
     hour: "2-digit",
     minute: "2-digit",
   });
+
+  const activeHospitalName = facility?.name || encounter?.hospitalName || "RS Umum Daerah Sehat Sejahtera";
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -103,7 +162,7 @@ export function QueueTicketPrintModal({
             <div className="flex items-center justify-center gap-1.5 mb-1">
               <Activity className="h-4 w-4 text-teal-600" />
               <h3 className="font-extrabold text-sm uppercase tracking-wider text-slate-900">
-                {encounter.hospitalName}
+                {activeHospitalName}
               </h3>
             </div>
             <p className="text-[10px] text-slate-500">
@@ -126,12 +185,16 @@ export function QueueTicketPrintModal({
               {effectiveQueueNumber}
             </div>
             <div className="inline-flex items-center gap-1 px-3 py-1 bg-teal-50 border border-teal-200 rounded-full text-xs font-bold text-teal-700">
-              <span>{matchingQueueItem?.department || encounter.clinicDepartment}</span>
+              <span>{effectiveDepartment}</span>
             </div>
           </div>
 
           {/* Details Table */}
           <div className="border-t border-b border-dashed border-slate-300 py-3 text-left text-xs space-y-1.5 font-sans">
+            <div className="flex justify-between">
+              <span className="text-slate-500 text-[11px]">No. Registrasi:</span>
+              <span className="font-bold font-mono text-blue-800">{effectiveRegistrationNumber}</span>
+            </div>
             <div className="flex justify-between">
               <span className="text-slate-500 text-[11px]">Nama Pasien:</span>
               <span className="font-bold text-slate-900">{patient.name}</span>
@@ -142,11 +205,11 @@ export function QueueTicketPrintModal({
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 text-[11px]">DPJP Dokter:</span>
-              <span className="font-semibold text-slate-800">{matchingQueueItem?.doctor || encounter.doctorName}</span>
+              <span className="font-semibold text-slate-800">{effectiveDoctor}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 text-[11px]">Ruang Poli:</span>
-              <span className="font-semibold text-slate-800">{matchingQueueItem?.room || "Ruang 204 (Lt. 2)"}</span>
+              <span className="font-semibold text-slate-800">{effectiveRoom}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 text-[11px]">Waktu Kedatangan:</span>

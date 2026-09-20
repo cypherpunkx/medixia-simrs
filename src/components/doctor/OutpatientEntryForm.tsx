@@ -26,40 +26,58 @@ import {
   ExternalLink,
   FlaskConical,
   Radio,
+  Eye,
+  Edit3,
+  RotateCcw,
+  Save,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CustomDatePicker } from "@/components/ui/custom-date-picker";
+import { CustomSelect } from "@/components/ui/custom-select";
 import {
   Dialog,
   DialogContent,
 } from "@/components/ui/dialog";
 import {
   AuthSession,
-  DiagnosisItem,
   OutpatientEncounter,
   PatientProfile,
-  PrescriptionItem,
+  UserProfile,
+  DiagnosisItem,
   ProcedureItem,
+  PrescriptionItem,
+  formatDoctorSip,
+  cleanDoctorName,
 } from "@/lib/satusehat/types";
-import { KFA_MEDICATIONS_DATABASE, KfaMedication } from "@/lib/satusehat/kfa-database";
+import {
+  KFA_MEDICATIONS_DATABASE,
+  KfaMedication,
+} from "@/lib/satusehat/kfa-database";
 import {
   evaluateVitalSigns,
   checkDrugAllergyConflict,
   validateEncounterCompletion,
   VitalSignAlert,
 } from "@/lib/satusehat/validation";
+import { generatePrefixedId } from "@/lib/id-generator";
+import { useAuth } from "@/lib/auth/auth-context";
+import { ModuleEmptyState } from "@/components/layout/ModuleEmptyState";
+import { SatusehatSyncLoadingModal } from "@/components/compliance/SatusehatSyncLoadingModal";
 import { toast } from "sonner";
 
 interface OutpatientEntryFormProps {
-  patient: PatientProfile;
+  patient?: PatientProfile | null;
   activeEncounter?: OutpatientEncounter;
   activeDepartment?: string;
   onEncounterCreated: (newEncounter: OutpatientEncounter) => void;
   token?: string;
   session?: AuthSession | null;
   onNavigateToBridging?: () => void;
+  onOpenRegistration?: () => void;
 }
 
 type SoapTab = "S" | "O" | "A" | "P";
@@ -96,6 +114,134 @@ export const COMMON_ICD9_LIST = [
   { code: "93.39", display: "Other physical therapy", name: "Fisioterapi & Terapi Latihan", category: "Fisioterapi" },
 ];
 
+function hasEncounterChanges(
+  original: OutpatientEncounter | undefined,
+  current: {
+    department: string;
+    doctorName: string;
+    doctorSip: string;
+    doctorIhsId: string;
+    chiefComplaint: string;
+    anamnesis: string;
+    pastMedicalHistory: string;
+    systolic: string;
+    diastolic: string;
+    heartRate: string;
+    temperature: string;
+    respiratoryRate: string;
+    oxygenSaturation: string;
+    weightKg: string;
+    heightCm: string;
+    physicalExamNotes: string;
+    diagnoses: DiagnosisItem[];
+    procedures: ProcedureItem[];
+    prescriptions: PrescriptionItem[];
+    followUpNotes: string;
+    nextVisitDate: string;
+    referredToHospital: string;
+    dischargeDisposition: string;
+    consentStatus: string;
+  }
+): boolean {
+  if (!original) return true;
+
+  // Basic Subjective & Doctor info
+  if ((original.clinicDepartment || "").trim() !== current.department.trim()) return true;
+  if ((original.doctorName || "").trim() !== current.doctorName.trim()) return true;
+  if ((original.doctorSip || "").trim() !== current.doctorSip.trim()) return true;
+  if ((original.doctorIhsId || "").trim() !== current.doctorIhsId.trim()) return true;
+  if ((original.chiefComplaint || "").trim() !== current.chiefComplaint.trim()) return true;
+
+  const combinedAnamnesis = `${current.anamnesis} ${current.pastMedicalHistory ? `[RPD: ${current.pastMedicalHistory}]` : ""}`.trim();
+  if ((original.anamnesis || "").trim() !== combinedAnamnesis) return true;
+
+  // Vitals & Physical Exam
+  const origVitals = original.vitals;
+  const normalizeNum = (val: string | number | undefined | null) =>
+    val != null && val !== "" ? Number(val) : null;
+
+  if (normalizeNum(origVitals?.systolic) !== normalizeNum(current.systolic)) return true;
+  if (normalizeNum(origVitals?.diastolic) !== normalizeNum(current.diastolic)) return true;
+  if (normalizeNum(origVitals?.heartRate) !== normalizeNum(current.heartRate)) return true;
+  if (normalizeNum(origVitals?.temperature) !== normalizeNum(current.temperature)) return true;
+  if (normalizeNum(origVitals?.respiratoryRate) !== normalizeNum(current.respiratoryRate)) return true;
+  if (normalizeNum(origVitals?.oxygenSaturation) !== normalizeNum(current.oxygenSaturation)) return true;
+  if (normalizeNum(origVitals?.weightKg) !== normalizeNum(current.weightKg)) return true;
+  if (normalizeNum(origVitals?.heightCm) !== normalizeNum(current.heightCm)) return true;
+  if ((origVitals?.physicalExamNotes || "").trim() !== current.physicalExamNotes.trim()) return true;
+
+  // Diagnoses
+  const origDiag = original.diagnoses || [];
+  if (origDiag.length !== current.diagnoses.length) return true;
+  for (let i = 0; i < current.diagnoses.length; i++) {
+    const cd = current.diagnoses[i];
+    const od = origDiag[i];
+    if (!od) return true;
+    if (
+      cd.code !== od.code ||
+      cd.type !== od.type ||
+      cd.display !== od.display ||
+      cd.clinicalStatus !== od.clinicalStatus
+    ) {
+      return true;
+    }
+  }
+
+  // Procedures
+  const origProc = original.procedures || [];
+  if (origProc.length !== current.procedures.length) return true;
+  for (let i = 0; i < current.procedures.length; i++) {
+    const cp = current.procedures[i];
+    const op = origProc[i];
+    if (!op) return true;
+    if (
+      cp.code !== op.code ||
+      cp.notes !== op.notes ||
+      cp.display !== op.display ||
+      cp.category !== op.category
+    ) {
+      return true;
+    }
+  }
+
+  // Prescriptions
+  const origPresc = original.prescriptions || [];
+  if (origPresc.length !== current.prescriptions.length) return true;
+  for (let i = 0; i < current.prescriptions.length; i++) {
+    const cp = current.prescriptions[i];
+    const op = origPresc[i];
+    if (!op) return true;
+    if (
+      cp.kfaCode !== op.kfaCode ||
+      cp.medicationName !== op.medicationName ||
+      cp.dosage !== op.dosage ||
+      cp.frequency !== op.frequency ||
+      cp.timing !== op.timing ||
+      cp.quantity !== op.quantity ||
+      cp.unit !== op.unit ||
+      cp.durationDays !== op.durationDays ||
+      cp.instructions !== op.instructions
+    ) {
+      return true;
+    }
+  }
+
+  // Follow-up plan
+  const origPlan = original.followUpPlan;
+  if ((origPlan?.instruction || "").trim() !== current.followUpNotes.trim()) return true;
+  if ((origPlan?.nextVisitDate || "").trim() !== current.nextVisitDate.trim()) return true;
+  if ((origPlan?.referredTo || "").trim() !== current.referredToHospital.trim()) return true;
+
+  // Disposition & Consent
+  const origDisp = original.dischargeDisposition || "Pulang Berobat Jalan";
+  if (origDisp !== (current.dischargeDisposition || "Pulang Berobat Jalan")) return true;
+
+  const origConsent = original.consentStatus || "opt-in";
+  if (origConsent !== (current.consentStatus || "opt-in")) return true;
+
+  return false;
+}
+
 export function OutpatientEntryForm({
   patient,
   activeEncounter,
@@ -104,7 +250,10 @@ export function OutpatientEntryForm({
   token,
   session,
   onNavigateToBridging,
+  onOpenRegistration,
 }: OutpatientEntryFormProps) {
+  const { user, facility, departments: authDepartments } = useAuth();
+
   // Navigation State (SOAP Guided Stepper)
   const [activeSoapTab, setActiveSoapTab] = useState<SoapTab>("S");
 
@@ -114,14 +263,47 @@ export function OutpatientEntryForm({
 
   const isBridgingConnected = Boolean(token || session?.accessToken);
 
+  // Encounter Status & Read-Only / Correction Mode Control
+  const isEncounterFinished = activeEncounter?.encounterStatus === "finished";
+  const [isCorrectionMode, setIsCorrectionMode] = useState(false);
+
+  React.useEffect(() => {
+    setIsCorrectionMode(false);
+  }, [activeEncounter?.id, activeEncounter?.encounterStatus, patient?.id]);
+
+  const isReadOnly = isEncounterFinished && !isCorrectionMode;
+
+  // Dynamic Facility Doctors from DB
+  const [facilityDoctors, setFacilityDoctors] = useState<UserProfile[]>([]);
+
+  const fetchFacilityDoctors = React.useCallback(async () => {
+    try {
+      const url = facility?.id ? `/api/users?facilityId=${facility.id}` : "/api/users";
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        const docs = (json.data as UserProfile[]).filter(
+          (u) => u.role === "doctor" && u.isActive !== false
+        );
+        setFacilityDoctors(docs);
+      }
+    } catch (err) {
+      console.error("Gagal mengambil daftar dokter faskes:", err);
+    }
+  }, [facility?.id]);
+
+  React.useEffect(() => {
+    fetchFacilityDoctors();
+  }, [fetchFacilityDoctors]);
+
   // Tab S: Subjektif
   const [department, setDepartment] = useState(
-    activeDepartment && activeDepartment !== "Semua Poli"
-      ? activeDepartment
-      : activeEncounter?.clinicDepartment || "Poli Penyakit Dalam"
+    activeEncounter?.clinicDepartment ||
+    (activeDepartment && activeDepartment !== "Semua Poli" ? activeDepartment : "Poli Umum")
   );
   const [doctorName, setDoctorName] = useState(
-    activeEncounter?.doctorName || "dr. Rian Pratama, Sp.PD"
+    activeEncounter?.doctorName ||
+    (user && user.role === "doctor" ? user.name : "dr. Sarah Wijaya, M.Kes")
   );
   const [chiefComplaint, setChiefComplaint] = useState(
     activeEncounter?.chiefComplaint || ""
@@ -168,6 +350,9 @@ export function OutpatientEntryForm({
   );
   const [icdSearch, setIcdSearch] = useState("");
   const [showIcdDropdown, setShowIcdDropdown] = useState(false);
+  const icdSearchInputRef = React.useRef<HTMLInputElement>(null);
+  const kfaSearchInputRef = React.useRef<HTMLInputElement>(null);
+  const [lastSubmittedEncounter, setLastSubmittedEncounter] = useState<OutpatientEncounter | null>(null);
 
   const [procedures, setProcedures] = useState<ProcedureItem[]>(
     activeEncounter?.procedures && activeEncounter.procedures.length > 0
@@ -191,18 +376,21 @@ export function OutpatientEntryForm({
       : []
   );
   const [kfaSearch, setKfaSearch] = useState("");
+  const [showKfaDropdown, setShowKfaDropdown] = useState(false);
   const [allergyWarning, setAllergyWarning] = useState<string | null>(null);
   const [followUpNotes, setFollowUpNotes] = useState(
     activeEncounter?.followUpPlan?.instruction || ""
   );
   const [doctorSip, setDoctorSip] = useState(
-    activeEncounter?.doctorSip || "SIP.446/089/DS/Dinkes/2026"
+    activeEncounter?.doctorSip || user?.sip || ""
   );
   const [doctorIhsId, setDoctorIhsId] = useState(
-    activeEncounter?.doctorIhsId || "N10009841"
+    activeEncounter?.doctorIhsId || user?.ihsPractitionerId || ""
   );
   const [dischargeDisposition, setDischargeDisposition] = useState(
-    activeEncounter?.dischargeDisposition || "Pulang Berobat Jalan"
+    activeEncounter?.dischargeDisposition && activeEncounter.dischargeDisposition !== "Menunggu Pelayanan Poli"
+      ? activeEncounter.dischargeDisposition
+      : "Pulang Berobat Jalan"
   );
   const [nextVisitDate, setNextVisitDate] = useState(
     activeEncounter?.followUpPlan?.nextVisitDate || ""
@@ -211,9 +399,133 @@ export function OutpatientEntryForm({
     activeEncounter?.followUpPlan?.referredTo || ""
   );
   const [consentStatus, setConsentStatus] = useState<"opt-in" | "opt-out">(
-    patient.satusehatConsent || "opt-in"
+    patient?.satusehatConsent || "opt-in"
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // -------------------------------------------------------------
+  // Production Feature: Draft Auto-Save & Local Recovery (localStorage)
+  // -------------------------------------------------------------
+  const [savedDraftAvailable, setSavedDraftAvailable] = useState(false);
+  const [draftTimestamp, setDraftTimestamp] = useState<string | null>(null);
+  const [storedDraft, setStoredDraft] = useState<any | null>(null);
+
+  // Dynamic Clinic Options for Dropdown
+  const clinicOptions = React.useMemo(() => {
+    if (authDepartments && authDepartments.length > 0) {
+      return authDepartments.map((d) => ({
+        value: d.name,
+        label: `${d.name}${d.room ? ` (${d.room})` : ""}`,
+      }));
+    }
+    return [
+      { value: "Poli Penyakit Dalam", label: "Poli Penyakit Dalam (Lt. 2)" },
+      { value: "Poli Umum", label: "Poli Umum (Lt. 1)" },
+      { value: "Poli Anak (Pediatri)", label: "Poli Anak / Pediatri (Lt. 1)" },
+      { value: "Poli Gigi & Mulut", label: "Poli Gigi & Mulut (Lt. 2)" },
+      { value: "Poli Jantung & Pembuluh Darah", label: "Poli Jantung & Pembuluh Darah (Lt. 2)" },
+      { value: "Poli Mata", label: "Poli Mata (Lt. 2)" },
+    ];
+  }, [authDepartments]);
+
+  // Dynamic Doctor Options for Dropdown (Strictly Filtered by Active Clinic)
+  const doctorOptions = React.useMemo(() => {
+    if (facilityDoctors.length > 0) {
+      const clinicDoctors = facilityDoctors.filter(
+        (d) =>
+          d.department === department ||
+          (d.department && department.toLowerCase().includes(d.department.toLowerCase())) ||
+          (d.department && department.toLowerCase().includes(d.department.toLowerCase().replace("poli ", "")))
+      );
+      const listToMap = clinicDoctors.length > 0 ? clinicDoctors : facilityDoctors;
+      return listToMap.map((d) => ({
+        value: d.name,
+        label: `${d.name}${d.sip ? ` (${formatDoctorSip(d.sip)})` : ""}${d.department ? ` — ${d.department}` : ""}`,
+      }));
+    }
+
+    const fallbackList = [
+      { name: "dr. Rian Pratama, Sp.PD", dept: "Poli Penyakit Dalam", sip: "SIP.446/089/DS/Dinkes/2026" },
+      { name: "dr. Amanda Putri, M.Biomed", dept: "Poli Umum", sip: "SIP.446/012/DU/Dinkes/2026" },
+      { name: "dr. Maya Anggraini, Sp.A", dept: "Poli Anak (Pediatri)", sip: "SIP.446/055/SPA/Dinkes/2026" },
+      { name: "drg. Kevin Tanuwidjaja", dept: "Poli Gigi & Mulut", sip: "SIP.446/099/DG/Dinkes/2026" },
+      { name: "dr. Rian Hidayat, Sp.JP", dept: "Poli Jantung & Pembuluh Darah", sip: "SIP.446/108/SJP/Dinkes/2026" },
+      { name: "dr. Nadia Putri, Sp.M", dept: "Poli Mata", sip: "SIP.446/077/SPM/Dinkes/2026" },
+    ];
+
+    const matched = fallbackList.filter(
+      (d) =>
+        d.dept === department ||
+        (department && d.dept.toLowerCase().includes(department.toLowerCase())) ||
+        (department && department.toLowerCase().includes(d.dept.toLowerCase()))
+    );
+
+    const targetList = matched.length > 0 ? matched : fallbackList;
+    return targetList.map((d) => ({
+      value: d.name,
+      label: `${d.name}${d.sip ? ` (${formatDoctorSip(d.sip)})` : ""} — ${d.dept}`,
+    }));
+  }, [facilityDoctors, department]);
+
+  // Handler when Poliklinik is changed -> automatically update DPJP & Credentials
+  const handleClinicChange = (newClinic: string) => {
+    setDepartment(newClinic);
+    const matchedDoctor = facilityDoctors.find(
+      (d) =>
+        d.department === newClinic ||
+        (d.department && newClinic.toLowerCase().includes(d.department.toLowerCase())) ||
+        (d.department && newClinic.toLowerCase().includes(d.department.toLowerCase().replace("poli ", "")))
+    );
+
+    if (matchedDoctor) {
+      setDoctorName(matchedDoctor.name);
+      setDoctorSip(matchedDoctor.sip || "");
+      setDoctorIhsId(matchedDoctor.ihsPractitionerId || "");
+    } else {
+      const deptInfo = authDepartments?.find((d) => d.name === newClinic);
+      if (deptInfo?.defaultDoctorName) {
+        setDoctorName(deptInfo.defaultDoctorName);
+        const docObj = facilityDoctors.find((d) => d.name === deptInfo.defaultDoctorName);
+        if (docObj) {
+          setDoctorSip(docObj.sip || "");
+          setDoctorIhsId(docObj.ihsPractitionerId || "");
+        } else {
+          setDoctorSip("");
+          setDoctorIhsId("");
+        }
+      } else if (user?.role === "doctor") {
+        setDoctorName(user.name);
+        setDoctorSip(user.sip || "");
+        setDoctorIhsId(user.ihsPractitionerId || "");
+      } else {
+        setDoctorName("");
+        setDoctorSip("");
+        setDoctorIhsId("");
+      }
+    }
+  };
+
+  // Handler when Doctor DPJP is selected -> automatically update SIP & IHS ID
+  const handleDoctorChange = (selectedDocName: string) => {
+    setDoctorName(selectedDocName);
+    const matchedDoctor = facilityDoctors.find(
+      (d) => d.name === selectedDocName || selectedDocName.includes(d.name)
+    );
+    if (matchedDoctor) {
+      setDoctorSip(matchedDoctor.sip || "");
+      setDoctorIhsId(matchedDoctor.ihsPractitionerId || "");
+    }
+  };
+
+  // Auto sync doctor credentials on logged-in doctor
+  React.useEffect(() => {
+    if (user && user.role === "doctor" && !activeEncounter) {
+      setDoctorName(user.name);
+      if (user.sip) setDoctorSip(user.sip);
+      if (user.ihsPractitionerId) setDoctorIhsId(user.ihsPractitionerId);
+      if (user.department) setDepartment(user.department);
+    }
+  }, [user, activeEncounter]);
 
   // Re-synchronize form when patient, activeEncounter, or activeDepartment changes
   React.useEffect(() => {
@@ -222,9 +534,12 @@ export function OutpatientEntryForm({
         activeEncounter.clinicDepartment ||
         (activeDepartment && activeDepartment !== "Semua Poli" ? activeDepartment : "Poli Umum")
       );
-      setDoctorName(activeEncounter.doctorName || "dr. Rian Pratama, Sp.PD");
-      setDoctorSip(activeEncounter.doctorSip || "SIP.446/089/DS/Dinkes/2026");
-      setDoctorIhsId(activeEncounter.doctorIhsId || "N10009841");
+      setDoctorName(
+        cleanDoctorName(activeEncounter.doctorName) ||
+        (user && user.role === "doctor" ? user.name : "")
+      );
+      setDoctorSip(activeEncounter.doctorSip || user?.sip || "");
+      setDoctorIhsId(activeEncounter.doctorIhsId || user?.ihsPractitionerId || "");
       setChiefComplaint(activeEncounter.chiefComplaint || "");
       setAnamnesis(activeEncounter.anamnesis || "");
       if (activeEncounter.vitals) {
@@ -263,10 +578,14 @@ export function OutpatientEntryForm({
       );
       setPrescriptions(activeEncounter.prescriptions || []);
       setFollowUpNotes(activeEncounter.followUpPlan?.instruction || "");
-      setDischargeDisposition(activeEncounter.dischargeDisposition || "Pulang Berobat Jalan");
+      setDischargeDisposition(
+        activeEncounter.dischargeDisposition && activeEncounter.dischargeDisposition !== "Menunggu Pelayanan Poli"
+          ? activeEncounter.dischargeDisposition
+          : "Pulang Berobat Jalan"
+      );
       setNextVisitDate(activeEncounter.followUpPlan?.nextVisitDate || "");
       setReferredToHospital(activeEncounter.followUpPlan?.referredTo || "");
-      setConsentStatus(activeEncounter.consentStatus || patient.satusehatConsent || "opt-in");
+      setConsentStatus(activeEncounter.consentStatus || patient?.satusehatConsent || "opt-in");
     } else {
       setDepartment(
         activeDepartment && activeDepartment !== "Semua Poli" ? activeDepartment : "Poli Umum"
@@ -296,9 +615,178 @@ export function OutpatientEntryForm({
       setDischargeDisposition("Pulang Berobat Jalan");
       setNextVisitDate("");
       setReferredToHospital("");
-      setConsentStatus(patient.satusehatConsent || "opt-in");
+      setConsentStatus(patient?.satusehatConsent || "opt-in");
     }
-  }, [patient.id, activeEncounter?.id, activeDepartment]);
+  }, [patient?.id, activeEncounter?.id, activeDepartment]);
+
+  // Check for unsaved draft when patient or encounter changes
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !patient?.id) {
+      setSavedDraftAvailable(false);
+      setStoredDraft(null);
+      return;
+    }
+
+    // Only look for draft if encounter is NOT already finished
+    if (activeEncounter?.encounterStatus === "finished") {
+      setSavedDraftAvailable(false);
+      setStoredDraft(null);
+      return;
+    }
+
+    try {
+      const draftKey = `medixia_soap_draft_${patient.id}`;
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (
+          parsed &&
+          (parsed.chiefComplaint ||
+            parsed.anamnesis ||
+            parsed.systolic ||
+            (Array.isArray(parsed.diagnoses) && parsed.diagnoses.length > 0) ||
+            (Array.isArray(parsed.prescriptions) && parsed.prescriptions.length > 0))
+        ) {
+          setStoredDraft(parsed);
+          setDraftTimestamp(parsed.savedAtFormatted || "Sesi sebelumnya");
+          setSavedDraftAvailable(true);
+          return;
+        }
+      }
+    } catch {
+      // ignore parse error
+    }
+    setSavedDraftAvailable(false);
+    setStoredDraft(null);
+  }, [patient?.id, activeEncounter?.id, activeEncounter?.encounterStatus]);
+
+  // Debounced auto-save to localStorage
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !patient?.id || isReadOnly || isSubmitting) return;
+
+    // Only auto-save if clinical fields have inputs
+    const hasAnyInput = Boolean(
+      chiefComplaint.trim() ||
+      anamnesis.trim() ||
+      systolic ||
+      diastolic ||
+      heartRate ||
+      temperature ||
+      diagnoses.length > 0 ||
+      prescriptions.length > 0 ||
+      followUpNotes.trim()
+    );
+
+    if (!hasAnyInput) return;
+
+    const timer = setTimeout(() => {
+      try {
+        const draftKey = `medixia_soap_draft_${patient.id}`;
+        const draftPayload = {
+          patientId: patient.id,
+          savedAt: new Date().toISOString(),
+          savedAtFormatted: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+          department,
+          doctorName,
+          doctorSip,
+          doctorIhsId,
+          chiefComplaint,
+          anamnesis,
+          pastMedicalHistory,
+          systolic,
+          diastolic,
+          heartRate,
+          temperature,
+          respiratoryRate,
+          oxygenSaturation,
+          weightKg,
+          heightCm,
+          physicalExamNotes,
+          diagnoses,
+          procedures,
+          prescriptions,
+          followUpNotes,
+          nextVisitDate,
+          referredToHospital,
+          dischargeDisposition,
+          consentStatus,
+        };
+        localStorage.setItem(draftKey, JSON.stringify(draftPayload));
+      } catch {
+        // ignore localStorage quota errors
+      }
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [
+    patient?.id,
+    isReadOnly,
+    isSubmitting,
+    department,
+    doctorName,
+    doctorSip,
+    doctorIhsId,
+    chiefComplaint,
+    anamnesis,
+    pastMedicalHistory,
+    systolic,
+    diastolic,
+    heartRate,
+    temperature,
+    respiratoryRate,
+    oxygenSaturation,
+    weightKg,
+    heightCm,
+    physicalExamNotes,
+    diagnoses,
+    procedures,
+    prescriptions,
+    followUpNotes,
+    nextVisitDate,
+    referredToHospital,
+    dischargeDisposition,
+    consentStatus,
+  ]);
+
+  const handleRestoreDraft = () => {
+    if (!storedDraft) return;
+    if (storedDraft.department) setDepartment(storedDraft.department);
+    if (storedDraft.doctorName) setDoctorName(storedDraft.doctorName);
+    if (storedDraft.doctorSip) setDoctorSip(storedDraft.doctorSip);
+    if (storedDraft.doctorIhsId) setDoctorIhsId(storedDraft.doctorIhsId);
+    if (storedDraft.chiefComplaint) setChiefComplaint(storedDraft.chiefComplaint);
+    if (storedDraft.anamnesis) setAnamnesis(storedDraft.anamnesis);
+    if (storedDraft.pastMedicalHistory) setPastMedicalHistory(storedDraft.pastMedicalHistory);
+    if (storedDraft.systolic) setSystolic(storedDraft.systolic);
+    if (storedDraft.diastolic) setDiastolic(storedDraft.diastolic);
+    if (storedDraft.heartRate) setHeartRate(storedDraft.heartRate);
+    if (storedDraft.temperature) setTemperature(storedDraft.temperature);
+    if (storedDraft.respiratoryRate) setRespiratoryRate(storedDraft.respiratoryRate);
+    if (storedDraft.oxygenSaturation) setOxygenSaturation(storedDraft.oxygenSaturation);
+    if (storedDraft.weightKg) setWeightKg(storedDraft.weightKg);
+    if (storedDraft.heightCm) setHeightCm(storedDraft.heightCm);
+    if (storedDraft.physicalExamNotes) setPhysicalExamNotes(storedDraft.physicalExamNotes);
+    if (Array.isArray(storedDraft.diagnoses)) setDiagnoses(storedDraft.diagnoses);
+    if (Array.isArray(storedDraft.procedures)) setProcedures(storedDraft.procedures);
+    if (Array.isArray(storedDraft.prescriptions)) setPrescriptions(storedDraft.prescriptions);
+    if (storedDraft.followUpNotes) setFollowUpNotes(storedDraft.followUpNotes);
+    if (storedDraft.nextVisitDate) setNextVisitDate(storedDraft.nextVisitDate);
+    if (storedDraft.referredToHospital) setReferredToHospital(storedDraft.referredToHospital);
+    if (storedDraft.dischargeDisposition) setDischargeDisposition(storedDraft.dischargeDisposition);
+    if (storedDraft.consentStatus) setConsentStatus(storedDraft.consentStatus);
+
+    setSavedDraftAvailable(false);
+    toast.success("Draf rekam medis berhasil dipulihkan ke formulir");
+  };
+
+  const handleDismissDraft = () => {
+    if (typeof window !== "undefined" && patient?.id) {
+      localStorage.removeItem(`medixia_soap_draft_${patient.id}`);
+    }
+    setSavedDraftAvailable(false);
+    setStoredDraft(null);
+    toast.info("Draf rekam medis sesi sebelumnya telah dibuang");
+  };
 
   // Live Vital Signs Evaluation & BMI
   const vitalsEval = evaluateVitalSigns({
@@ -336,7 +824,7 @@ export function OutpatientEntryForm({
   const completedTabsCount = [isTabSComplete, isTabOComplete, isTabAComplete, isTabPComplete].filter(Boolean).length;
 
   const handleAddKfaMedication = (med: KfaMedication) => {
-    const allergyCheck = checkDrugAllergyConflict(patient.allergies, med.name);
+    const allergyCheck = checkDrugAllergyConflict(patient?.allergies, med.name);
     if (allergyCheck.hasConflict) {
       setAllergyWarning(allergyCheck.message || null);
       toast.warning("Peringatan Alergi Obat!", {
@@ -363,6 +851,7 @@ export function OutpatientEntryForm({
 
     setPrescriptions((prev) => [...prev, newItem]);
     setKfaSearch("");
+    setShowKfaDropdown(false);
     toast.success(`Obat ${med.name} ditambahkan ke resep`);
   };
 
@@ -469,7 +958,7 @@ export function OutpatientEntryForm({
   const handleAddCustomMedication = (customName: string) => {
     if (!customName.trim()) return;
     const trimmed = customName.trim();
-    const conflict = checkDrugAllergyConflict(patient.allergies, trimmed);
+    const conflict = checkDrugAllergyConflict(patient?.allergies, trimmed);
     if (conflict.hasConflict) {
       setAllergyWarning(conflict.message || null);
       toast.warning("Peringatan Alergi Obat!", {
@@ -494,6 +983,7 @@ export function OutpatientEntryForm({
 
     setPrescriptions((prev) => [...prev, newItem]);
     setKfaSearch("");
+    setShowKfaDropdown(false);
     toast.success(`Obat "${trimmed}" ditambahkan ke resep`);
   };
 
@@ -516,7 +1006,7 @@ export function OutpatientEntryForm({
   const handleLoadPreset = (type: "hipertensi" | "ispa" | "gastritis" | "diabetes") => {
     if (type === "hipertensi") {
       setDepartment("Poli Penyakit Dalam");
-      setDoctorName("dr. Rian Pratama, Sp.PD");
+      handleDoctorChange("dr. Rian Pratama, Sp.PD");
       setChiefComplaint("Sakit kepala tengkuk dan badan pegal sejak 3 hari");
       setAnamnesis("Pasien rutin konsumsi obat antihipertensi, saat ini obat habis 4 hari. Keluhan pusing melayang saat bangun tidur.");
       setPastMedicalHistory("Hipertensi grade 1 sejak 2021. Alergi: Tidak ada.");
@@ -570,7 +1060,7 @@ export function OutpatientEntryForm({
       setFollowUpNotes("Edukasi pembatasan konsumsi garam (< 5 gram/hari), olahraga teratur 150 menit/minggu, dan kontrol tensi ulang 1 bulan kemudian.");
     } else if (type === "ispa") {
       setDepartment("Poli Umum");
-      setDoctorName("dr. Siti Rahmawati");
+      handleDoctorChange("dr. Amanda Putri, M.Biomed");
       setChiefComplaint("Batuk pilek, bersin, dan sakit menelan sejak 3 hari");
       setAnamnesis("Demam sumeng hari ke-1 dan 2. Sekret hidung encer bening. Tidak ada sesak napas. Nafsu makan menurun.");
       setPastMedicalHistory("Riwayat asma disangkal. Alergi amoxicillin disangkal.");
@@ -608,7 +1098,7 @@ export function OutpatientEntryForm({
       ]);
       setPrescriptions([
         {
-          kfaCode: "93001027",
+          kfaCode: "93001028",
           medicationName: "Paracetamol 500 mg Tablet",
           form: "Tablet",
           dosage: "500 mg",
@@ -637,7 +1127,7 @@ export function OutpatientEntryForm({
       setFollowUpNotes("Istirahat cukup, perbanyak minum air hangat, gunakan masker, dan kontrol kembali bila demam menetap > 3 hari.");
     } else if (type === "gastritis") {
       setDepartment("Poli Penyakit Dalam");
-      setDoctorName("dr. Rian Pratama, Sp.PD");
+      handleDoctorChange("dr. Rian Pratama, Sp.PD");
       setChiefComplaint("Nyeri ulu hati perih dan mual sejak 2 hari");
       setAnamnesis("Keluhan memberat sesudah makan makanan pedas dan kopi. Terkadang terasa begah dan kembung. BAB warna normal.");
       setPastMedicalHistory("Riwayat maag kronis.");
@@ -669,23 +1159,23 @@ export function OutpatientEntryForm({
       ]);
       setPrescriptions([
         {
-          kfaCode: "93000912",
-          medicationName: "Omeprazole 20 mg Kapsul",
-          form: "Kapsul",
-          dosage: "20 mg",
-          frequency: "2x sehari 1 kapsul",
+          kfaCode: "93003012",
+          medicationName: "Antasida Doen Tablet Kunyah",
+          form: "Tablet Kunyah",
+          dosage: "1 tablet",
+          frequency: "3x sehari 1 tablet",
           timing: "Sebelum Makan",
-          schedule: { morning: true, evening: true },
-          quantity: 14,
-          unit: "Kapsul",
-          durationDays: 7,
-          instructions: "Diminum 30 menit sebelum makan pagi dan malam.",
+          schedule: { morning: true, afternoon: true, evening: true },
+          quantity: 15,
+          unit: "Tablet Kunyah",
+          durationDays: 5,
+          instructions: "Dikunyah 1 jam sebelum makan atau saat perut terasa perih/kembung.",
         },
       ]);
       setFollowUpNotes("Hindari makanan pedas, asam, bersantan, dan kopi. Makan dengan porsi kecil tapi sering.");
     } else if (type === "diabetes") {
       setDepartment("Poli Penyakit Dalam");
-      setDoctorName("dr. Rian Pratama, Sp.PD");
+      handleDoctorChange("dr. Rian Pratama, Sp.PD");
       setChiefComplaint("Kontrol rutin gula darah dan lemas badan");
       setAnamnesis("Pasien rutin minum obat DM. Akhir-akhir ini sering haus dan sering buang air kecil di malam hari.");
       setPastMedicalHistory("Diabetes Melitus Tipe 2 sejak 2020.");
@@ -717,7 +1207,7 @@ export function OutpatientEntryForm({
       ]);
       setPrescriptions([
         {
-          kfaCode: "93000780",
+          kfaCode: "93001552",
           medicationName: "Metformin 500 mg Tablet",
           form: "Tablet",
           dosage: "500 mg",
@@ -750,9 +1240,10 @@ export function OutpatientEntryForm({
         (m) =>
           m.name.toLowerCase().includes(kfaSearch.toLowerCase()) ||
           m.genericName.toLowerCase().includes(kfaSearch.toLowerCase()) ||
-          m.kfaCode.includes(kfaSearch)
+          m.kfaCode.includes(kfaSearch) ||
+          (m.category && m.category.toLowerCase().includes(kfaSearch.toLowerCase()))
       )
-    : [];
+    : KFA_MEDICATIONS_DATABASE;
 
   const filteredIcdOptions = icdSearch.trim()
     ? COMMON_ICD10_LIST.filter(
@@ -768,6 +1259,7 @@ export function OutpatientEntryForm({
     saveAsLocalPending: boolean = false
   ) => {
     setIsSubmitting(true);
+    setLastSubmittedEncounter(encounterToSave);
     setShowBridgingWarningModal(false);
 
     try {
@@ -778,7 +1270,6 @@ export function OutpatientEntryForm({
           patient,
           encounter: encounterToSave,
           token: session?.accessToken || token,
-          simulate: false,
           saveLocalPending: saveAsLocalPending,
         }),
       });
@@ -797,36 +1288,23 @@ export function OutpatientEntryForm({
         };
 
         if (consentStatus === "opt-out") {
-          toast.success("Resume medis berhasil disimpan di SIMRS lokal", {
-            description:
-              "Sesuai pilihan pasien (Opt-Out), transmisi cloud SATUSEHAT dilewati demi hak privasi pasien.",
-            duration: 5000,
-          });
+          toast.success("Resume medis berhasil disimpan");
         } else if (saveAsLocalPending) {
-          toast.info("Resume medis disimpan di SIMRS lokal", {
-            description:
-              "Status: Menunggu Pengiriman ke SATUSEHAT (Pending). Data tersimpan aman dan siap disinkronkan saat bridging aktif.",
-            duration: 6000,
-          });
+          toast.info("Resume medis berhasil disimpan (menunggu sinkronisasi)");
         } else if (finalizedEncounter.syncStatus === "partial_failed") {
-          toast.warning(
-            "Resume medis disimpan dengan catatan sinkronisasi parsial",
-            {
-              description:
-                "Beberapa resource FHIR gagal dikirim. Silakan gunakan tombol Sinkronisasi Ulang di panel SATUSEHAT.",
-              duration: 6000,
-            }
-          );
+          toast.warning("Resume medis berhasil disimpan dengan catatan sinkronisasi parsial");
         } else {
-          toast.success(
-            "Resume medis rawat jalan berhasil disimpan & disinkronkan ke SATUSEHAT",
-            {
-              description:
-                "Data Kunjungan, TTV, Diagnosis, Tindakan, Resep Obat & Persetujuan berhasil disinkronkan ke Kemenkes.",
-              duration: 5000,
-            }
-          );
+          toast.success("Resume medis rawat jalan berhasil disahkan");
         }
+        // Smooth grace delay so doctor sees final stage completion checkmark
+        await new Promise((resolve) => setTimeout(resolve, 350));
+        if (patient?.id && typeof window !== "undefined") {
+          try {
+            localStorage.removeItem(`medixia_soap_draft_${patient.id}`);
+          } catch {}
+        }
+        setSavedDraftAvailable(false);
+        setStoredDraft(null);
         onEncounterCreated(finalizedEncounter);
       } else {
         toast.error("Gagal menyimpan rekam medis", { description: data.error });
@@ -839,6 +1317,62 @@ export function OutpatientEntryForm({
   };
 
   const handleSubmit = async () => {
+    if (isSubmitting) return;
+
+    // 0. RBAC Role Validation (Permenkes 24/2022)
+    if (user && user.role !== "doctor") {
+      toast.error("Akses Ditolak: Wewenang Khusus Dokter DPJP", {
+        description: `Akun Anda (${user.name}) terdaftar sebagai ${
+          user.role === "registration"
+            ? "Petugas Pendaftaran"
+            : user.role === "nurse"
+            ? "Perawat"
+            : user.role === "pharmacy"
+            ? "Apoteker / Farmasi"
+            : "Administrator"
+        }. Sesuai Permenkes No. 24/2022, pengisian & finalisasi Rekam Medis Klinis hanya dapat dilakukan oleh Dokter DPJP.`,
+        duration: 6000,
+      });
+      return;
+    }
+
+    // 0.5. Dirty Checking / No-Op Protection for Finished Encounters
+    // If encounter is finished and no changes have been made, lock back immediately without sending to SATUSEHAT
+    if (isEncounterFinished && activeEncounter) {
+      const hasChanges = hasEncounterChanges(activeEncounter, {
+        department,
+        doctorName,
+        doctorSip,
+        doctorIhsId,
+        chiefComplaint,
+        anamnesis,
+        pastMedicalHistory,
+        systolic,
+        diastolic,
+        heartRate,
+        temperature,
+        respiratoryRate,
+        oxygenSaturation,
+        weightKg,
+        heightCm,
+        physicalExamNotes,
+        diagnoses,
+        procedures,
+        prescriptions,
+        followUpNotes,
+        nextVisitDate,
+        referredToHospital,
+        dischargeDisposition,
+        consentStatus,
+      });
+
+      if (!hasChanges) {
+        setIsCorrectionMode(false);
+        toast.info("Tidak ada perubahan data");
+        return;
+      }
+    }
+
     // 1. Validate mandatory clinical fields according to Permenkes 24/2022
     const validation = validateEncounterCompletion({
       hasChiefComplaint: Boolean(chiefComplaint.trim()),
@@ -868,9 +1402,86 @@ export function OutpatientEntryForm({
       return;
     }
 
+    // 3. Duplication check for ICD-10 diagnoses
+    const diagCodes = diagnoses.map((d) => d.code.trim().toUpperCase());
+    const hasDuplicateDiag = diagCodes.some((code, idx) => diagCodes.indexOf(code) !== idx);
+    if (hasDuplicateDiag) {
+      toast.error("Duplikasi Diagnosis ICD-10", {
+        description: "Terdapat kode diagnosis yang dicatat lebih dari satu kali. Mohon hapus duplikat sebelum menyimpan.",
+      });
+      setActiveSoapTab("A");
+      return;
+    }
+
+    // 4. Follow-up plan & disposition validation
+    if (dischargeDisposition === "Kontrol Kembali") {
+      if (!nextVisitDate) {
+        toast.error("Tanggal kontrol wajib diisi", {
+          description: "Untuk pasien dengan disposisi 'Kontrol Kembali', tentukan tanggal rencana kontrol ulang.",
+        });
+        setActiveSoapTab("P");
+        return;
+      }
+      const todayStr = new Date().toISOString().split("T")[0];
+      if (nextVisitDate < todayStr) {
+        toast.error("Tanggal kontrol tidak valid", {
+          description: "Tanggal rencana kontrol ulang tidak boleh merupakan tanggal lampau.",
+        });
+        setActiveSoapTab("P");
+        return;
+      }
+    }
+
+    if (dischargeDisposition === "Dirujuk ke RS Lain" || dischargeDisposition === "Konsul Internal Poli Lain") {
+      if (!referredToHospital.trim()) {
+        toast.error("Tujuan rujukan/konsul wajib diisi", {
+          description: "Mohon isi nama faskes rujukan atau poliklinik/spesialis konsul internal.",
+        });
+        setActiveSoapTab("P");
+        return;
+      }
+    }
+
+    // 5. Prescription items integrity check
+    if (prescriptions.length > 0) {
+      const invalidRx = prescriptions.find(
+        (rx) => !rx.quantity || rx.quantity <= 0 || !rx.durationDays || rx.durationDays <= 0
+      );
+      if (invalidRx) {
+        toast.error("Data resep obat belum lengkap/valid", {
+          description: `Obat "${invalidRx.medicationName || "Item resep"}" harus memiliki jumlah dan durasi konsumsi yang lebih dari 0.`,
+        });
+        setActiveSoapTab("P");
+        return;
+      }
+    }
+
     const isOptOut = consentStatus === "opt-out";
+    const matchedDept = authDepartments?.find(
+      (d) =>
+        d.name === department ||
+        (department && d.name.toLowerCase() === department.toLowerCase())
+    );
+    const matchedDoc = facilityDoctors.find(
+      (d) =>
+        (doctorName && d.name.includes(doctorName.split(" (")[0])) ||
+        d.name === doctorName ||
+        (user?.role === "doctor" && d.id === user.id)
+    );
+
+    const resolvedFacilityId =
+      facility?.id || activeEncounter?.facilityId || user?.facilityId || "fac-rsud-01";
+    const resolvedDepartmentId =
+      activeEncounter?.departmentId || matchedDept?.id;
+    const resolvedDoctorId =
+      activeEncounter?.doctorId ||
+      (user?.role === "doctor" ? user.id : matchedDoc?.id);
+
     const newEncounter: OutpatientEncounter = {
-      id: activeEncounter?.id || `ENC-${Date.now().toString().slice(-6)}`,
+      id: activeEncounter?.id || generatePrefixedId("enc_"),
+      facilityId: resolvedFacilityId,
+      departmentId: resolvedDepartmentId,
+      doctorId: resolvedDoctorId,
       satusehatEncounterId:
         isOptOut || !isBridgingConnected
           ? undefined
@@ -878,14 +1489,11 @@ export function OutpatientEntryForm({
             `ss-enc-${Math.random().toString(36).substring(2, 10)}`,
       visitDate: activeEncounter?.visitDate || new Date().toISOString(),
       clinicDepartment: department,
-      doctorName: doctorName,
-      doctorSip:
-        doctorSip.trim() || activeEncounter?.doctorSip || "SIP.446/089/DS/Dinkes/2026",
-      doctorIhsId:
-        doctorIhsId.trim() || activeEncounter?.doctorIhsId || "N10009841",
-      hospitalName:
-        activeEncounter?.hospitalName || "RS Umum Daerah Sehat Sejahtera",
-      hospitalOrgId: activeEncounter?.hospitalOrgId || "10000004",
+      doctorName: doctorName || (user?.role === "doctor" ? user.name : undefined) || activeEncounter?.doctorName || "",
+      doctorSip: doctorSip.trim() || user?.sip || activeEncounter?.doctorSip || "",
+      doctorIhsId: doctorIhsId.trim() || user?.ihsPractitionerId || activeEncounter?.doctorIhsId || "",
+      hospitalName: facility?.name || activeEncounter?.hospitalName || user?.facilityName || "",
+      hospitalOrgId: facility?.satusehatOrgId || activeEncounter?.hospitalOrgId || "",
       chiefComplaint,
       anamnesis: `${anamnesis} ${pastMedicalHistory ? `[RPD: ${pastMedicalHistory}]` : ""}`.trim(),
       vitals: {
@@ -900,20 +1508,41 @@ export function OutpatientEntryForm({
         bmi: calculatedBmi ? parseFloat(calculatedBmi) : 22.5,
         physicalExamNotes:
           physicalExamNotes || "Pemeriksaan fisik umum dalam batas normal.",
+        satusehatBpId: activeEncounter?.vitals?.satusehatBpId,
+        satusehatHrId: activeEncounter?.vitals?.satusehatHrId,
+        satusehatTempId: activeEncounter?.vitals?.satusehatTempId,
+        satusehatSpo2Id: activeEncounter?.vitals?.satusehatSpo2Id,
+        satusehatRrId: activeEncounter?.vitals?.satusehatRrId,
+        satusehatWeightId: activeEncounter?.vitals?.satusehatWeightId,
+        satusehatHeightId: activeEncounter?.vitals?.satusehatHeightId,
+        satusehatBmiId: activeEncounter?.vitals?.satusehatBmiId,
       },
-      diagnoses,
-      procedures:
-        procedures.length > 0
-          ? procedures
-          : [
-              {
-                code: "89.07",
-                display: "General medical consultation",
-                category: "Konsultasi Medis",
-                notes: "Konsultasi dan Pemeriksaan Dokter",
-              },
-            ],
-      prescriptions,
+      diagnoses: diagnoses.map((d, idx) => ({
+        ...d,
+        satusehatConditionId:
+          d.satusehatConditionId || activeEncounter?.diagnoses?.[idx]?.satusehatConditionId,
+      })),
+      procedures: (procedures.length > 0
+        ? procedures
+        : [
+            {
+              code: "89.07",
+              display: "General medical consultation",
+              category: "Konsultasi Medis",
+              notes: "Konsultasi dan Pemeriksaan Dokter",
+            },
+          ]).map((p, idx) => ({
+        ...p,
+        satusehatProcedureId:
+          p.satusehatProcedureId || activeEncounter?.procedures?.[idx]?.satusehatProcedureId,
+      })),
+      prescriptions: prescriptions.map((rx, idx) => ({
+        ...rx,
+        satusehatMedicationId:
+          rx.satusehatMedicationId || activeEncounter?.prescriptions?.[idx]?.satusehatMedicationId,
+        satusehatMedicationRequestId:
+          rx.satusehatMedicationRequestId || activeEncounter?.prescriptions?.[idx]?.satusehatMedicationRequestId,
+      })),
       diagnosticOrders: activeEncounter?.diagnosticOrders || [],
       labResults: activeEncounter?.labResults || [],
       radiologyResults: activeEncounter?.radiologyResults || [],
@@ -922,10 +1551,18 @@ export function OutpatientEntryForm({
         nextVisitDate: nextVisitDate.trim() || undefined,
         referredTo: referredToHospital.trim() || undefined,
       },
-      dischargeDisposition: dischargeDisposition,
+      dischargeDisposition:
+        !dischargeDisposition || dischargeDisposition === "Menunggu Pelayanan Poli"
+          ? "Pulang Berobat Jalan"
+          : dischargeDisposition,
       consentStatus: consentStatus,
+      queueNumber: activeEncounter?.queueNumber,
+      registrationNumber: activeEncounter?.registrationNumber,
+      patientId: patient?.id || activeEncounter?.patientId || "",
+      encounterStatus: "finished",
       syncStatus: isOptOut ? "draft" : isBridgingConnected ? "synced" : "pending",
       syncedAt: isOptOut || !isBridgingConnected ? undefined : new Date().toISOString(),
+      syncBreakdown: activeEncounter?.syncBreakdown,
       isLocked: activeEncounter?.isLocked || false,
       addendums: activeEncounter?.addendums || [],
     };
@@ -942,11 +1579,52 @@ export function OutpatientEntryForm({
     await executeSubmission(newEncounter, false);
   };
 
+  // Keyboard Shortcuts: Ctrl+Enter (Simpan) & Ctrl+K (Cari Diagnosa/Obat)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        if (!isReadOnly && !isSubmitting) {
+          e.preventDefault();
+          handleSubmit();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (activeSoapTab === "A") {
+          icdSearchInputRef.current?.focus();
+          setShowIcdDropdown(true);
+        } else if (activeSoapTab === "P") {
+          kfaSearchInputRef.current?.focus();
+          setShowKfaDropdown(true);
+        } else {
+          setActiveSoapTab("A");
+          setTimeout(() => {
+            icdSearchInputRef.current?.focus();
+            setShowIcdDropdown(true);
+          }, 60);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isReadOnly, isSubmitting, handleSubmit, activeSoapTab]);
+
   const bpAlert = getAlertForField("bloodPressure");
   const hrAlert = getAlertForField("heartRate");
   const rrAlert = getAlertForField("respiratoryRate");
   const tempAlert = getAlertForField("temperature");
   const spo2Alert = getAlertForField("oxygenSaturation");
+
+  if (!patient || !patient.id) {
+    return (
+      <ModuleEmptyState
+        icon={Stethoscope}
+        title="Belum Ada Pasien yang Dipilih"
+        description="Silakan pilih pasien dari daftar antrean poliklinik atau daftarkan pasien baru di loket pendaftaran untuk memulai penginputan formulir Rekam Medis Elektronik (SOAP)."
+        actionText="Buka Daftar Antrean Pasien"
+        onAction={onOpenRegistration}
+      />
+    );
+  }
 
   return (
     <div className="ehr-card p-5 space-y-4">
@@ -956,27 +1634,32 @@ export function OutpatientEntryForm({
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-600 text-white shadow-xs shrink-0">
             <Stethoscope className="h-5 w-5" />
           </div>
-          <div>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <h3 className="font-extrabold text-sm text-slate-900">
-                Formulir Input Rekam Medis SOAP (DPJP)
+          <div className="space-y-1.5 min-w-0">
+            {/* Row 1: Title & Accreditation & Integration Badges */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-extrabold text-sm sm:text-base text-slate-900 tracking-tight">
+                Pemeriksaan Rekam Medis SOAP (DPJP)
               </h3>
-              <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-1.5 py-0.2 rounded-md border border-teal-200">
+              <Badge
+                variant="outline"
+                className="text-[9px] font-bold text-teal-800 bg-teal-50 border-teal-200 py-0.5 px-1.5"
+              >
                 Permenkes 24/2022
-              </span>
+              </Badge>
+
               {/* Bridging Connection Status Pill */}
               {isBridgingConnected ? (
-                <span className="text-[10px] font-bold text-emerald-900 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
+                <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  <span>SATUSEHAT Live</span>
+                  <span>SATUSEHAT Terhubung</span>
                 </span>
               ) : (
                 <span className="text-[10px] font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1.5 shadow-2xs">
                   <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-                  <span>Mode Lokal (Offline)</span>
+                  <span>Mode Internal (Offline)</span>
                   {onNavigateToBridging && (
                     <button
                       type="button"
@@ -988,23 +1671,52 @@ export function OutpatientEntryForm({
                   )}
                 </span>
               )}
+
+              {/* Patient Consent Status Badge */}
               {consentStatus === "opt-out" ? (
-                <span className="text-[10px] font-bold text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-300 flex items-center gap-1">
+                <span className="text-[10px] font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1 shadow-2xs">
                   <Lock className="h-3 w-3 text-amber-700" />
-                  <span>Opt-Out (Lokal)</span>
+                  <span>Consent: Ditolak (Internal RS)</span>
                 </span>
               ) : (
-                <span className="text-[10px] font-bold text-teal-900 bg-teal-50 px-1.5 py-0.5 rounded-full border border-teal-300 flex items-center gap-1">
+                <span className="text-[10px] font-bold text-teal-900 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-300 flex items-center gap-1 shadow-2xs">
                   <ShieldCheck className="h-3 w-3 text-teal-700" />
-                  <span>Opt-In (Cloud)</span>
+                  <span>Consent: Disetujui (Cloud)</span>
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-slate-500">
-              Pasien: <strong className="text-slate-800">{patient.name}</strong> • No. RM:{" "}
-              <strong className="font-mono text-slate-700">{patient.mrn.replace(/^RM-?/i, "")}</strong> • NIK:{" "}
-              <strong className="font-mono text-slate-700">{patient.nik}</strong>
-            </p>
+
+            {/* Row 2: Structured Patient Metadata Chips (Lega & Presisi) */}
+            <div className="flex items-center gap-2 flex-wrap text-xs pt-0.5">
+              <span className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight">
+                {patient.name}
+              </span>
+              <span className="text-slate-300 hidden sm:inline">•</span>
+
+              <div
+                title="Nomor Rekam Medis Pasien"
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-slate-100/90 border border-slate-200/90 text-[11px] text-slate-700 shadow-2xs"
+              >
+                <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">
+                  No. RM:
+                </span>
+                <strong className="font-mono font-bold text-slate-900">
+                  {patient.mrn.replace(/^RM-?/i, "")}
+                </strong>
+              </div>
+
+              <div
+                title="Nomor Induk Kependudukan (Dukcapil)"
+                className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-slate-100/90 border border-slate-200/90 text-[11px] text-slate-700 shadow-2xs"
+              >
+                <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">
+                  NIK:
+                </span>
+                <strong className="font-mono font-bold text-slate-900 tracking-wide">
+                  {patient.nik}
+                </strong>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1016,8 +1728,9 @@ export function OutpatientEntryForm({
           </span>
           <button
             type="button"
+            disabled={isReadOnly}
             onClick={() => handleLoadPreset("hipertensi")}
-            className="h-7 text-[11px] font-bold px-2.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95"
+            className="h-7 text-[11px] font-bold px-2.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-300 shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
             title="Terapkan Template SOAP Hipertensi"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
@@ -1025,8 +1738,9 @@ export function OutpatientEntryForm({
           </button>
           <button
             type="button"
+            disabled={isReadOnly}
             onClick={() => handleLoadPreset("ispa")}
-            className="h-7 text-[11px] font-bold px-2.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95"
+            className="h-7 text-[11px] font-bold px-2.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-300 shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
             title="Terapkan Template SOAP ISPA"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-sky-600" />
@@ -1034,8 +1748,9 @@ export function OutpatientEntryForm({
           </button>
           <button
             type="button"
+            disabled={isReadOnly}
             onClick={() => handleLoadPreset("gastritis")}
-            className="h-7 text-[11px] font-bold px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95"
+            className="h-7 text-[11px] font-bold px-2.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
             title="Terapkan Template SOAP Gastritis"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />
@@ -1043,8 +1758,9 @@ export function OutpatientEntryForm({
           </button>
           <button
             type="button"
+            disabled={isReadOnly}
             onClick={() => handleLoadPreset("diabetes")}
-            className="h-7 text-[11px] font-bold px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95"
+            className="h-7 text-[11px] font-bold px-2.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs cursor-pointer transition-all flex items-center gap-1 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
             title="Terapkan Template SOAP Diabetes"
           >
             <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />
@@ -1053,9 +1769,102 @@ export function OutpatientEntryForm({
         </div>
       </div>
 
-      {/* Safety Allergen Alert Banner (Persistent if patient has allergies) */}
+      {/* Finished Encounter Mode Banner (Read-Only View vs Correction Mode) */}
+      {isEncounterFinished && (
+        !isCorrectionMode ? (
+          <div className="px-3.5 py-2.5 rounded-xl bg-slate-50/90 border border-slate-200/80 text-slate-800 flex items-center justify-between gap-3 shadow-2xs animate-fade-in-up">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Badge
+                variant="outline"
+                className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold inline-flex items-center gap-1.5 py-0.5 px-2 shrink-0 shadow-2xs"
+              >
+                <Lock className="h-3 w-3 text-emerald-600 shrink-0" />
+                <span>Arsip Terkunci</span>
+              </Badge>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-extrabold text-xs text-slate-900 truncate">
+                  Rekam Medis Selesai
+                </span>
+                <span
+                  title="Pelayanan kunjungan ini telah selesai dan disahkan. Seluruh kolom formulir terkunci untuk melindungi integritas data medis sesuai Permenkes No. 24/2022."
+                  className="hidden sm:inline text-[11px] text-slate-400 font-medium truncate cursor-help"
+                >
+                  • Dokumen sah terkunci
+                </span>
+              </div>
+            </div>
+            {(!user || user.role === "doctor") && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCorrectionMode(true)}
+                className="h-7.5 text-xs font-bold gap-1.5 bg-white border-slate-200 hover:bg-teal-50 hover:text-teal-800 hover:border-teal-300 text-slate-700 shrink-0 cursor-pointer shadow-2xs btn-press"
+              >
+                <Edit3 className="h-3.5 w-3.5 text-teal-600" />
+                <span>Buka Koreksi</span>
+              </Button>
+            )}
+          </div>
+        ) : (
+          <div className="px-3.5 py-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-amber-950 flex items-center justify-between gap-3 shadow-2xs animate-fade-in-up">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <Badge
+                variant="outline"
+                className="text-[10px] bg-amber-100 text-amber-900 border-amber-300 font-bold inline-flex items-center gap-1.5 py-0.5 px-2 shrink-0 shadow-2xs"
+              >
+                <Edit3 className="h-3 w-3 text-amber-700 shrink-0" />
+                <span>Mode Koreksi</span>
+              </Badge>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="font-extrabold text-xs text-amber-950 truncate">
+                  Revisi Klinis Aktif
+                </span>
+                <span
+                  title="Anda sedang mengoreksi rekam medis yang telah disahkan. Perubahan akan tercatat sebagai amandemen resmi."
+                  className="hidden sm:inline text-[11px] text-amber-800/70 font-medium truncate cursor-help"
+                >
+                  • Perubahan akan memperbarui data
+                </span>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCorrectionMode(false)}
+              className="h-7.5 text-xs font-bold gap-1.5 bg-white border-amber-300 hover:bg-amber-100 text-amber-900 shrink-0 cursor-pointer shadow-2xs btn-press"
+            >
+              <RotateCcw className="h-3.5 w-3.5 text-amber-700" />
+              <span>Batal Koreksi</span>
+            </Button>
+          </div>
+        )
+      )}
+
+      {/* RBAC Role Guard Notice if logged-in user is not a Doctor */}
+      {user && user.role !== "doctor" && (
+        <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 flex items-start gap-3 shadow-2xs">
+          <ShieldCheck className="h-5 w-5 text-teal-600 shrink-0 mt-0.5" />
+          <div className="space-y-0.5 text-xs flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-extrabold text-slate-900 tracking-tight">
+                Mode Peninjauan Rekam Medis (View-Only) • {user.role === "registration" ? "Petugas Pendaftaran" : user.role === "nurse" ? "Perawat Poli" : user.role === "pharmacy" ? "Apoteker / Farmasi" : "Administrator"}
+              </span>
+              <span className="text-[9px] font-bold bg-teal-50 text-teal-800 border border-teal-200 px-1.5 py-0.2 rounded">
+                Permenkes 24/2022
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Sesuai <strong>Permenkes No. 24 Tahun 2022</strong>, pengisian &amp; penandatanganan berkas SOAP merupakan wewenang <strong>Dokter DPJP</strong>. Anda dapat meninjau data catatan medis ini secara lengkap.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Safety Allergen Alert Banner (Persistent & Sticky if patient has allergies) */}
       {patient.allergies && patient.allergies.length > 0 && (
-        <div className="p-2.5 rounded-xl bg-amber-50/90 border border-amber-300 text-xs flex items-center justify-between gap-2 shadow-2xs">
+        <div className="sticky top-2 z-20 p-2.5 rounded-xl bg-amber-50/95 backdrop-blur-md border border-amber-300 text-xs flex items-center justify-between gap-2 shadow-xs transition-all">
           <div className="flex items-center gap-2">
             <ShieldAlert className="h-4 w-4 text-amber-700 shrink-0" />
             <span className="font-bold text-amber-950">
@@ -1065,7 +1874,7 @@ export function OutpatientEntryForm({
               {patient.allergies.map((allg, idx) => (
                 <span
                   key={idx}
-                  className="px-1.5 py-0.5 rounded bg-amber-200/80 text-amber-950 font-bold text-[10px] border border-amber-300"
+                  className="px-1.5 py-0.5 rounded bg-amber-200/90 text-amber-950 font-bold text-[10px] border border-amber-300 shadow-2xs"
                 >
                   ⚠️ {allg}
                 </span>
@@ -1075,6 +1884,51 @@ export function OutpatientEntryForm({
           <span className="text-[10px] text-amber-800 font-semibold hidden sm:inline">
             Pemeriksaan Otomatis Interaksi &amp; Alergi Obat Aktif
           </span>
+        </div>
+      )}
+
+      {/* Draft Auto-Save Recovery Notice Banner */}
+      {savedDraftAvailable && !isReadOnly && (
+        <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs animate-fade-in-up">
+          <div className="flex items-center gap-3">
+            <div className="h-8.5 w-8.5 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+              <RotateCcw className="h-4 w-4" />
+            </div>
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-extrabold text-xs text-amber-950">
+                  Ditemukan Draf Rekam Medis Belum Tersimpan
+                </span>
+                {draftTimestamp && (
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
+                    Disimpan Pukul {draftTimestamp}
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-amber-900 leading-relaxed">
+                Terdapat draf pengisian dari sesi sebelumnya yang belum disahkan. Anda dapat memulihkannya langsung ke formulir.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleRestoreDraft}
+              className="h-8 px-3.5 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white cursor-pointer shadow-2xs btn-press"
+            >
+              Pulihkan Draf
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleDismissDraft}
+              className="h-8 px-3 text-xs font-semibold bg-white border-amber-300 text-amber-900 hover:bg-amber-100 cursor-pointer shadow-2xs"
+            >
+              Abaikan
+            </Button>
+          </div>
         </div>
       )}
 
@@ -1226,7 +2080,7 @@ export function OutpatientEntryForm({
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-teal-950 flex items-center gap-1.5 uppercase tracking-wide">
                 <FileText className="h-3.5 w-3.5 text-teal-700" />
-                <span>Informasi Kunjungan & Keluhan Pasien (Subjective)</span>
+                <span>Informasi Kunjungan &amp; Keluhan Pasien</span>
               </span>
               <span className="text-[10px] text-teal-800 font-bold bg-teal-100/80 px-2 py-0.5 rounded-md border border-teal-200/60 shadow-2xs">
                 Langkah 1 dari 4
@@ -1238,48 +2092,48 @@ export function OutpatientEntryForm({
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span>Poliklinik / Ruang Pelayanan *</span>
+                  {activeEncounter?.encounterStatus === "finished" ? (
+                    <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      🔒 Riwayat Selesai
+                    </span>
+                  ) : activeEncounter?.clinicDepartment ? (
+                    <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
+                      🔒 Terdaftar di Loket
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-teal-700 font-medium">Unit Rawat Jalan</span>
+                  )}
                 </Label>
-                <Input
+                <CustomSelect<string>
                   value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  placeholder="Contoh: Poli Penyakit Dalam"
-                  className="h-9 text-xs bg-white border-slate-200 focus:border-teal-500 rounded-lg shadow-2xs"
+                  options={clinicOptions}
+                  onChange={handleClinicChange}
+                  placeholder="Pilih Poliklinik..."
+                  className="w-full"
+                  disabled={Boolean(activeEncounter?.clinicDepartment) || isReadOnly}
+                  title={
+                    activeEncounter?.clinicDepartment
+                      ? "Poliklinik dikunci sesuai data registrasi pendaftaran loket."
+                      : undefined
+                  }
                 />
               </div>
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span>Dokter Penanggung Jawab (DPJP) *</span>
+                  <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" />
+                    <span>SIP &amp; IHS Terverifikasi</span>
+                  </span>
                 </Label>
-                <Input
+                <CustomSelect<string>
                   value={doctorName}
-                  onChange={(e) => setDoctorName(e.target.value)}
-                  placeholder="Contoh: dr. Rian Pratama, Sp.PD"
-                  className="h-9 text-xs bg-white border-slate-200 focus:border-teal-500 rounded-lg shadow-2xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                  <span>Nomor Surat Izin Praktik (SIP)</span>
-                </Label>
-                <Input
-                  value={doctorSip}
-                  onChange={(e) => setDoctorSip(e.target.value)}
-                  placeholder="SIP.446/089/DS/Dinkes/2026"
-                  className="h-9 text-xs bg-white border-slate-200 focus:border-teal-500 rounded-lg font-mono text-[11px] shadow-2xs"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
-                  <span>ID IHS Praktisi SATUSEHAT</span>
-                </Label>
-                <Input
-                  value={doctorIhsId}
-                  onChange={(e) => setDoctorIhsId(e.target.value)}
-                  placeholder="N10009841"
-                  className="h-9 text-xs bg-white border-slate-200 focus:border-teal-500 rounded-lg font-mono text-[11px] shadow-2xs"
+                  options={doctorOptions}
+                  onChange={handleDoctorChange}
+                  placeholder="Pilih Dokter DPJP..."
+                  className="w-full"
+                  disabled={isReadOnly}
                 />
               </div>
             </div>
@@ -1297,12 +2151,14 @@ export function OutpatientEntryForm({
               <Input
                 value={chiefComplaint}
                 onChange={(e) => setChiefComplaint(e.target.value)}
+                disabled={isReadOnly}
+                readOnly={isReadOnly}
                 placeholder="Contoh: Nyeri kepala tengkuk berdenyut sejak 3 hari"
                 className={`h-9 text-xs bg-white rounded-lg ${
                   !chiefComplaint.trim()
                     ? "border-red-400 focus:ring-red-300 ring-1 ring-red-200"
                     : "border-teal-300 focus:border-teal-500"
-                }`}
+                } ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed border-slate-200" : ""}`}
               />
             </div>
 
@@ -1314,22 +2170,30 @@ export function OutpatientEntryForm({
               <textarea
                 value={anamnesis}
                 onChange={(e) => setAnamnesis(e.target.value)}
+                disabled={isReadOnly}
+                readOnly={isReadOnly}
                 rows={3}
                 placeholder="Jelaskan onset, durasi, lokasi, kualitas nyeri, faktor pemberat/peringan, serta riwayat pengobatan sebelumnya..."
-                className="w-full text-xs p-2.5 rounded-lg border border-teal-200 bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 leading-relaxed text-slate-800"
+                className={`w-full text-xs p-2.5 rounded-lg border border-teal-200 bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 leading-relaxed text-slate-800 ${
+                  isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed border-slate-200" : ""
+                }`}
               />
             </div>
 
             {/* Riwayat Penyakit Dahulu & Riwayat Keluarga */}
             <div className="space-y-1">
               <Label className="text-xs font-semibold text-slate-700">
-                Riwayat Penyakit Dahulu (RPD) & Riwayat Keluarga
+                Riwayat Penyakit Dahulu (RPD) &amp; Riwayat Keluarga
               </Label>
               <Input
                 value={pastMedicalHistory}
                 onChange={(e) => setPastMedicalHistory(e.target.value)}
+                disabled={isReadOnly}
+                readOnly={isReadOnly}
                 placeholder="Contoh: Hipertensi sejak 2021, DM disangkal. Ayah riwayat stroke."
-                className="h-9 text-xs bg-white border-slate-200 focus:border-teal-500 rounded-lg"
+                className={`h-9 text-xs bg-white border-slate-200 focus:border-teal-500 rounded-lg ${
+                  isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed border-slate-200" : ""
+                }`}
               />
             </div>
           </div>
@@ -1343,7 +2207,7 @@ export function OutpatientEntryForm({
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-teal-950 flex items-center gap-1.5 uppercase tracking-wide">
                 <Activity className="h-3.5 w-3.5 text-teal-700" />
-                <span>Tanda-Tanda Vital & Pemeriksaan Fisik (Objective)</span>
+                <span>Tanda-Tanda Vital &amp; Pemeriksaan Fisik</span>
               </span>
               <span className="text-[10px] text-teal-800 font-bold bg-teal-100/80 px-2 py-0.5 rounded-md border border-teal-200/60 shadow-2xs">
                 Langkah 2 dari 4
@@ -1360,8 +2224,10 @@ export function OutpatientEntryForm({
                 <Input
                   type="number"
                   value={systolic}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(e) => setSystolic(e.target.value)}
-                  className="h-8 font-mono text-xs bg-slate-50/50"
+                  className={`h-8 font-mono text-xs ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : "bg-slate-50/50"}`}
                 />
                 {bpAlert ? (
                   <span
@@ -1389,8 +2255,10 @@ export function OutpatientEntryForm({
                 <Input
                   type="number"
                   value={diastolic}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(e) => setDiastolic(e.target.value)}
-                  className="h-8 font-mono text-xs bg-slate-50/50"
+                  className={`h-8 font-mono text-xs ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : "bg-slate-50/50"}`}
                 />
                 <span className="text-[9px] text-slate-400 block truncate">Normal: 60-80</span>
               </div>
@@ -1403,8 +2271,10 @@ export function OutpatientEntryForm({
                 <Input
                   type="number"
                   value={heartRate}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(e) => setHeartRate(e.target.value)}
-                  className="h-8 font-mono text-xs bg-slate-50/50"
+                  className={`h-8 font-mono text-xs ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : "bg-slate-50/50"}`}
                 />
                 {hrAlert ? (
                   <span
@@ -1432,8 +2302,10 @@ export function OutpatientEntryForm({
                   type="number"
                   step="0.1"
                   value={temperature}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(e) => setTemperature(e.target.value)}
-                  className="h-8 font-mono text-xs bg-slate-50/50"
+                  className={`h-8 font-mono text-xs ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : "bg-slate-50/50"}`}
                 />
                 {tempAlert ? (
                   <span
@@ -1462,8 +2334,10 @@ export function OutpatientEntryForm({
                 <Input
                   type="number"
                   value={respiratoryRate}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(e) => setRespiratoryRate(e.target.value)}
-                  className="h-8 font-mono text-xs bg-slate-50/50"
+                  className={`h-8 font-mono text-xs ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : "bg-slate-50/50"}`}
                 />
                 {rrAlert ? (
                   <span className="text-[9px] font-bold text-slate-600 block truncate">{rrAlert.label}</span>
@@ -1479,8 +2353,10 @@ export function OutpatientEntryForm({
                 <Input
                   type="number"
                   value={oxygenSaturation}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(e) => setOxygenSaturation(e.target.value)}
-                  className="h-8 font-mono text-xs bg-slate-50/50"
+                  className={`h-8 font-mono text-xs ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : "bg-slate-50/50"}`}
                 />
                 {spo2Alert ? (
                   <span
@@ -1505,8 +2381,10 @@ export function OutpatientEntryForm({
                   type="number"
                   step="0.5"
                   value={weightKg}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(e) => setWeightKg(e.target.value)}
-                  className="h-8 font-mono text-xs bg-slate-50/50"
+                  className={`h-8 font-mono text-xs ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : "bg-slate-50/50"}`}
                 />
                 {calculatedBmi && (
                   <span className="text-[9px] font-mono text-slate-500 block truncate">
@@ -1522,8 +2400,10 @@ export function OutpatientEntryForm({
                 <Input
                   type="number"
                   value={heightCm}
+                  disabled={isReadOnly}
+                  readOnly={isReadOnly}
                   onChange={(e) => setHeightCm(e.target.value)}
-                  className="h-8 font-mono text-xs bg-slate-50/50"
+                  className={`h-8 font-mono text-xs ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : "bg-slate-50/50"}`}
                 />
                 {calculatedBmi && (
                   <span
@@ -1545,9 +2425,13 @@ export function OutpatientEntryForm({
               <textarea
                 value={physicalExamNotes}
                 onChange={(e) => setPhysicalExamNotes(e.target.value)}
+                disabled={isReadOnly}
+                readOnly={isReadOnly}
                 rows={2}
                 placeholder="Mata, THT, Thorax (Cor/Pulmo), Abdomen, Ekstremitas, Status Lokalis..."
-                className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 leading-relaxed text-slate-800 font-sans"
+                className={`w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 leading-relaxed text-slate-800 font-sans ${
+                  isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""
+                }`}
               />
             </div>
 
@@ -1558,7 +2442,7 @@ export function OutpatientEntryForm({
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-extrabold text-teal-950 flex items-center gap-1.5 uppercase tracking-wide">
                     <FlaskConical className="h-3.5 w-3.5 text-teal-700" />
-                    <span>Hasil Penunjang Terintegrasi (Lab & Radiologi)</span>
+                    <span>Hasil Penunjang Terintegrasi</span>
                   </span>
                   <div className="flex items-center gap-1.5">
                     {activeEncounter.labResults && activeEncounter.labResults.length > 0 && (
@@ -1578,7 +2462,7 @@ export function OutpatientEntryForm({
                 {activeEncounter.labResults && activeEncounter.labResults.length > 0 && (
                   <div className="rounded-xl border border-teal-200 bg-white p-2.5 space-y-1.5 shadow-2xs">
                     <span className="text-[10px] font-bold text-slate-700 uppercase block">
-                      Hasil Laboratorium (LOINC):
+                      Hasil Laboratorium:
                     </span>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                       {activeEncounter.labResults.map((lr) => (
@@ -1661,11 +2545,19 @@ export function OutpatientEntryForm({
               <div className="flex items-center gap-2">
                 <span className="text-xs font-extrabold text-teal-950 flex items-center gap-1.5 uppercase tracking-wide">
                   <Stethoscope className="h-3.5 w-3.5 text-teal-700" />
-                  <span>Diagnosis Medis (ICD-10)</span>
+                  <span>Diagnosis Medis</span>
                 </span>
-                <span className="text-[10px] text-teal-800 font-bold bg-teal-100 px-2 py-0.5 rounded-full border border-teal-200/60">
-                  *Wajib Minimal 1 Diagnosa Utama
-                </span>
+                {diagnoses.some((d) => d.type === "primary") ? (
+                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    Diagnosa Utama Terpenuhi
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-amber-900 font-bold bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 flex items-center gap-1 animate-pulse">
+                    <AlertTriangle className="h-3 w-3 text-amber-600" />
+                    Wajib 1 Diagnosa Utama
+                  </span>
+                )}
               </div>
               <span className="text-[10px] text-teal-800 font-bold bg-teal-100/80 px-2 py-0.5 rounded-md border border-teal-200/60 shadow-2xs">
                 Langkah 3 dari 4
@@ -1674,127 +2566,137 @@ export function OutpatientEntryForm({
 
             {/* Selected Diagnoses Chips */}
             <div className="flex flex-wrap gap-2">
-              {diagnoses.map((d) => (
-                <div
-                  key={d.code}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs shadow-2xs ${
-                    d.type === "primary"
-                      ? "bg-teal-50 border-teal-300 text-teal-950 font-bold ring-1 ring-teal-500/20"
-                      : "bg-white border-slate-200 text-slate-800"
-                  }`}
-                >
-                  <span
-                    className={`font-mono font-bold px-1.5 py-0.5 rounded text-[10px] ${
+              {diagnoses.length === 0 ? (
+                <div className="p-2.5 text-slate-400 text-xs italic">
+                  Belum ada diagnosis medis yang dipilih.
+                </div>
+              ) : (
+                diagnoses.map((d) => (
+                  <div
+                    key={d.code}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs shadow-2xs ${
                       d.type === "primary"
-                        ? "bg-teal-700 text-white"
-                        : "bg-slate-100 text-slate-700 border border-slate-200"
+                        ? "bg-teal-50 border-teal-300 text-teal-950 font-bold ring-1 ring-teal-500/20"
+                        : "bg-white border-slate-200 text-slate-800"
                     }`}
                   >
-                    {d.code}
-                  </span>
-                  <span>{d.patientFriendlyName}</span>
-                  {d.type === "primary" ? (
-                    <span className="text-[9px] text-teal-800 font-extrabold uppercase bg-teal-200/70 px-1 py-0.2 rounded">
-                      Utama
+                    <span
+                      className={`font-mono font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                        d.type === "primary"
+                          ? "bg-teal-700 text-white"
+                          : "bg-slate-100 text-slate-700 border border-slate-200"
+                      }`}
+                    >
+                      {d.code}
                     </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleSetPrimaryDiagnosis(d.code)}
-                      className="text-[9px] text-teal-700 hover:underline cursor-pointer"
-                      title="Jadikan Diagnosa Utama"
-                    >
-                      (Set Utama)
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveDiagnosis(d.code)}
-                    className="text-slate-400 hover:text-red-600 p-0.5 rounded transition-colors cursor-pointer ml-1 font-bold"
-                    title="Hapus diagnosis"
-                  >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* ICD-10 Search & Dropdown Selector */}
-            <div className="relative pt-1">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                  <Input
-                    value={icdSearch}
-                    onFocus={() => setShowIcdDropdown(true)}
-                    onChange={(e) => {
-                      setIcdSearch(e.target.value);
-                      setShowIcdDropdown(true);
-                    }}
-                    placeholder="Cari kode ICD-10 atau nama penyakit (contoh: I10, E11, ISPA, Gastritis, Asma)..."
-                    className="h-8.5 text-xs bg-white pl-8 border-slate-300 rounded-lg"
-                  />
-                </div>
-                {showIcdDropdown && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowIcdDropdown(false)}
-                    className="h-8.5 text-xs text-slate-500 cursor-pointer"
-                  >
-                    Tutup
-                  </Button>
-                )}
-              </div>
-
-              {showIcdDropdown && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-52 overflow-y-auto divide-y divide-slate-100">
-                  {filteredIcdOptions.map((item) => (
-                    <button
-                      key={item.code}
-                      type="button"
-                      onClick={() => handleAddDiagnosis(item)}
-                      className="w-full text-left p-2.5 hover:bg-teal-50 transition-colors flex items-center justify-between text-xs cursor-pointer"
-                    >
-                      <div>
-                        <span className="font-bold text-slate-900">{item.name}</span>
-                        <span className="text-[10px] text-slate-500 block">{item.display}</span>
-                      </div>
-                      <span className="font-mono text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
-                        {item.code}
+                    <span>{d.patientFriendlyName}</span>
+                    {d.type === "primary" ? (
+                      <span className="text-[9px] text-teal-800 font-extrabold uppercase bg-teal-200/70 px-1 py-0.2 rounded">
+                        Utama
                       </span>
-                    </button>
-                  ))}
-                  {icdSearch.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => handleAddCustomDiagnosis(icdSearch)}
-                      className="w-full text-left p-2.5 bg-teal-50/80 hover:bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-between cursor-pointer"
-                    >
-                      <span>+ Gunakan Diagnosa Kustom: "{icdSearch}"</span>
-                      <span className="font-mono text-[10px] bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200">
-                        Kustom
-                      </span>
-                    </button>
-                  )}
-                </div>
+                    ) : !isReadOnly ? (
+                      <button
+                        type="button"
+                        onClick={() => handleSetPrimaryDiagnosis(d.code)}
+                        className="text-[10px] font-bold text-teal-700 bg-teal-50 hover:bg-teal-100 border border-teal-200 px-1.5 py-0.5 rounded-md flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                        title="Jadikan Diagnosa Utama"
+                      >
+                        <Star className="h-2.5 w-2.5 text-amber-500 fill-amber-500" />
+                        <span>Jadikan Utama</span>
+                      </button>
+                    ) : null}
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDiagnosis(d.code)}
+                        className="text-slate-400 hover:text-red-600 p-0.5 rounded transition-colors cursor-pointer ml-1 font-bold"
+                        title="Hapus diagnosis"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))
               )}
             </div>
+
+            {/* ICD-10 Search & Dropdown Selector (Only when not Read-Only) */}
+            {!isReadOnly && (
+              <div className="relative pt-1">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                    <Input
+                      ref={icdSearchInputRef}
+                      value={icdSearch}
+                      onFocus={() => setShowIcdDropdown(true)}
+                      onChange={(e) => {
+                        setIcdSearch(e.target.value);
+                        setShowIcdDropdown(true);
+                      }}
+                      placeholder="Cari kode atau nama diagnosis (contoh: I10, E11, ISPA, Gastritis, Asma)..."
+                      className="h-8.5 text-xs bg-white pl-8 pr-14 border-slate-300 rounded-lg"
+                    />
+                    <kbd className="absolute right-2.5 top-2 hidden sm:inline-flex items-center text-[9px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">
+                      Ctrl+K
+                    </kbd>
+                  </div>
+                  {showIcdDropdown && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowIcdDropdown(false)}
+                      className="h-8.5 text-xs text-slate-500 cursor-pointer"
+                    >
+                      Tutup
+                    </Button>
+                  )}
+                </div>
+
+                {showIcdDropdown && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-52 overflow-y-auto divide-y divide-slate-100">
+                    {filteredIcdOptions.map((item) => (
+                      <button
+                        key={item.code}
+                        type="button"
+                        onClick={() => handleAddDiagnosis(item)}
+                        className="w-full text-left p-2.5 hover:bg-teal-50 transition-colors flex items-center justify-between text-xs cursor-pointer"
+                      >
+                        <div>
+                          <span className="font-bold text-slate-900">{item.name}</span>
+                          <span className="text-[10px] text-slate-500 block">{item.display}</span>
+                        </div>
+                        <span className="font-mono text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                          {item.code}
+                        </span>
+                      </button>
+                    ))}
+                    {icdSearch.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => handleAddCustomDiagnosis(icdSearch)}
+                        className="w-full text-left p-2.5 bg-teal-50/80 hover:bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-between cursor-pointer"
+                      >
+                        <span>+ Gunakan Diagnosa Kustom: "{icdSearch}"</span>
+                        <span className="font-mono text-[10px] bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200">
+                          Kustom
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 2. Tindakan / Prosedur Medis ICD-9-CM */}
           <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
-                  <Syringe className="h-3.5 w-3.5 text-teal-600" />
-                  <span>Tindakan &amp; Prosedur Medis (ICD-9-CM)</span>
-                </span>
-                <span className="text-[10px] text-teal-800 font-bold bg-teal-100 px-2 py-0.5 rounded-full">
-                  FHIR Procedure
-                </span>
-              </div>
+              <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
+                <Syringe className="h-3.5 w-3.5 text-teal-600" />
+                <span>Tindakan &amp; Prosedur Medis</span>
+              </span>
               <span className="text-[10px] font-mono text-slate-500">
                 {procedures.length} Tindakan Dipilih
               </span>
@@ -1802,113 +2704,125 @@ export function OutpatientEntryForm({
 
             {/* Selected Procedures Chips */}
             <div className="flex flex-wrap gap-2">
-              {procedures.map((p) => (
-                <div
-                  key={p.code}
-                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs shadow-2xs bg-white border-teal-200 text-slate-800"
-                >
-                  <span className="font-mono font-bold px-1.5 py-0.5 rounded text-[10px] bg-teal-700 text-white">
-                    {p.code}
-                  </span>
-                  <span className="font-semibold text-slate-900">{p.notes || p.display}</span>
-                  <span className="text-[9px] text-teal-800 font-semibold bg-teal-50 px-1 py-0.5 rounded border border-teal-200">
-                    {p.category}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveProcedure(p.code)}
-                    className="text-slate-400 hover:text-red-600 p-0.5 rounded transition-colors cursor-pointer ml-1 font-bold"
-                    title="Hapus tindakan"
+              {procedures.length === 0 ? (
+                <div className="p-2.5 text-slate-400 text-xs italic">
+                  Belum ada tindakan medis yang dipilih.
+                </div>
+              ) : (
+                procedures.map((p) => (
+                  <div
+                    key={p.code}
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs shadow-2xs bg-white border-teal-200 text-slate-800"
                   >
-                    ×
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick Common Presets */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-1">
-              <span className="text-[10px] font-bold text-slate-500">Preset Cepat:</span>
-              {COMMON_ICD9_LIST.slice(0, 6).map((proc) => (
-                <button
-                  key={proc.code}
-                  type="button"
-                  onClick={() => handleAddProcedure(proc)}
-                  className="text-[10px] bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-900 border border-slate-200 hover:border-teal-300 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-                >
-                  <span className="font-mono font-semibold text-teal-700">{proc.code}</span>
-                  <span>{proc.name}</span>
-                </button>
-              ))}
-            </div>
-
-            {/* ICD-9-CM Search & Dropdown Selector */}
-            <div className="relative pt-1">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
-                  <Input
-                    value={icd9Search}
-                    onFocus={() => setShowIcd9Dropdown(true)}
-                    onChange={(e) => {
-                      setIcd9Search(e.target.value);
-                      setShowIcd9Dropdown(true);
-                    }}
-                    placeholder="Cari kode ICD-9-CM atau nama tindakan (contoh: 89.52, EKG, Nebulisasi, Injeksi, Rawat Luka)..."
-                    className="h-8.5 text-xs bg-white pl-8 border-slate-300 rounded-lg"
-                  />
-                </div>
-                {showIcd9Dropdown && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowIcd9Dropdown(false)}
-                    className="h-8.5 text-xs text-slate-500 cursor-pointer"
-                  >
-                    Tutup
-                  </Button>
-                )}
-              </div>
-
-              {showIcd9Dropdown && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-52 overflow-y-auto divide-y divide-slate-100">
-                  {filteredIcd9Options.map((item) => (
-                    <button
-                      key={item.code}
-                      type="button"
-                      onClick={() => handleAddProcedure(item)}
-                      className="w-full text-left p-2.5 hover:bg-teal-50 transition-colors flex items-center justify-between text-xs cursor-pointer"
-                    >
-                      <div>
-                        <span className="font-bold text-slate-900">{item.name}</span>
-                        <span className="text-[10px] text-slate-500 block">{item.display}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                          {item.category}
-                        </span>
-                        <span className="font-mono text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
-                          {item.code}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                  {icd9Search.trim() && (
-                    <button
-                      type="button"
-                      onClick={() => handleAddCustomProcedure(icd9Search)}
-                      className="w-full text-left p-2.5 bg-teal-50/80 hover:bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-between cursor-pointer"
-                    >
-                      <span>+ Gunakan Tindakan Kustom: "{icd9Search}"</span>
-                      <span className="font-mono text-[10px] bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200">
-                        Kustom
-                      </span>
-                    </button>
-                  )}
-                </div>
+                    <span className="font-mono font-bold px-1.5 py-0.5 rounded text-[10px] bg-teal-700 text-white">
+                      {p.code}
+                    </span>
+                    <span className="font-semibold text-slate-900">{p.notes || p.display}</span>
+                    <span className="text-[9px] text-teal-800 font-semibold bg-teal-50 px-1 py-0.5 rounded border border-teal-200">
+                      {p.category}
+                    </span>
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveProcedure(p.code)}
+                        className="text-slate-400 hover:text-red-600 p-0.5 rounded transition-colors cursor-pointer ml-1 font-bold"
+                        title="Hapus tindakan"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ))
               )}
             </div>
+
+            {/* Quick Common Presets (Only when not Read-Only) */}
+            {!isReadOnly && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                <span className="text-[10px] font-bold text-slate-500">Preset Cepat:</span>
+                {COMMON_ICD9_LIST.slice(0, 6).map((proc) => (
+                  <button
+                    key={proc.code}
+                    type="button"
+                    onClick={() => handleAddProcedure(proc)}
+                    className="text-[10px] bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-900 border border-slate-200 hover:border-teal-300 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                  >
+                    <span className="font-mono font-semibold text-teal-700">{proc.code}</span>
+                    <span>{proc.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* ICD-9-CM Search & Dropdown Selector (Only when not Read-Only) */}
+            {!isReadOnly && (
+              <div className="relative pt-1">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                    <Input
+                      value={icd9Search}
+                      onFocus={() => setShowIcd9Dropdown(true)}
+                      onChange={(e) => {
+                        setIcd9Search(e.target.value);
+                        setShowIcd9Dropdown(true);
+                      }}
+                      placeholder="Cari kode atau nama tindakan (contoh: 89.52, EKG, Nebulisasi, Injeksi, Rawat Luka)..."
+                      className="h-8.5 text-xs bg-white pl-8 border-slate-300 rounded-lg"
+                    />
+                  </div>
+                  {showIcd9Dropdown && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowIcd9Dropdown(false)}
+                      className="h-8.5 text-xs text-slate-500 cursor-pointer"
+                    >
+                      Tutup
+                    </Button>
+                  )}
+                </div>
+
+                {showIcd9Dropdown && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-52 overflow-y-auto divide-y divide-slate-100">
+                    {filteredIcd9Options.map((item) => (
+                      <button
+                        key={item.code}
+                        type="button"
+                        onClick={() => handleAddProcedure(item)}
+                        className="w-full text-left p-2.5 hover:bg-teal-50 transition-colors flex items-center justify-between text-xs cursor-pointer"
+                      >
+                        <div>
+                          <span className="font-bold text-slate-900">{item.name}</span>
+                          <span className="text-[10px] text-slate-500 block">{item.display}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[9px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                            {item.category}
+                          </span>
+                          <span className="font-mono text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                            {item.code}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                    {icd9Search.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => handleAddCustomProcedure(icd9Search)}
+                        className="w-full text-left p-2.5 bg-teal-50/80 hover:bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-between cursor-pointer"
+                      >
+                        <span>+ Gunakan Tindakan Kustom: "{icd9Search}"</span>
+                        <span className="font-mono text-[10px] bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200">
+                          Kustom
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1922,7 +2836,7 @@ export function OutpatientEntryForm({
               <div className="flex items-center gap-2">
                 <span className="text-xs font-extrabold text-teal-950 flex items-center gap-1.5 uppercase tracking-wide">
                   <Pill className="h-3.5 w-3.5 text-teal-700" />
-                  <span>Penulisan E-Resep Obat (Kamus Farmasi KFA)</span>
+                  <span>Penulisan E-Resep Obat</span>
                 </span>
                 <span className="text-[10px] text-teal-800/80 font-mono hidden sm:inline">
                   ({prescriptions.length} Item Obat)
@@ -1946,69 +2860,159 @@ export function OutpatientEntryForm({
               </div>
             )}
 
-            {/* KFA Search Bar */}
-            <div className="relative">
-              <Input
-                value={kfaSearch}
-                onChange={(e) => setKfaSearch(e.target.value)}
-                placeholder="Ketik nama obat KFA (Contoh: Paracetamol, Amlodipine, Metformin, Amoxicillin, Omeprazole)..."
-                className="text-xs bg-white border-slate-300 focus:border-teal-500 pr-8 h-9 rounded-lg"
-              />
-              {kfaSearch && (
-                <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-52 overflow-y-auto divide-y divide-slate-100">
-                  {filteredKfaOptions.map((med) => {
-                    const hasAllergyConflict = checkDrugAllergyConflict(
-                      patient.allergies,
-                      med.name
-                    ).hasConflict;
+            {/* Quick Common Presets (Only when not Read-Only) */}
+            {!isReadOnly && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                <span className="text-[10px] font-bold text-slate-500">Preset Cepat:</span>
+                {KFA_MEDICATIONS_DATABASE.slice(0, 6).map((med) => (
+                  <button
+                    key={med.kfaCode}
+                    type="button"
+                    onClick={() => handleAddKfaMedication(med)}
+                    className="text-[10px] bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-900 border border-slate-200 hover:border-teal-300 px-2 py-0.5 rounded-md transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                  >
+                    <span className="font-semibold text-slate-900">{med.name.split(" ")[0]}</span>
+                    <span className="text-slate-500 font-mono text-[9px]">{med.strength}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
-                    return (
-                      <button
-                        key={med.kfaCode}
-                        type="button"
-                        onClick={() => handleAddKfaMedication(med)}
-                        className={`w-full text-left p-2.5 transition-colors flex items-center justify-between text-xs cursor-pointer ${
-                          hasAllergyConflict
-                            ? "bg-red-50/70 hover:bg-red-100/80"
-                            : "hover:bg-teal-50/80"
-                        }`}
-                      >
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-900">{med.name}</span>
-                            {hasAllergyConflict && (
-                              <span className="text-[9px] bg-red-600 text-white font-extrabold px-1.5 py-0.2 rounded">
-                                ⚠️ Alergi Pasien
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            {med.genericName} • {med.form} • {med.strength}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className="font-mono text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
-                            KFA: {med.kfaCode}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
-                  {kfaSearch.trim() && (
-                    <button
+            {/* KFA Search Bar (Only when not Read-Only) */}
+            {!isReadOnly && (
+              <div className="relative pt-1">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
+                    <Input
+                      ref={kfaSearchInputRef}
+                      value={kfaSearch}
+                      onFocus={() => setShowKfaDropdown(true)}
+                      onClick={() => setShowKfaDropdown(true)}
+                      onChange={(e) => {
+                        setKfaSearch(e.target.value);
+                        setShowKfaDropdown(true);
+                      }}
+                      placeholder="Ketik nama obat KFA (Contoh: Paracetamol, Amlodipine, Metformin, Amoxicillin, Omeprazole)..."
+                      className="h-8.5 text-xs bg-white pl-8 pr-14 border-slate-300 rounded-lg focus:border-teal-500"
+                    />
+                    <kbd className="absolute right-2.5 top-2 hidden sm:inline-flex items-center text-[9px] font-mono bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">
+                      Ctrl+K
+                    </kbd>
+                  </div>
+                  {showKfaDropdown && (
+                    <Button
                       type="button"
-                      onClick={() => handleAddCustomMedication(kfaSearch)}
-                      className="w-full text-left p-2.5 bg-teal-50/80 hover:bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-between cursor-pointer"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowKfaDropdown(false)}
+                      className="h-8.5 text-xs text-slate-500 cursor-pointer"
                     >
-                      <span>+ Tambahkan Obat Kustom: "{kfaSearch}"</span>
-                      <span className="font-mono text-[10px] bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200">
-                        Kustom
-                      </span>
-                    </button>
+                      Tutup
+                    </Button>
                   )}
                 </div>
-              )}
-            </div>
+
+                {showKfaDropdown && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    <div className="p-2 bg-slate-50/90 text-[10px] font-bold text-slate-500 border-b border-slate-100 flex items-center justify-between">
+                      <span>DAFTAR OBAT KAMUS FARMASI (KFA)</span>
+                      <span>{filteredKfaOptions.length} Obat Tersedia</span>
+                    </div>
+                    {filteredKfaOptions.map((med) => {
+                      const hasAllergyConflict = checkDrugAllergyConflict(
+                        patient?.allergies,
+                        med.name
+                      ).hasConflict;
+
+                      return (
+                        <button
+                          key={med.kfaCode}
+                          type="button"
+                          onClick={() => handleAddKfaMedication(med)}
+                          className={`w-full text-left p-2.5 transition-colors flex items-center justify-between text-xs cursor-pointer ${
+                            hasAllergyConflict
+                              ? "bg-red-50/70 hover:bg-red-100/80"
+                              : "hover:bg-teal-50/80"
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-slate-900">{med.name}</span>
+                              {hasAllergyConflict && (
+                                <span className="text-[9px] bg-red-600 text-white font-extrabold px-1.5 py-0.2 rounded">
+                                  ⚠️ Alergi Pasien
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-500">
+                              {med.genericName} • {med.form} • {med.strength}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-mono text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                              KFA: {med.kfaCode}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                    {kfaSearch.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => handleAddCustomMedication(kfaSearch)}
+                        className="w-full text-left p-2.5 bg-teal-50/80 hover:bg-teal-100 text-teal-950 font-bold text-xs flex items-center justify-between cursor-pointer"
+                      >
+                        <span>+ Tambahkan Obat Kustom: "{kfaSearch}"</span>
+                        <span className="font-mono text-[10px] bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200">
+                          Kustom
+                        </span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Safety Guard: Persistent Drug Allergy Conflict Banner */}
+            {(() => {
+              if (!patient?.allergies || patient.allergies.length === 0 || prescriptions.length === 0) return null;
+              const conflicts: { medName: string; conflict: string }[] = [];
+              for (const rx of prescriptions) {
+                const check = checkDrugAllergyConflict(patient.allergies, rx.medicationName);
+                if (check.hasConflict) {
+                  conflicts.push({
+                    medName: rx.medicationName,
+                    conflict: check.conflictingAllergens.join(", ") || (check.message || "Alergi Pasien"),
+                  });
+                }
+              }
+              if (conflicts.length === 0) return null;
+
+              return (
+                <div className="p-3.5 rounded-xl bg-red-50 border border-red-300 text-red-950 space-y-2 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4.5 w-4.5 text-red-600 shrink-0" />
+                    <span className="font-extrabold text-xs text-red-900 uppercase tracking-wide">
+                      Peringatan Kritis: Potensi Reaksi Alergi Obat Terdeteksi!
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-red-800 leading-relaxed">
+                    Satu atau lebih obat dalam resep bertentangan dengan riwayat alergi yang tercatat pada profil pasien:
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {conflicts.map((c, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-red-200/90 text-red-950 font-bold text-[11px] border border-red-300"
+                      >
+                        ⚠️ <strong>{c.medName}</strong> &rarr; {c.conflict}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Prescribed Items Table with Inline Controls */}
             <div className="space-y-2.5">
@@ -2044,16 +3048,18 @@ export function OutpatientEntryForm({
                           )}
                         </div>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemovePrescription(idx)}
-                          className="h-7 w-7 text-slate-400 hover:text-red-600 shrink-0 cursor-pointer"
-                          title="Hapus item obat"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                        {!isReadOnly && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemovePrescription(idx)}
+                            className="h-7 w-7 text-slate-400 hover:text-red-600 shrink-0 cursor-pointer"
+                            title="Hapus item obat"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                       </div>
 
                       {/* Interactive Dose, Frequency & Timing Inputs */}
@@ -2064,11 +3070,13 @@ export function OutpatientEntryForm({
                           </Label>
                           <Input
                             value={p.frequency}
+                            disabled={isReadOnly}
+                            readOnly={isReadOnly}
                             onChange={(e) =>
                               handleUpdatePrescription(idx, "frequency", e.target.value)
                             }
                             placeholder="Contoh: 3 x 1 tablet sehari"
-                            className="h-7 text-xs bg-white border-slate-300"
+                            className={`h-7 text-xs bg-white border-slate-300 ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
                           />
                         </div>
 
@@ -2076,18 +3084,22 @@ export function OutpatientEntryForm({
                           <Label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">
                             Waktu Minum:
                           </Label>
-                          <select
-                            value={p.timing}
-                            onChange={(e) =>
-                              handleUpdatePrescription(idx, "timing", e.target.value)
+                          <CustomSelect<string>
+                            value={p.timing || "Sesudah Makan"}
+                            disabled={isReadOnly}
+                            onChange={(val) =>
+                              handleUpdatePrescription(idx, "timing", val)
                             }
-                            className="w-full h-7 text-xs bg-white border border-slate-300 rounded px-1.5 text-slate-800 font-medium"
-                          >
-                            <option value="Sesudah Makan">Sesudah Makan</option>
-                            <option value="Sebelum Makan">Sebelum Makan</option>
-                            <option value="Bersama Makanan">Bersama Makanan</option>
-                            <option value="Sesuai Kebutuhan">Sesuai Kebutuhan (PRN)</option>
-                          </select>
+                            size="sm"
+                            className="w-full"
+                            buttonClassName={`h-7 text-xs bg-white border-slate-300 font-medium px-2 py-0.5 ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
+                            options={[
+                              { value: "Sesudah Makan", label: "Sesudah Makan" },
+                              { value: "Sebelum Makan", label: "Sebelum Makan" },
+                              { value: "Bersama Makanan", label: "Bersama Makanan" },
+                              { value: "Sesuai Kebutuhan", label: "Sesuai Kebutuhan (PRN)" },
+                            ]}
+                          />
                         </div>
 
                         <div className="grid grid-cols-2 gap-1.5">
@@ -2099,6 +3111,8 @@ export function OutpatientEntryForm({
                               type="number"
                               min="1"
                               value={p.quantity}
+                              disabled={isReadOnly}
+                              readOnly={isReadOnly}
                               onChange={(e) =>
                                 handleUpdatePrescription(
                                   idx,
@@ -2106,7 +3120,7 @@ export function OutpatientEntryForm({
                                   parseInt(e.target.value) || 1
                                 )
                               }
-                              className="h-7 text-xs bg-white border-slate-300 font-bold"
+                              className={`h-7 text-xs bg-white border-slate-300 font-bold ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
                             />
                           </div>
                           <div>
@@ -2117,6 +3131,8 @@ export function OutpatientEntryForm({
                               type="number"
                               min="1"
                               value={p.durationDays}
+                              disabled={isReadOnly}
+                              readOnly={isReadOnly}
                               onChange={(e) =>
                                 handleUpdatePrescription(
                                   idx,
@@ -2124,7 +3140,7 @@ export function OutpatientEntryForm({
                                   parseInt(e.target.value) || 1
                                 )
                               }
-                              className="h-7 text-xs bg-white border-slate-300 font-bold"
+                              className={`h-7 text-xs bg-white border-slate-300 font-bold ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
                             />
                           </div>
                         </div>
@@ -2141,65 +3157,87 @@ export function OutpatientEntryForm({
             <div className="flex items-center justify-between">
               <Label className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
                 <Clock className="h-3.5 w-3.5 text-teal-600" />
-                <span>Disposisi Kepulangan & Rencana Tindak Lanjut</span>
+                <span>Disposisi Kepulangan &amp; Rencana Tindak Lanjut</span>
               </Label>
-              <span className="text-[10px] font-mono text-teal-700 bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                FHIR CarePlan & Encounter.dischargeDisposition
-              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="space-y-1">
                 <Label className="text-xs font-semibold text-slate-700">Disposisi Pasien (Cara Keluar Poli):</Label>
-                <select
+                <CustomSelect<string>
                   value={dischargeDisposition}
-                  onChange={(e) => setDischargeDisposition(e.target.value)}
-                  className="w-full h-9 text-xs bg-white border border-slate-300 rounded-lg px-2.5 text-slate-800 font-medium focus:border-teal-500 focus:outline-none"
-                >
-                  <option value="Pulang Berobat Jalan">Pulang Berobat Jalan (Selesai Pelayanan)</option>
-                  <option value="Kontrol Kembali">Kontrol Kembali (Jadwal Terencana)</option>
-                  <option value="Rawat Inap">Rawat Inap / Opname (Admisi)</option>
-                  <option value="Dirujuk ke RS Lain">Dirujuk ke RS / Faskes Lain (Eksternal)</option>
-                  <option value="Konsul Internal Poli Lain">Konsul Internal Poli Lain</option>
-                  <option value="Meninggal">Meninggal Dunia</option>
-                </select>
+                  disabled={isReadOnly}
+                  onChange={(val) => setDischargeDisposition(val)}
+                  size="md"
+                  className="w-full"
+                  buttonClassName={`h-9 bg-white border-slate-300 rounded-lg ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
+                  options={[
+                    { value: "Pulang Berobat Jalan", label: "Pulang Berobat Jalan (Selesai Pelayanan)" },
+                    { value: "Kontrol Kembali", label: "Kontrol Kembali (Jadwal Terencana)" },
+                    { value: "Rawat Inap", label: "Rawat Inap / Opname (Admisi)" },
+                    { value: "Dirujuk ke RS Lain", label: "Dirujuk ke RS / Faskes Lain (Eksternal)" },
+                    { value: "Konsul Internal Poli Lain", label: "Konsul Internal Poli Lain" },
+                    { value: "Meninggal", label: "Meninggal Dunia" },
+                  ]}
+                />
               </div>
 
               {(dischargeDisposition === "Kontrol Kembali" || dischargeDisposition === "Pulang Berobat Jalan") && (
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-slate-700">Tanggal Rencana Kontrol Ulang (Opsional):</Label>
+                  <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <span>Tanggal Rencana Kontrol Ulang:</span>
+                    {dischargeDisposition === "Kontrol Kembali" ? (
+                      <span className="inline-flex items-center gap-0.5 text-rose-500 font-bold text-2xs bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                        * Wajib Diisi
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 font-normal text-2xs">(Opsional)</span>
+                    )}
+                  </Label>
                   <CustomDatePicker
                     value={nextVisitDate}
+                    disabled={isReadOnly}
                     onChange={setNextVisitDate}
                     placeholder="Pilih Tanggal Kontrol Ulang..."
                     minDate={new Date().toISOString().split("T")[0]}
                     size="md"
-                    buttonClassName="h-9 text-xs bg-white border-slate-300 rounded-lg shadow-2xs font-mono"
+                    buttonClassName={`h-9 text-xs bg-white border-slate-300 rounded-lg shadow-2xs font-mono ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
                   />
                 </div>
               )}
 
               {(dischargeDisposition === "Dirujuk ke RS Lain" || dischargeDisposition === "Konsul Internal Poli Lain") && (
                 <div className="space-y-1">
-                  <Label className="text-xs font-semibold text-slate-700">Tujuan Faskes Rujukan / Spesialis Konsul:</Label>
+                  <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                    <span>Tujuan Faskes Rujukan / Spesialis Konsul:</span>
+                    <span className="inline-flex items-center gap-0.5 text-rose-500 font-bold text-2xs bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                      * Wajib Diisi
+                    </span>
+                  </Label>
                   <Input
                     value={referredToHospital}
+                    disabled={isReadOnly}
+                    readOnly={isReadOnly}
                     onChange={(e) => setReferredToHospital(e.target.value)}
                     placeholder="Contoh: RSUPN Dr. Cipto Mangunkusumo / Poli Jantung"
-                    className="h-9 text-xs bg-white border-slate-300 rounded-lg"
+                    className={`h-9 text-xs bg-white border-slate-300 rounded-lg ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
                   />
                 </div>
               )}
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs font-semibold text-slate-700">Instruksi Edukasi & Catatan Pulang Pasien:</Label>
+              <Label className="text-xs font-semibold text-slate-700">Instruksi Edukasi &amp; Catatan Pulang Pasien:</Label>
               <textarea
                 value={followUpNotes}
+                disabled={isReadOnly}
+                readOnly={isReadOnly}
                 onChange={(e) => setFollowUpNotes(e.target.value)}
                 rows={2}
                 placeholder="Instruksi diet, anjuran istirahat, jadwal minum obat, tanda bahaya yang harus diwaspadai..."
-                className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 leading-relaxed text-slate-800 font-sans"
+                className={`w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-white focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 leading-relaxed text-slate-800 font-sans ${
+                  isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""
+                }`}
               />
             </div>
           </div>
@@ -2209,10 +3247,11 @@ export function OutpatientEntryForm({
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
                 <Shield className="h-3.5 w-3.5 text-teal-600" />
-                <span>Persetujuan Pertukaran Data (SATUSEHAT Consent)</span>
+                <span>Persetujuan Pertukaran Data SATUSEHAT</span>
               </span>
-              <span className="text-[10px] font-mono text-slate-500">
-                Hak Privasi Pasien
+              <span className="text-[10px] text-teal-700 bg-teal-100/70 font-semibold px-2 py-0.5 rounded-md flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3 text-teal-600" />
+                Otomatis Diwarisi dari Profil Pasien
               </span>
             </div>
 
@@ -2220,11 +3259,15 @@ export function OutpatientEntryForm({
               {/* Option 1: Opt-In */}
               <button
                 type="button"
+                disabled={isReadOnly}
                 onClick={() => {
+                  if (isReadOnly) return;
                   setConsentStatus("opt-in");
-                  toast.success("Status persetujuan: Opt-In (Sinkronisasi cloud SATUSEHAT diizinkan)");
+                  toast.success("Persetujuan pasien: Opt-In");
                 }}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
+                  isReadOnly ? "cursor-not-allowed opacity-90" : "cursor-pointer"
+                } ${
                   consentStatus === "opt-in"
                     ? "bg-teal-50/80 border-teal-400 ring-2 ring-teal-500/20 shadow-xs"
                     : "bg-white border-slate-200 hover:border-teal-200 hover:bg-slate-50/50"
@@ -2251,7 +3294,7 @@ export function OutpatientEntryForm({
                     )}
                   </div>
                   <p className="text-[10px] text-slate-500 leading-relaxed">
-                    Sinkronkan bundle resume medis ke Cloud SATUSEHAT via HL7 FHIR R4 standard. Pasien dapat mengakses riwayat di SATUSEHAT Mobile.
+                    Pertukaran data resume medis ke SATUSEHAT aktif sesuai persetujuan pasien.
                   </p>
                 </div>
               </button>
@@ -2259,11 +3302,15 @@ export function OutpatientEntryForm({
               {/* Option 2: Opt-Out */}
               <button
                 type="button"
+                disabled={isReadOnly}
                 onClick={() => {
+                  if (isReadOnly) return;
                   setConsentStatus("opt-out");
-                  toast.info("Status persetujuan: Opt-Out (Data hanya disimpan di SIMRS lokal)");
+                  toast.info("Persetujuan pasien: Opt-Out");
                 }}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`p-3 rounded-xl border text-left transition-all flex items-start gap-2.5 ${
+                  isReadOnly ? "cursor-not-allowed opacity-90" : "cursor-pointer"
+                } ${
                   consentStatus === "opt-out"
                     ? "bg-amber-50/80 border-amber-400 ring-2 ring-amber-500/20 shadow-xs"
                     : "bg-white border-slate-200 hover:border-amber-200 hover:bg-slate-50/50"
@@ -2290,7 +3337,7 @@ export function OutpatientEntryForm({
                     )}
                   </div>
                   <p className="text-[10px] text-slate-500 leading-relaxed">
-                    Simpan rekam medis hanya di SIMRS lokal rumah sakit. Transmisi ke cloud SATUSEHAT diblokir (FHIR Consent Deny) demi hak privasi pasien.
+                    Rekam medis disimpan di fasilitas kesehatan tanpa pengiriman ke SATUSEHAT (Opt-Out).
                   </p>
                 </div>
               </button>
@@ -2357,6 +3404,45 @@ export function OutpatientEntryForm({
               </span>
               <ChevronRight className="h-3.5 w-3.5" />
             </Button>
+          ) : user && user.role !== "doctor" ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={true}
+              className="h-9 px-4 text-xs font-semibold gap-1.5 bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed shadow-none"
+              title="Sesuai Permenkes 24/2022, finalisasi SOAP hanya dapat dilakukan oleh Dokter DPJP."
+            >
+              <Lock className="h-3.5 w-3.5 text-slate-400" />
+              <span>Mode Peninjauan (Wewenang Dokter DPJP)</span>
+            </Button>
+          ) : isReadOnly ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsCorrectionMode(true)}
+              className="h-9 px-4 text-xs font-bold gap-1.5 bg-white border-teal-300 hover:bg-teal-50 text-teal-900 shadow-xs cursor-pointer btn-press"
+            >
+              <Edit3 className="h-3.5 w-3.5 text-teal-600" />
+              <span>Buka Mode Koreksi / Edit</span>
+            </Button>
+          ) : isCorrectionMode ? (
+            <Button
+              type="button"
+              variant="medical"
+              size="sm"
+              onClick={handleSubmit}
+              disabled={isSubmitting}
+              className="h-9 px-4 text-xs font-bold gap-1.5 shadow-sm cursor-pointer bg-amber-600 hover:bg-amber-700 text-white"
+            >
+              <Save className="h-3.5 w-3.5" />
+              <span>
+                {isSubmitting
+                  ? "Menyimpan Perubahan..."
+                  : "Simpan Perubahan (Ctrl+↵)"}
+              </span>
+            </Button>
           ) : (
             <Button
               type="button"
@@ -2375,8 +3461,8 @@ export function OutpatientEntryForm({
                   <Lock className="h-3.5 w-3.5" />
                   <span>
                     {isSubmitting
-                      ? "Menyimpan ke SIMRS Lokal..."
-                      : "Simpan Rekam Medis Lokal (Tanpa Sinkronisasi)"}
+                      ? "Menyimpan..."
+                      : "Simpan Rekam Medis (Ctrl+↵)"}
                   </span>
                 </>
               ) : (
@@ -2384,16 +3470,16 @@ export function OutpatientEntryForm({
                   <Send className="h-3.5 w-3.5" />
                   <span>
                     {isSubmitting
-                      ? "Menyinkronkan ke SATUSEHAT..."
-                      : "Simpan & Sinkronkan Resume Medis (FHIR)"}
+                      ? "Menyimpan Resume Medis..."
+                      : "Simpan Resume Medis (Ctrl+↵)"}
                   </span>
                 </>
               )}
             </Button>
           )}
 
-          {/* Quick Direct Sync Button (Available anytime if required fields are met) */}
-          {activeSoapTab !== "P" && isTabSComplete && isTabOComplete && isTabAComplete && (
+          {/* Quick Direct Sync Button (Available anytime if required fields are met and NOT in read-only mode) */}
+          {(!user || user.role === "doctor") && !isReadOnly && activeSoapTab !== "P" && isTabSComplete && isTabOComplete && isTabAComplete && (
             <Button
               type="button"
               variant="outline"
@@ -2401,23 +3487,31 @@ export function OutpatientEntryForm({
               onClick={handleSubmit}
               disabled={isSubmitting}
               className={`h-9 px-3 text-xs font-bold gap-1 cursor-pointer ${
-                consentStatus === "opt-out"
+                isCorrectionMode
+                  ? "text-amber-900 bg-amber-50 border-amber-300 hover:bg-amber-100"
+                  : consentStatus === "opt-out"
                   ? "text-amber-900 bg-amber-50 border-amber-300 hover:bg-amber-100"
                   : "text-teal-800 bg-teal-50 border-teal-300 hover:bg-teal-100"
               }`}
               title={
-                consentStatus === "opt-out"
-                  ? "Kelengkapan SOAP Terpenuhi. Simpan langsung ke SIMRS Lokal (Status Opt-Out Pasien)."
-                  : "Kelengkapan SOAP Terpenuhi. Simpan langsung & sinkronkan ke SATUSEHAT."
+                isCorrectionMode
+                  ? "Kelengkapan SOAP terpenuhi. Simpan pembaruan rekam medis."
+                  : "Kelengkapan SOAP terpenuhi. Simpan rekam medis."
               }
             >
-              {consentStatus === "opt-out" ? (
+              {isCorrectionMode ? (
+                <Save className="h-3.5 w-3.5 text-amber-600" />
+              ) : consentStatus === "opt-out" ? (
                 <Lock className="h-3.5 w-3.5 text-amber-600" />
               ) : (
                 <CheckCircle2 className="h-3.5 w-3.5 text-teal-600" />
               )}
               <span className="hidden sm:inline">
-                {consentStatus === "opt-out" ? "Simpan Lokal" : "Langsung Simpan"}
+                {isCorrectionMode
+                  ? "Simpan Pembaruan"
+                  : consentStatus === "opt-out"
+                  ? "Simpan Internal"
+                  : "Langsung Simpan"}
               </span>
             </Button>
           )}
@@ -2441,7 +3535,7 @@ export function OutpatientEntryForm({
                   Koneksi Bridging SATUSEHAT Belum Aktif
                 </h3>
                 <span className="text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 shrink-0 whitespace-nowrap">
-                  Mode Lokal
+                  Mode Internal
                 </span>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
@@ -2458,7 +3552,7 @@ export function OutpatientEntryForm({
               <div className="text-xs text-slate-700 leading-relaxed space-y-1">
                 <span className="font-bold text-slate-900 block">Jaminan Keamanan Rekam Medis (Zero Data Loss)</span>
                 <span>
-                  Catatan medis pasien <strong>{patient.name}</strong> tidak akan hilang. Data akan disimpan secara aman pada database lokal SIMRS dengan status <strong>Menunggu Pengiriman (Draft / Pending)</strong>.
+                  Catatan medis pasien <strong>{patient.name}</strong> tidak akan hilang. Data akan disimpan secara aman pada basis data internal RS dengan status <strong>Menunggu Pengiriman (Draft / Pending)</strong>.
                 </span>
               </div>
             </div>
@@ -2486,14 +3580,14 @@ export function OutpatientEntryForm({
                 <div className="space-y-0.5 flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-slate-900 group-hover:text-teal-900 min-w-0">
-                      Simpan ke SIMRS Lokal & Antrekan Pengiriman
+                      Simpan Rekam Medis
                     </span>
                     <span className="text-[9px] font-extrabold text-teal-800 bg-teal-100 border border-teal-200 px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap">
                       Rekomendasi DPJP
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-600 leading-relaxed">
-                    Simpan rekam medis pasien di database RS sekarang agar pelayanan pasien selesai. Pengiriman ke SATUSEHAT dapat dilakukan nanti saat koneksi sudah aktif.
+                    Simpan rekam medis pasien agar pelayanan selesai. Pengiriman ke SATUSEHAT dapat dilakukan saat koneksi aktif.
                   </p>
                 </div>
               </button>
@@ -2546,6 +3640,27 @@ export function OutpatientEntryForm({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 5. Animated SATUSEHAT Syncing Loading Overlay Modal with Non-Blocking Option */}
+      <SatusehatSyncLoadingModal
+        isOpen={isSubmitting}
+        patient={patient}
+        encounter={activeEncounter}
+        doctorName={doctorName}
+        department={department}
+        isOptOut={consentStatus === "opt-out"}
+        isCorrectionMode={isCorrectionMode}
+        onContinueInBackground={() => {
+          setIsSubmitting(false);
+          if (lastSubmittedEncounter) {
+            onEncounterCreated(lastSubmittedEncounter);
+          }
+          toast.info("Rekam medis berhasil disimpan", {
+            description: "Proses sinkronisasi SATUSEHAT tetap dilanjutkan di latar belakang.",
+            duration: 5000,
+          });
+        }}
+      />
     </div>
   );
 }

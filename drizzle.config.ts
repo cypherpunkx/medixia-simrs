@@ -1,10 +1,12 @@
 import { defineConfig } from "drizzle-kit";
 
 export default defineConfig({
-  dialect: "sqlite",
+  dialect: "postgresql",
   schema: "./src/lib/db/schema.ts",
   out: "./drizzle",
   dbCredentials: {
-    url: "./data/simrs_rme.db",
+    url:
+      process.env.DATABASE_URL ||
+      "postgres://postgres:admin@localhost:5432/medixia_simrs",
   },
 });

@@ -29,8 +29,8 @@ import {
 import { PatientProfile, OutpatientEncounter } from "@/lib/satusehat/types";
 
 interface PatientProfileBannerProps {
-  patient: PatientProfile;
-  encounter?: OutpatientEncounter;
+  patient?: PatientProfile | null;
+  encounter?: OutpatientEncounter | null;
   onOpenPrintModal: () => void;
   isBridgingActive?: boolean;
 }
@@ -42,6 +42,8 @@ export function PatientProfileBanner({
   isBridgingActive = false,
 }: PatientProfileBannerProps) {
   const [showQrModal, setShowQrModal] = useState(false);
+
+  if (!patient || !patient.id) return null;
 
   const birthYear = new Date(patient.birthDate).getFullYear();
   const currentYear = new Date().getFullYear();
@@ -68,10 +70,10 @@ export function PatientProfileBanner({
               {patient.satusehatConsent === "opt-out" ? (
                 <span
                   className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 border border-amber-300 shrink-0 transition-all duration-150 hover:bg-amber-100/80"
-                  title="Pasien memilih Opt-Out: Rekam medis disimpan lokal RS, tidak dikirimkan ke cloud SATUSEHAT sesuai UU No. 27/2022"
+                  title="Pasien memilih Opt-Out: Rekam medis disimpan internal RS, tidak dikirimkan ke cloud SATUSEHAT sesuai UU No. 27/2022"
                 >
                   <Lock className="h-3 w-3 text-amber-700 shrink-0" />
-                  <span>SATUSEHAT • Opt-Out (Lokal)</span>
+                  <span>SATUSEHAT • Opt-Out (Internal)</span>
                 </span>
               ) : isBridgingActive ? (
                 <span
@@ -131,6 +133,15 @@ export function PatientProfileBanner({
             <span className="text-slate-400 font-sans text-[11px]">No. RM:</span>
             <strong className="text-slate-900 font-bold">{patient.mrn.replace(/^RM-?/i, "")}</strong>
           </div>
+          {encounter?.registrationNumber && (
+            <>
+              <span className="text-slate-300 hidden sm:inline select-none">•</span>
+              <div className="inline-flex items-center gap-1 whitespace-nowrap">
+                <span className="text-blue-600 font-sans text-[11px]">No. Reg:</span>
+                <strong className="text-blue-900 font-bold">{encounter.registrationNumber}</strong>
+              </div>
+            </>
+          )}
           <span className="text-slate-300 hidden sm:inline select-none">•</span>
           <div className="inline-flex items-center gap-1 whitespace-nowrap">
             <span className="text-slate-400 font-sans text-[11px]">NIK:</span>
@@ -222,28 +233,12 @@ export function PatientProfileBanner({
           </span>
         </div>
 
-        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200 flex flex-col justify-between">
-          <div className="flex items-center justify-between gap-1">
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">
-              ID SATUSEHAT
-            </span>
-            {isBridgingActive ? (
-              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded border border-emerald-300 shrink-0 whitespace-nowrap">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
-                <span>Terhubung</span>
-              </span>
-            ) : (
-              <span
-                className="inline-flex items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-100/90 px-1.5 py-0.5 rounded border border-amber-300 shrink-0 whitespace-nowrap"
-                title="ID Rekam Medis Lokal (Belum tersinkronisasi ke Cloud SATUSEHAT Kemenkes)"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                <span>Draft Lokal</span>
-              </span>
-            )}
-          </div>
+        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+            ID SATUSEHAT
+          </span>
           <span
-            className={`font-mono text-xs font-bold block mt-0.5 truncate ${isBridgingActive ? "text-teal-700" : "text-slate-800"}`}
+            className={`font-mono text-xs font-bold block mt-1 truncate ${isBridgingActive ? "text-teal-700" : "text-slate-800"}`}
             title={patient.id}
           >
             {patient.id}

@@ -59,21 +59,26 @@ export function validateIHS(ihs: string): ValidationResult {
 
 /**
  * Validasi Nomor Kartu BPJS / JKN
- * - Opsional jika kosong (kecuali isRequired = true)
- * - Jika diisi, harus 13 digit numerik
+ * - Wajib 13 digit angka jika isRequired = true atau jika diisi
  */
 export function validateBPJS(noBpjs: string, isRequired = false): ValidationResult {
   const clean = noBpjs.trim();
   if (!clean) {
     if (isRequired) {
-      return { isValid: false, message: 'Nomor kartu BPJS wajib diisi.' };
+      return { isValid: false, message: 'Nomor kartu BPJS Kesehatan (13 digit) wajib diisi untuk penjamin BPJS.' };
     }
     return { isValid: true };
   }
-  if (!/^\d{13}$/.test(clean)) {
+  if (!/^\d+$/.test(clean)) {
+    return {
+      isValid: false,
+      message: 'Nomor kartu BPJS hanya boleh berisi angka.',
+    };
+  }
+  if (clean.length !== 13) {
     return { 
       isValid: false, 
-      message: `Nomor BPJS harus 13 digit angka (saat ini ${clean.length} digit).` 
+      message: `Nomor kartu BPJS harus 13 digit angka (saat ini ${clean.length} digit).` 
     };
   }
   return { isValid: true };

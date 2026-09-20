@@ -19,13 +19,13 @@ export async function GET(req: NextRequest) {
     let data: PatientProfile | PatientProfile[] | null;
 
     if (nik) {
-      data = PatientRepository.getByNik(nik);
+      data = await PatientRepository.getByNik(nik);
     } else if (mrn) {
-      data = PatientRepository.getByMrn(mrn);
+      data = await PatientRepository.getByMrn(mrn);
     } else if (q) {
-      data = PatientRepository.search(q);
+      data = await PatientRepository.search(q);
     } else {
-      data = PatientRepository.getAll();
+      data = await PatientRepository.getAll();
     }
 
     const durationMs = Number((performance.now() - startTime).toFixed(2));
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Check duplicate NIK
-    const existingNik = PatientRepository.getByNik(body.nik.trim());
+    const existingNik = await PatientRepository.getByNik(body.nik.trim());
     if (existingNik) {
       return NextResponse.json(
         {
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
 
     // Check duplicate MRN if provided
     if (body.mrn && body.mrn.trim()) {
-      const existingMrn = PatientRepository.getByMrn(body.mrn.trim());
+      const existingMrn = await PatientRepository.getByMrn(body.mrn.trim());
       if (existingMrn) {
         return NextResponse.json(
           {
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const created = PatientRepository.create(body);
+    const created = await PatientRepository.create(body);
     return NextResponse.json({ success: true, data: created }, { status: 201 });
   } catch (error) {
     return NextResponse.json(

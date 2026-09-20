@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   Copy,
   Check,
-  ExternalLink,
   Layers,
   KeyRound,
   FileCode,
@@ -20,16 +19,25 @@ import {
   RefreshCw,
   AlertTriangle,
   Clock,
-  Zap,
-  Info,
-  ArrowRight,
   WifiOff,
+  Activity,
+  Stethoscope,
+  Scissors,
+  AlertCircle,
+  Pill,
+  ClipboardList,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Building2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   AuthSession,
   OutpatientEncounter,
+  PatientProfile,
   ResourceSyncItem,
 } from "@/lib/satusehat/types";
 import { toast } from "sonner";
@@ -37,32 +45,113 @@ import { toast } from "sonner";
 interface SatusehatFhirDetailModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  encounter: OutpatientEncounter;
+  encounter?: OutpatientEncounter | null;
+  patient?: PatientProfile | null;
   session: AuthSession | null;
-  onOpenCodeSnippet?: () => void;
   onRefreshToken?: () => void;
   isRefreshing?: boolean;
   onSelectiveRetry?: (targetTypes?: string[]) => Promise<void> | void;
-  onSimulatePartialDrop?: () => void;
   isRetrying?: boolean;
 }
+
+interface CategoryDefinition {
+  key: string;
+  resourceType: string;
+  name: string;
+  standard: string;
+  clinicalDomain: string;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const CANONICAL_FHIR_CATEGORIES: CategoryDefinition[] = [
+  {
+    key: "Consent",
+    resourceType: "Consent",
+    name: "Persetujuan Pasien (Informed Consent)",
+    standard: "HL7 FHIR R4 (IDS)",
+    clinicalDomain: "Legal & Privasi Pasien (UU PDP No. 27/2022)",
+    icon: ShieldCheck,
+  },
+  {
+    key: "Encounter",
+    resourceType: "Encounter",
+    name: "Kunjungan Rawat Jalan (AMB)",
+    standard: "HL7 FHIR R4",
+    clinicalDomain: "Administrasi & Registrasi Kunjungan",
+    icon: Layers,
+  },
+  {
+    key: "Observation",
+    resourceType: "Observation",
+    name: "TTV & Pemeriksaan Penunjang (Lab / Rad)",
+    standard: "LOINC, DICOM & Standar Kemenkes",
+    clinicalDomain: "Pemeriksaan Fisik, Nilai Lab & Laporan Diagnostik",
+    icon: Activity,
+  },
+  {
+    key: "Condition",
+    resourceType: "Condition",
+    name: "Diagnosis Klinis (Primer & Sekunder)",
+    standard: "ICD-10 (WHO/Kemenkes)",
+    clinicalDomain: "Penegakan Diagnostik",
+    icon: Stethoscope,
+  },
+  {
+    key: "Procedure",
+    resourceType: "Procedure",
+    name: "Tindakan Medis & Edukasi",
+    standard: "ICD-9-CM (WHO/Kemenkes)",
+    clinicalDomain: "Intervensi Klinis",
+    icon: Scissors,
+  },
+  {
+    key: "AllergyIntolerance",
+    resourceType: "AllergyIntolerance",
+    name: "Keamanan Pasien & Riwayat Alergi",
+    standard: "HL7 FHIR R4 (SNOMED-CT)",
+    clinicalDomain: "Patient Safety",
+    icon: AlertCircle,
+  },
+  {
+    key: "MedicationRequest",
+    resourceType: "MedicationRequest",
+    name: "Resep Elektronik & Farmasi",
+    standard: "KFA Kemenkes (9300...)",
+    clinicalDomain: "Terapi Farmakologi",
+    icon: Pill,
+  },
+  {
+    key: "CarePlan",
+    resourceType: "CarePlan",
+    name: "Rencana Asuhan & Instruksi Kontrol",
+    standard: "HL7 FHIR R4 (SNOMED-CT)",
+    clinicalDomain: "Instruksi Tindak Lanjut",
+    icon: ClipboardList,
+  },
+  {
+    key: "Composition",
+    resourceType: "Composition",
+    name: "Resume Medis Rawat Jalan Terpadu",
+    standard: "HL7 FHIR R4 (DIC)",
+    clinicalDomain: "Agregasi Rekam Medis Elektronik",
+    icon: FileText,
+  },
+];
 
 export function SatusehatFhirDetailModal({
   isOpen,
   onOpenChange,
   encounter,
+  patient,
   session,
-  onOpenCodeSnippet,
   onRefreshToken,
   isRefreshing = false,
   onSelectiveRetry,
-  onSimulatePartialDrop,
   isRetrying = false,
 }: SatusehatFhirDetailModalProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  const [retryingSingleType, setRetryingSingleType] = useState<string | null>(
-    null
-  );
+  const [retryingSingleType, setRetryingSingleType] = useState<string | null>(null);
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -71,123 +160,272 @@ export function SatusehatFhirDetailModal({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  const isOptOut = encounter.consentStatus === "opt-out";
-  const isEncounterSynced = encounter.syncStatus === "synced";
-  const isEncounterPartialFailed = encounter.syncStatus === "partial_failed";
-  const isEncounterPending = !isEncounterSynced && !isEncounterPartialFailed;
+  const encId = encounter?.id || "draft";
+  const isOptOut = encounter?.consentStatus === "opt-out";
+  const isEncounterSynced = encounter?.syncStatus === "synced";
+  const isEncounterPartialFailed = encounter?.syncStatus === "partial_failed";
 
-  // Build default breakdown based on truthful encounter sync state
-  const defaultBreakdown: ResourceSyncItem[] = [
-    {
+  // Build high-fidelity draft granular breakdown representing all 18 clinical FHIR resources
+  const defaultGranularBreakdown = useMemo<ResourceSyncItem[]>(() => {
+    const list: ResourceSyncItem[] = [];
+
+    // 1. Consent
+    list.push({
       resourceType: "Consent",
       label: isOptOut ? "Persetujuan Pasien (Opt-Out)" : "Persetujuan Pasien (Opt-In)",
       standard: "HL7 FHIR R4 (IDS)",
-      category: "Legal & Privasi Pasien (UU PDP)",
+      category: "Legal & Privasi Pasien",
       status: isEncounterSynced ? "synced" : "pending",
-      httpStatus: isEncounterSynced ? (isOptOut ? 200 : 201) : undefined,
-      fhirId: isEncounterSynced
-        ? (isOptOut ? `ss-con-optout-${encounter.id}` : `ss-con-${encounter.id}`)
-        : undefined,
-    },
-    {
+      httpStatus: isEncounterSynced ? 200 : undefined,
+      fhirId: isEncounterSynced ? `ss-con-${encId}` : undefined,
+    });
+
+    // 2. Encounter
+    list.push({
       resourceType: "Encounter",
-      label: "Kunjungan Rawat Jalan (AMB)",
+      label: `Kunjungan Rawat Jalan (${encounter?.clinicDepartment || "Poli Rawat Jalan"})`,
       standard: "HL7 FHIR R4",
       category: "Administrasi Kunjungan",
       status: isEncounterSynced ? "synced" : "pending",
       httpStatus: isEncounterSynced ? 201 : undefined,
-      fhirId: encounter.satusehatEncounterId || (isEncounterSynced ? `ss-enc-${encounter.id}` : undefined),
-    },
-    {
-      resourceType: "Observation",
-      label: `TTV & Antropometri (${encounter.vitals ? "8 items" : "Pemeriksaan Fisik"})`,
-      standard: "LOINC",
-      category: "Pemeriksaan Fisik",
-      status: isEncounterSynced ? "synced" : "pending",
-      httpStatus: isEncounterSynced ? 201 : undefined,
-      fhirId: isEncounterSynced ? `ss-obs-${encounter.id}` : undefined,
-    },
-    {
-      resourceType: "Condition",
-      label: `Diagnosis ICD-10 (${encounter.diagnoses?.length || 0} items)`,
-      standard: "ICD-10 (WHO/Kemenkes)",
-      category: "Penegakan Diagnostik",
-      status: isEncounterSynced ? "synced" : "pending",
-      httpStatus: isEncounterSynced ? 201 : undefined,
-      fhirId: isEncounterSynced ? `ss-cnd-${encounter.id}` : undefined,
-    },
-    {
-      resourceType: "Procedure",
-      label: `Tindakan ICD-9-CM (${encounter.procedures?.length || 0} items)`,
-      standard: "ICD-9-CM",
-      category: "Intervensi Klinis",
-      status: isEncounterSynced ? "synced" : "pending",
-      httpStatus: isEncounterSynced ? 201 : undefined,
-      fhirId: isEncounterSynced ? `ss-prc-${encounter.id}` : undefined,
-    },
-    {
+      fhirId: encounter?.satusehatEncounterId || (isEncounterSynced ? `ss-enc-${encId}` : undefined),
+    });
+
+    // 3. Observations (8 Vitals + Lab Results)
+    const vitals = encounter?.vitals;
+    const observationDefinitions = [
+      { key: "systolic", name: "Tekanan Darah Sistolik", code: "8480-6", unit: "mmHg", val: vitals?.systolic || 120 },
+      { key: "diastolic", name: "Tekanan Darah Diastolik", code: "8462-4", unit: "mmHg", val: vitals?.diastolic || 80 },
+      { key: "heartRate", name: "Detak Jantung / Nadi", code: "8867-4", unit: "bpm", val: vitals?.heartRate || 78 },
+      { key: "respiratoryRate", name: "Laju Pernapasan", code: "9279-1", unit: "/min", val: vitals?.respiratoryRate || 18 },
+      { key: "temperature", name: "Suhu Tubuh", code: "8310-5", unit: "°C", val: vitals?.temperature || 36.6 },
+      { key: "height", name: "Tinggi Badan", code: "8302-2", unit: "cm", val: vitals?.heightCm || 165 },
+      { key: "weight", name: "Berat Badan", code: "29463-7", unit: "kg", val: vitals?.weightKg || 60 },
+      { key: "bmi", name: "Indeks Massa Tubuh (BMI)", code: "39156-5", unit: "kg/m2", val: vitals?.bmi || 22.0 },
+    ];
+
+    observationDefinitions.forEach((obs) => {
+      list.push({
+        resourceType: "Observation",
+        label: `${obs.name} (${obs.val} ${obs.unit})`,
+        standard: `LOINC ${obs.code}`,
+        category: "Pemeriksaan Fisik (TTV)",
+        status: isEncounterSynced ? "synced" : "pending",
+        httpStatus: isEncounterSynced ? 201 : undefined,
+        fhirId: isEncounterSynced ? `ss-obs-${obs.key}-${encId}` : undefined,
+      });
+    });
+
+    if (encounter?.labResults && encounter.labResults.length > 0) {
+      encounter.labResults.forEach((lab, lIdx) => {
+        list.push({
+          resourceType: "Observation",
+          label: `Lab: ${lab.testName} (${lab.value} ${lab.unit})`,
+          standard: `LOINC ${lab.testCode || "11502-2"}`,
+          category: "Hasil Laboratorium",
+          status: isEncounterSynced ? "synced" : "pending",
+          httpStatus: isEncounterSynced ? 201 : undefined,
+          fhirId: isEncounterSynced ? `ss-lab-${lIdx + 1}-${encId}` : undefined,
+        });
+      });
+    }
+
+    // 4. Condition (ICD-10)
+    if (encounter?.diagnoses && encounter.diagnoses.length > 0) {
+      encounter.diagnoses.forEach((d, idx) => {
+        list.push({
+          resourceType: "Condition",
+          label: `${idx === 0 ? "Diagnosis Primer" : "Diagnosis Sekunder"}: ${d.code} - ${d.display}`,
+          standard: "ICD-10 (WHO/Kemenkes)",
+          category: "Penegakan Diagnostik",
+          status: isEncounterSynced ? "synced" : "pending",
+          httpStatus: isEncounterSynced ? 201 : undefined,
+          fhirId: isEncounterSynced ? `ss-cnd-${idx + 1}-${encId}` : undefined,
+        });
+      });
+    } else {
+      list.push({
+        resourceType: "Condition",
+        label: "Diagnosis: I10 - Essential (primary) hypertension",
+        standard: "ICD-10 (WHO/Kemenkes)",
+        category: "Penegakan Diagnostik",
+        status: isEncounterSynced ? "synced" : "pending",
+        httpStatus: isEncounterSynced ? 201 : undefined,
+        fhirId: isEncounterSynced ? `ss-cnd-1-${encId}` : undefined,
+      });
+    }
+
+    // 5. Procedure (ICD-9-CM)
+    if (encounter?.procedures && encounter.procedures.length > 0) {
+      encounter.procedures.forEach((p, idx) => {
+        list.push({
+          resourceType: "Procedure",
+          label: `Tindakan #${idx + 1}: ${p.code} - ${p.display}`,
+          standard: "ICD-9-CM",
+          category: "Intervensi Klinis",
+          status: isEncounterSynced ? "synced" : "pending",
+          httpStatus: isEncounterSynced ? 201 : undefined,
+          fhirId: isEncounterSynced ? `ss-prc-${idx + 1}-${encId}` : undefined,
+        });
+      });
+    } else {
+      list.push({
+        resourceType: "Procedure",
+        label: "Tindakan: 89.07 - Konsultasi & Pemeriksaan Klinis",
+        standard: "ICD-9-CM",
+        category: "Intervensi Klinis",
+        status: isEncounterSynced ? "synced" : "pending",
+        httpStatus: isEncounterSynced ? 201 : undefined,
+        fhirId: isEncounterSynced ? `ss-prc-1-${encId}` : undefined,
+      });
+    }
+
+    // 6. AllergyIntolerance
+    list.push({
       resourceType: "AllergyIntolerance",
-      label: "Riwayat Alergi Obat",
-      standard: "SNOMED-CT",
+      label: "Keamanan Pasien (Status Riwayat Alergi Obat/Makanan)",
+      standard: "HL7 FHIR R4 (SNOMED-CT)",
       category: "Patient Safety",
       status: isEncounterSynced ? "synced" : "pending",
       httpStatus: isEncounterSynced ? 201 : undefined,
-      fhirId: isEncounterSynced ? `ss-alg-${encounter.id}` : undefined,
-    },
-    {
-      resourceType: "MedicationRequest",
-      label: `Resep Elektronik KFA (${encounter.prescriptions?.length || 0} items)`,
-      standard: "KFA (Kemenkes)",
-      category: "Terapi Farmasi",
-      status: isEncounterPartialFailed ? "failed" : isEncounterSynced ? "synced" : "pending",
-      httpStatus: isEncounterPartialFailed ? 504 : isEncounterSynced ? 201 : undefined,
-      errorMessage:
-        isEncounterPartialFailed
-          ? "504 Gateway Timeout: Gangguan koneksi ke gateway SATUSEHAT."
-          : undefined,
-      fhirId: isEncounterSynced ? `ss-med-${encounter.id}` : undefined,
-    },
-    {
+      fhirId: isEncounterSynced ? `ss-alg-1-${encId}` : undefined,
+    });
+
+    // 7. MedicationRequest (KFA)
+    if (encounter?.prescriptions && encounter.prescriptions.length > 0) {
+      encounter.prescriptions.forEach((rx, idx) => {
+        list.push({
+          resourceType: "MedicationRequest",
+          label: `Resep #${idx + 1}: ${rx.medicationName} (${rx.dosage}, ${rx.frequency})`,
+          standard: `KFA ${rx.kfaCode || "93000182"}`,
+          category: "Farmasi & E-Resep",
+          status: isEncounterSynced ? "synced" : "pending",
+          httpStatus: isEncounterSynced ? 201 : undefined,
+          fhirId: isEncounterSynced ? `ss-rx-${idx + 1}-${encId}` : undefined,
+        });
+      });
+    } else {
+      list.push({
+        resourceType: "MedicationRequest",
+        label: "Resep #1: Amlodipine 5 mg Tablet (1x1)",
+        standard: "KFA 93000182",
+        category: "Farmasi & E-Resep",
+        status: isEncounterSynced ? "synced" : "pending",
+        httpStatus: isEncounterSynced ? 201 : undefined,
+        fhirId: isEncounterSynced ? `ss-rx-1-${encId}` : undefined,
+      });
+    }
+
+    // 8. CarePlan
+    list.push({
       resourceType: "CarePlan",
-      label: "Rencana Kontrol & Edukasi",
-      standard: "SNOMED-CT",
+      label: "Rencana Asuhan & Instruksi Kontrol Rawat Jalan",
+      standard: "HL7 FHIR R4",
       category: "Instruksi Tindak Lanjut",
       status: isEncounterSynced ? "synced" : "pending",
       httpStatus: isEncounterSynced ? 201 : undefined,
-      fhirId: isEncounterSynced ? `ss-pln-${encounter.id}` : undefined,
-    },
-    {
+      fhirId: isEncounterSynced ? `ss-pln-1-${encId}` : undefined,
+    });
+
+    // 9. Composition
+    list.push({
       resourceType: "Composition",
-      label: "Resume Medis Rawat Jalan LOINC 88645-7",
-      standard: "LOINC 88645-7",
-      category: "Agregasi Resume Medis",
-      status: isEncounterPartialFailed ? "failed" : isEncounterSynced ? "synced" : "pending",
-      httpStatus: isEncounterPartialFailed ? 504 : isEncounterSynced ? 201 : undefined,
-      errorMessage:
-        isEncounterPartialFailed
-          ? "504 Gateway Timeout: Transmisi dokumen resume medis terputus."
-          : undefined,
-      fhirId: isEncounterSynced ? `ss-cmp-${encounter.id}` : undefined,
-    },
-  ];
+      label: "Dokumen Resume Medis Rawat Jalan Terpadu",
+      standard: "HL7 FHIR R4 (DIC)",
+      category: "Agregasi Rekam Medis",
+      status: isEncounterSynced ? "synced" : "pending",
+      httpStatus: isEncounterSynced ? 201 : undefined,
+      fhirId: isEncounterSynced ? `ss-cmp-1-${encId}` : undefined,
+    });
 
-  const items: ResourceSyncItem[] =
-    encounter.syncBreakdown && encounter.syncBreakdown.length > 0
-      ? encounter.syncBreakdown
-      : defaultBreakdown;
+    return list;
+  }, [encounter, isOptOut, isEncounterSynced, encId]);
 
-  const failedItems = items.filter((i) => i.status === "failed");
-  const pendingItems = items.filter((i) => i.status === "pending");
-  const syncedItems = items.filter((i) => i.status === "synced");
-  const totalItemsCount = items.length;
+  // Active items list (either from DB syncBreakdown or default granular breakdown)
+  const activeItems: ResourceSyncItem[] = useMemo(() => {
+    if (encounter?.syncBreakdown && encounter.syncBreakdown.length > 0) {
+      return encounter.syncBreakdown;
+    }
+    return defaultGranularBreakdown;
+  }, [encounter?.syncBreakdown, defaultGranularBreakdown]);
 
-  const hasFailedOrPending = failedItems.length > 0 || pendingItems.length > 0;
+  // Group active items by the 9 Canonical Categories
+  const categoryGroups = useMemo(() => {
+    return CANONICAL_FHIR_CATEGORIES.map((catDef) => {
+      const matchedItems = activeItems.filter((item) => {
+        if (catDef.resourceType === "MedicationRequest") {
+          return (
+            item.resourceType === "MedicationRequest" ||
+            item.resourceType === "Medication" ||
+            item.resourceType === "MedicationDispense"
+          );
+        }
+        if (catDef.resourceType === "Observation") {
+          return (
+            item.resourceType === "Observation" ||
+            item.resourceType === "DiagnosticReport" ||
+            item.resourceType === "ServiceRequest"
+          );
+        }
+        return item.resourceType === catDef.resourceType;
+      });
 
-  const handleRetrySingle = async (resourceType: string) => {
+      const syncedCount = matchedItems.filter((i) => i.status === "synced").length;
+      const failedCount = matchedItems.filter((i) => i.status === "failed").length;
+      const pendingCount = matchedItems.filter((i) => i.status === "pending").length;
+      const totalCount = matchedItems.length;
+
+      let groupStatus: "synced" | "failed" | "pending" = "pending";
+      if (failedCount > 0) {
+        groupStatus = "failed";
+      } else if (syncedCount > 0 && syncedCount === totalCount) {
+        groupStatus = "synced";
+      }
+
+      return {
+        ...catDef,
+        items: matchedItems,
+        syncedCount,
+        failedCount,
+        pendingCount,
+        totalCount,
+        status: groupStatus,
+      };
+    });
+  }, [activeItems]);
+
+  // Auto-expand categories with failed items
+  const isCategoryExpanded = (key: string, hasFailed: boolean) => {
+    if (expandedCategories[key] !== undefined) {
+      return expandedCategories[key];
+    }
+    return hasFailed; // default expand if it has errors
+  };
+
+  const toggleCategory = (key: string) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  };
+
+  // High level counts
+  const totalCategoriesCount = categoryGroups.length; // 9
+  const syncedCategoriesCount = categoryGroups.filter((g) => g.status === "synced").length;
+  const failedCategoriesCount = categoryGroups.filter((g) => g.status === "failed").length;
+
+  const totalResourcesCount = activeItems.length;
+  const syncedResourcesCount = activeItems.filter((i) => i.status === "synced").length;
+  const failedResourcesCount = activeItems.filter((i) => i.status === "failed").length;
+  const pendingResourcesCount = activeItems.filter((i) => i.status === "pending").length;
+
+  const handleRetrySingle = async (resourceTypes: string | string[]) => {
     if (!onSelectiveRetry) return;
-    setRetryingSingleType(resourceType);
+    const types = Array.isArray(resourceTypes) ? resourceTypes : [resourceTypes];
+    const triggerKey = types[0] || "resource";
+    setRetryingSingleType(triggerKey);
     try {
-      await onSelectiveRetry([resourceType]);
+      await onSelectiveRetry(types);
     } finally {
       setRetryingSingleType(null);
     }
@@ -195,10 +433,10 @@ export function SatusehatFhirDetailModal({
 
   const handleRetryAllFailed = async () => {
     if (!onSelectiveRetry) return;
-    const targetTypes = [...failedItems, ...pendingItems].map(
-      (i) => i.resourceType
-    );
-    await onSelectiveRetry(targetTypes);
+    const targetTypes = activeItems
+      .filter((i) => i.status === "failed" || i.status === "pending")
+      .map((i) => i.resourceType);
+    await onSelectiveRetry(targetTypes.length > 0 ? targetTypes : undefined);
   };
 
   return (
@@ -221,14 +459,76 @@ export function SatusehatFhirDetailModal({
                 )}
               </DialogTitle>
               <p className="text-xs text-slate-500">
-                Rincian transmisi rekam medis elektronik &amp; integrasi cloud SATUSEHAT
+                Rincian transmisi 9 Kategori Rekam Medis Standar Kemenkes RI ({totalResourcesCount} Resource FHIR)
               </p>
             </div>
           </div>
         </DialogHeader>
 
         <div className="space-y-4 max-h-[72vh] overflow-y-auto pr-1 py-2">
-          {/* Top Status Cards */}
+          {/* Active Patient & Polyclinic Context Banner */}
+          <div className="rounded-xl border border-teal-200/90 bg-gradient-to-r from-teal-50/90 via-emerald-50/40 to-slate-50 p-3 shadow-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-200/50 pb-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white shadow-xs">
+                  <User className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 text-sm truncate">
+                      {patient?.name || "Pasien Rawat Jalan"}
+                    </span>
+                    {patient?.gender && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-white/90 border-slate-200 text-slate-600 shrink-0">
+                        {patient.gender === "female" ? "Perempuan" : "Laki-laki"}
+                      </Badge>
+                    )}
+                    {patient?.birthDate && (
+                      <span className="text-[11px] text-slate-500 font-medium shrink-0">
+                        {new Date().getFullYear() - new Date(patient.birthDate).getFullYear()} thn
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-600 font-mono mt-0.5 flex-wrap">
+                    <span>RM: <strong className="text-slate-900 font-semibold">{patient?.mrn || "-"}</strong></span>
+                    {encounter?.registrationNumber && (
+                      <>
+                        <span>•</span>
+                        <span>Reg: <strong className="text-slate-800">{encounter.registrationNumber}</strong></span>
+                      </>
+                    )}
+                    <span>•</span>
+                    <span>NIK: <strong className="text-slate-900 font-semibold">{patient?.nik || "-"}</strong></span>
+                    {patient?.ihsNumber && (
+                      <>
+                        <span>•</span>
+                        <span className="text-teal-700 font-semibold">IHS: {patient.ihsNumber}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <Badge className="bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-semibold flex items-center gap-1 px-2.5 py-1">
+                  <Building2 className="h-3 w-3" />
+                  <span>{encounter?.clinicDepartment || "Poliklinik Rawat Jalan"}</span>
+                </Badge>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 pt-2">
+              <div className="flex items-center gap-1.5 truncate">
+                <Stethoscope className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <span>DPJP: <strong className="text-slate-800 font-medium">{encounter?.doctorName || "Dokter Pemeriksa"}</strong></span>
+              </div>
+              <span className="text-[10px] text-teal-800 bg-teal-100/70 font-semibold px-2 py-0.5 rounded-md border border-teal-200/60">
+                Resource FHIR Terisolasi untuk Sesi Pasien Ini
+              </span>
+            </div>
+          </div>
+
+          {/* Top Connection Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
             {/* OAuth Status Card */}
             <div className="p-3 rounded-xl bg-slate-900 text-white border border-slate-800 space-y-1.5 shadow-xs">
@@ -255,7 +555,7 @@ export function SatusehatFhirDetailModal({
               </div>
               <div className="text-[10px] text-slate-400 flex items-center justify-between">
                 <span>
-                  Lingkungan: <strong className="text-slate-200">{session?.env === "production" ? "Mode Produksi" : "Mode Uji Coba (Sandbox)"}</strong>
+                  Lingkungan: <strong className="text-slate-200">{session?.env === "production" ? "Mode Produksi" : "Mode Uji Coba"}</strong>
                 </span>
                 {onRefreshToken && session && (
                   <button
@@ -277,12 +577,12 @@ export function SatusehatFhirDetailModal({
                   <Layers className="h-3.5 w-3.5 text-teal-600" />
                   <span>SATUSEHAT Encounter ID</span>
                 </span>
-                {encounter.satusehatEncounterId ? (
+                {encounter?.satusehatEncounterId ? (
                   <button
                     type="button"
                     onClick={() =>
                       handleCopy(
-                        encounter.satusehatEncounterId || "",
+                        encounter?.satusehatEncounterId || "",
                         "Encounter ID"
                       )
                     }
@@ -302,8 +602,8 @@ export function SatusehatFhirDetailModal({
                 )}
               </div>
               <div className="text-xs font-mono font-bold text-teal-950 truncate">
-                {encounter.satusehatEncounterId ? (
-                  encounter.satusehatEncounterId
+                {encounter?.satusehatEncounterId ? (
+                  encounter?.satusehatEncounterId
                 ) : (
                   <span className="text-slate-500 font-normal italic">
                     (Belum Diterbitkan - Menunggu Pengiriman)
@@ -313,7 +613,7 @@ export function SatusehatFhirDetailModal({
               <div className="text-[10px] text-teal-800">
                 Fasilitas Kesehatan:{" "}
                 <span className="font-semibold text-teal-950">
-                  {encounter.hospitalName} ({encounter.hospitalOrgId})
+                  {encounter?.hospitalName || "RS Umum Daerah Sehat Sejahtera"} ({encounter?.hospitalOrgId || "10000004"})
                 </span>
               </div>
             </div>
@@ -329,14 +629,14 @@ export function SatusehatFhirDetailModal({
                   </div>
                   <div>
                     <h5 className="text-xs font-extrabold text-rose-900">
-                      Gangguan Jaringan Terdeteksi ({failedItems.length} Resource Gagal / {pendingItems.length} Pending)
+                      Gangguan Transmisi ({failedCategoriesCount} Kategori / {failedResourcesCount} Resource Perlu Dikirim Ulang)
                     </h5>
                     <p className="text-[11px] text-rose-800 mt-0.5">
-                      Koneksi gateway Kemenkes sempat terputus saat transmisi. Root{" "}
+                      Sebagian resource mengalami kendala jaringan atau validasi saat transmisi ke SATUSEHAT Cloud. Root{" "}
                       <strong className="font-mono text-rose-950">
-                        Encounter ID ({encounter.satusehatEncounterId || "ss-enc-..."})
+                        Encounter ID ({encounter?.satusehatEncounterId || "ss-enc-..."})
                       </strong>{" "}
-                      sudah tersimpan aman dan tidak akan diduplikasi.
+                      sudah tersimpan aman dan tidak akan diduplikasi saat Anda melakukan perbaikan.
                     </p>
                   </div>
                 </div>
@@ -357,32 +657,17 @@ export function SatusehatFhirDetailModal({
                   <span>
                     {isRetrying
                       ? "Mengirim Ulang..."
-                      : `Kirim Ulang ${failedItems.length + pendingItems.length} Resource Gagal (Selective Retry)`}
+                      : `Kirim Ulang ${failedResourcesCount + pendingResourcesCount} Resource Gagal (Selective Retry)`}
                   </span>
                 </Button>
               </div>
             </div>
           ) : isEncounterSynced ? (
-            <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-950 flex items-center justify-between text-xs shadow-2xs animate-fade-in-up">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span>
-                  <strong>Status Terkirim:</strong> Seluruh {totalItemsCount}/{totalItemsCount} resource FHIR telah tersinkronisasi 100% ke cloud SATUSEHAT Kemenkes RI.
-                </span>
-              </div>
-              {onSimulatePartialDrop && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={onSimulatePartialDrop}
-                  className="h-7 text-[10px] font-semibold bg-white border-emerald-300 text-emerald-800 hover:bg-rose-50 hover:text-rose-700 hover:border-rose-300 gap-1 shrink-0 btn-press transition-all duration-150 cursor-pointer"
-                  title="Simulasikan gangguan jaringan pada 2 resource untuk menguji fitur Selective Retry"
-                >
-                  <WifiOff className="h-3 w-3" />
-                  <span>Simulasi Putus Jaringan</span>
-                </Button>
-              )}
+            <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-950 flex items-center gap-2 text-xs shadow-2xs animate-fade-in-up">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span>
+                <strong>Status Terkirim (100%):</strong> Seluruh <strong>{totalCategoriesCount}/{totalCategoriesCount} Kategori</strong> ({totalResourcesCount} resource FHIR) telah sukses terverifikasi di Cloud SATUSEHAT Kemenkes RI.
+              </span>
             </div>
           ) : isOptOut ? (
             <div className="p-3.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-900 space-y-1 shadow-2xs">
@@ -393,7 +678,7 @@ export function SatusehatFhirDetailModal({
                 </span>
               </div>
               <p className="text-[11px] text-slate-600 leading-relaxed pl-6">
-                Pasien memilih untuk tidak meneruskan rekam medis ke platform SATUSEHAT (Sesuai UU PDP No. 27/2022). Data rekam medis tersimpan aman di basis data SIMRS internal.
+                Pasien memilih untuk tidak meneruskan rekam medis ke platform SATUSEHAT (Sesuai UU PDP No. 27/2022). Data rekam medis tersimpan aman di basis data internal.
               </p>
             </div>
           ) : (
@@ -401,24 +686,24 @@ export function SatusehatFhirDetailModal({
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-amber-600 shrink-0" />
                 <span className="font-bold text-xs text-amber-900">
-                  Status: Menunggu Pemeriksaan &amp; Pengiriman DPJP (Draft)
+                  Status: Siap Ditransmisikan ke SATUSEHAT (Draft Rekam Medis)
                 </span>
               </div>
               <p className="text-[11px] text-amber-800 leading-relaxed pl-6">
-                Data klinis kunjungan ini belum ditransmisikan ke SATUSEHAT Cloud Kemenkes. Pengiriman 9 resource FHIR akan diproses saat dokter menyelesaikan formulir SOAP dan menekan tombol <strong>Simpan &amp; Kirim ke SATUSEHAT</strong>.
+                Data klinis terstruktur kunjungan ini telah siap dikirimkan. Paket transmisi mencakup <strong>9 Kategori Standar</strong> ({totalResourcesCount} resource FHIR individual) yang akan diproses saat DPJP menekan tombol <strong>Simpan &amp; Kirim ke SATUSEHAT</strong>.
               </p>
             </div>
           )}
 
-          {/* Granular Resource Sync Breakdown Table */}
-          <div className="space-y-2">
+          {/* Unified 9-Category FHIR Interoperability Section */}
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <FileCode className="h-4 w-4 text-teal-600" />
-                <span>Rincian Status Sinkronisasi Berkas Klinis (Standar FHIR)</span>
+                <span>Rincian 9 Kategori Interoperabilitas Standar Kemenkes RI</span>
               </span>
               <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors duration-200 ${
+                className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border transition-colors duration-200 ${
                   isEncounterSynced
                     ? "text-emerald-700 bg-emerald-50 border-emerald-200"
                     : isEncounterPartialFailed
@@ -427,104 +712,110 @@ export function SatusehatFhirDetailModal({
                 }`}
               >
                 {isEncounterSynced
-                  ? `${syncedItems.length}/${totalItemsCount} Terkirim`
+                  ? `${syncedCategoriesCount}/${totalCategoriesCount} Kategori Selesai (${totalResourcesCount} Resource)`
                   : isEncounterPartialFailed
-                  ? `${syncedItems.length}/${totalItemsCount} Terkirim (${failedItems.length} Gagal)`
-                  : `0/${totalItemsCount} Terkirim (Draft)`}
+                  ? `${syncedCategoriesCount}/${totalCategoriesCount} Kategori (${syncedResourcesCount}/${totalResourcesCount} Resource Terkirim • ${failedResourcesCount} Gagal)`
+                  : `0/${totalCategoriesCount} Kategori (${totalResourcesCount} Resource Siap Dikirim)`}
               </span>
             </div>
 
-            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white divide-y divide-slate-100 text-xs shadow-2xs">
-              {items.map((item, idx) => {
-                const isItemFailed = item.status === "failed";
-                const isItemSynced = item.status === "synced";
-                const isItemPending = !isItemSynced && !isItemFailed;
-                const isThisSingleRetrying =
-                  retryingSingleType === item.resourceType;
+            {/* Hierarchical Accordion Category List */}
+            <div className="space-y-2 text-xs">
+              {categoryGroups.map((cat, catIdx) => {
+                const CategoryIcon = cat.icon;
+                const isCatFailed = cat.status === "failed";
+                const isCatSynced = cat.status === "synced";
+                const isCatPending = cat.status === "pending";
+                const isExpanded = isCategoryExpanded(cat.key, isCatFailed);
+                const isThisSingleRetrying = retryingSingleType === cat.resourceType;
 
                 return (
                   <div
-                    key={idx}
-                    className={`p-2.5 sm:px-3.5 flex flex-col gap-1.5 transition-all duration-150 ${
-                      isItemFailed
-                        ? "bg-rose-50/40 hover:bg-rose-50/80"
-                        : isItemSynced
-                        ? "hover:bg-slate-50/90"
-                        : "bg-slate-50/30 hover:bg-slate-50/70"
+                    key={cat.key}
+                    className={`border rounded-xl transition-all duration-200 overflow-hidden ${
+                      isCatFailed
+                        ? "border-rose-200 bg-rose-50/30"
+                        : isCatSynced
+                        ? "border-slate-200 bg-white hover:border-teal-200"
+                        : "border-slate-200 bg-slate-50/40"
                     }`}
                   >
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-start gap-2.5 min-w-0">
-                        {isItemSynced && (
-                          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5 transition-transform duration-200 hover:scale-110" />
-                        )}
-                        {isItemFailed && (
-                          <AlertTriangle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5 animate-pulse" />
-                        )}
-                        {isItemPending && (
-                          <Clock className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                        )}
+                    {/* Category Header Row */}
+                    <div
+                      onClick={() => toggleCategory(cat.key)}
+                      className="p-3 sm:px-3.5 flex items-center justify-between gap-3 cursor-pointer hover:bg-slate-50/80 transition-colors select-none"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 border ${
+                            isCatSynced
+                              ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                              : isCatFailed
+                              ? "bg-rose-50 text-rose-600 border-rose-200"
+                              : "bg-slate-100 text-slate-600 border-slate-200"
+                          }`}
+                        >
+                          <CategoryIcon className="h-4 w-4" />
+                        </div>
 
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-bold text-slate-900">
-                              {item.resourceType}
+                              {catIdx + 1}. {cat.resourceType}
                             </span>
                             <span className="text-[11px] text-slate-600 font-medium">
-                              ({item.label})
+                              ({cat.name})
                             </span>
-                            {item.retryCount && item.retryCount > 0 ? (
-                              <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200 animate-fade-in-up">
-                                Retry #{item.retryCount}
-                              </span>
-                            ) : null}
                           </div>
-                          <p className="text-[11px] text-slate-400 truncate">
-                            {item.category || "Resource"} •{" "}
-                            <span className="font-mono text-[10px] text-slate-500">
-                              {item.standard}
-                            </span>
-                            {item.fhirId ? (
-                              <span className="font-mono text-[10px] text-teal-700 ml-1.5">
-                                [ID: {item.fhirId}]
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 italic ml-1.5">
-                                [Belum Terkirim]
-                              </span>
-                            )}
-                          </p>
+                          <div className="text-[10px] text-slate-400 flex items-center gap-1.5 truncate mt-0.5">
+                            <span className="font-mono text-slate-500">{cat.standard}</span>
+                            <span>•</span>
+                            <span className="truncate">{cat.clinicalDomain}</span>
+                          </div>
                         </div>
                       </div>
 
-                      <div className="shrink-0 flex items-center gap-1.5">
+                      {/* Right Side: Status Badge & Item Counter */}
+                      <div className="shrink-0 flex items-center gap-2">
                         <Badge
                           variant="outline"
-                          className={`font-mono text-[10px] font-bold transition-colors duration-150 ${
-                            isItemSynced
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                              : isItemFailed
-                              ? "bg-rose-50 text-rose-700 border-rose-300"
+                          className={`text-[10px] font-bold px-2 py-0.5 ${
+                            isCatSynced
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : isCatFailed
+                              ? "bg-rose-50 text-rose-700 border-rose-300 animate-pulse"
                               : "bg-slate-100 text-slate-600 border-slate-200"
                           }`}
                         >
-                          {isItemSynced
-                            ? `${item.httpStatus || 201} Terkirim`
-                            : isItemFailed
-                            ? `${item.httpStatus || 504} Gagal`
-                            : "Belum Dikirim"}
+                          {isCatSynced
+                            ? `${cat.totalCount}/${cat.totalCount} Terkirim`
+                            : isCatFailed
+                            ? `${cat.syncedCount}/${cat.totalCount} Terkirim (${cat.failedCount} Gagal)`
+                            : `${cat.totalCount} Resource (Draft)`}
                         </Badge>
 
-                        {/* Individual Retry Button for failed items only */}
-                        {isItemFailed && onSelectiveRetry && (
+                        {/* Category Retry Button if failed */}
+                        {isCatFailed && onSelectiveRetry && (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => handleRetrySingle(item.resourceType)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const failedTypes = Array.from(
+                                new Set(
+                                  cat.items
+                                    .filter((i) => i.status === "failed" || i.status === "pending")
+                                    .map((i) => i.resourceType)
+                                )
+                              );
+                              handleRetrySingle(
+                                failedTypes.length > 0 ? failedTypes : [cat.resourceType]
+                              );
+                            }}
                             disabled={isRetrying || isThisSingleRetrying}
                             className="h-6 px-2 text-[10px] font-bold text-rose-700 border-rose-200 hover:bg-rose-100 hover:text-rose-900 cursor-pointer btn-press transition-all duration-150"
-                            title="Kirim ulang resource ini saja"
+                            title="Kirim ulang kategori ini saja"
                           >
                             <RefreshCw
                               className={`h-2.5 w-2.5 mr-1 ${
@@ -534,14 +825,105 @@ export function SatusehatFhirDetailModal({
                             <span>Retry</span>
                           </Button>
                         )}
+
+                        <div className="text-slate-400 hover:text-slate-600 transition-colors p-1">
+                          {isExpanded ? (
+                            <ChevronUp className="h-4 w-4" />
+                          ) : (
+                            <ChevronDown className="h-4 w-4" />
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Detailed Error message if failed */}
-                    {isItemFailed && item.errorMessage && (
-                      <div className="ml-6.5 p-1.5 px-2 rounded-md bg-rose-100/80 border border-rose-200 text-[10px] font-mono text-rose-900 flex items-start gap-1.5">
-                        <WifiOff className="h-3 w-3 text-rose-600 shrink-0 mt-0.5" />
-                        <span>{item.errorMessage}</span>
+                    {/* Expandable Granular Resource Breakdown */}
+                    {isExpanded && (
+                      <div className="border-t border-slate-100 bg-white/70 divide-y divide-slate-100">
+                        {cat.items.map((subItem, sIdx) => {
+                          const isSubSynced = subItem.status === "synced";
+                          const isSubFailed = subItem.status === "failed";
+                          const isSubPending = !isSubSynced && !isSubFailed;
+
+                          return (
+                            <div
+                              key={sIdx}
+                              className={`p-2.5 sm:px-4 flex flex-col gap-1 transition-colors ${
+                                isSubFailed
+                                  ? "bg-rose-50/50"
+                                  : isSubSynced
+                                  ? "hover:bg-slate-50/60"
+                                  : "bg-slate-50/30"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-start gap-2 min-w-0">
+                                  {isSubSynced && (
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                                  )}
+                                  {isSubFailed && (
+                                    <AlertTriangle className="h-3.5 w-3.5 text-rose-500 shrink-0 mt-0.5" />
+                                  )}
+                                  {isSubPending && (
+                                    <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                                  )}
+
+                                  <div className="min-w-0">
+                                    <p className="text-[11px] font-semibold text-slate-800 leading-snug">
+                                      {subItem.label}
+                                    </p>
+                                    <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-[9px] font-bold text-teal-800 bg-teal-50 px-1 py-0.2 rounded border border-teal-200">
+                                        {subItem.resourceType}
+                                      </span>
+                                      <span>{subItem.standard}</span>
+                                      {subItem.fhirId ? (
+                                        <span className="text-teal-700 bg-teal-50 px-1 py-0.2 rounded border border-teal-200">
+                                          ID: {subItem.fhirId}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-400 italic">
+                                          [Menunggu Pengiriman]
+                                        </span>
+                                      )}
+                                      {subItem.retryCount && subItem.retryCount > 0 ? (
+                                        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded border border-slate-200">
+                                          Retry #{subItem.retryCount}
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0 flex items-center gap-1.5">
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[9px] font-mono font-bold ${
+                                      isSubSynced
+                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                        : isSubFailed
+                                        ? "bg-rose-50 text-rose-700 border-rose-300"
+                                        : "bg-slate-100 text-slate-600 border-slate-200"
+                                    }`}
+                                  >
+                                    {isSubSynced
+                                      ? `${subItem.httpStatus || 201} OK`
+                                      : isSubFailed
+                                      ? `${subItem.httpStatus || 400} Failed`
+                                      : "Draft"}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              {/* Detailed Error message if failed */}
+                              {isSubFailed && subItem.errorMessage && (
+                                <div className="ml-5 p-1.5 px-2 rounded-md bg-rose-100/90 border border-rose-200 text-[10px] font-mono text-rose-900 flex items-start gap-1.5">
+                                  <WifiOff className="h-3 w-3 text-rose-600 shrink-0 mt-0.5" />
+                                  <span>{subItem.errorMessage}</span>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

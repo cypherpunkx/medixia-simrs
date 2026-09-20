@@ -1,5 +1,51 @@
 export type SatusehatEnvironment = "staging" | "production";
 
+// ==========================================
+// Multi-Faskes & Role-Based Access Control
+// ==========================================
+export type FacilityType = "rumah_sakit" | "klinik_pratama" | "klinik_utama" | "puskesmas";
+
+export interface FacilityProfile {
+  id: string;
+  name: string;
+  type: FacilityType;
+  satusehatOrgId: string;
+  satusehatClientId?: string;
+  satusehatClientSecret?: string;
+  address: string;
+  phone: string;
+  licenseNumber: string;
+  isActive: boolean;
+  departments?: DepartmentItem[];
+}
+
+export interface DepartmentItem {
+  id: string;
+  facilityId: string;
+  name: string;
+  room: string;
+  quota: number;
+  defaultDoctorName?: string;
+  isActive: boolean;
+}
+
+export type UserRole = "doctor" | "nurse" | "registration" | "admin" | "pharmacy";
+
+export interface UserProfile {
+  id: string;
+  facilityId?: string;
+  departmentId?: string;
+  username: string;
+  name: string;
+  role: UserRole;
+  sip?: string;
+  ihsPractitionerId?: string;
+  department?: string;
+  facilityName?: string;
+  facilityType?: FacilityType;
+  isActive: boolean;
+}
+
 export interface SatusehatAuthCredentials {
   clientId: string;
   clientSecret: string;
@@ -105,6 +151,7 @@ export interface PatientProfile {
   nik: string; // NIK KTP (16 digits)
   mrn: string; // Nomor Rekam Medis RS
   name: string;
+  ihsNumber?: string; // Nomor IHS Kemenkes SATUSEHAT (misal P01234567890)
   gender: "male" | "female";
   birthDate: string; // YYYY-MM-DD
   phone: string;
@@ -135,6 +182,7 @@ export interface DiagnosticOrder {
   orderDate: string;
   doctorName: string;
   clinicalNotes?: string;
+  satusehatServiceRequestId?: string;
 }
 
 export interface LabResult {
@@ -149,6 +197,8 @@ export interface LabResult {
   resultDate: string;
   performer: string;
   notes?: string;
+  satusehatObservationId?: string;
+  satusehatDiagnosticReportId?: string;
 }
 
 export interface RadiologyResult {
@@ -160,6 +210,9 @@ export interface RadiologyResult {
   conclusion: string;
   radiologistName: string;
   resultDate: string;
+  satusehatObservationId?: string;
+  satusehatServiceRequestId?: string;
+  satusehatDiagnosticReportId?: string;
 }
 
 export interface MedicalAddendum {
@@ -181,6 +234,15 @@ export interface VitalSigns {
   heightCm: number; // cm (e.g. 172)
   bmi?: number;
   physicalExamNotes?: string;
+  // Granular SATUSEHAT Observation IDs
+  satusehatBpId?: string; // LOINC 85354-9 (Blood Pressure Panel)
+  satusehatHrId?: string; // LOINC 8867-4 (Heart Rate)
+  satusehatTempId?: string; // LOINC 8310-5 (Body Temperature)
+  satusehatRrId?: string; // LOINC 9279-1 (Respiratory Rate)
+  satusehatSpo2Id?: string; // LOINC 59408-5 (Oxygen Saturation)
+  satusehatWeightId?: string; // LOINC 29463-7 (Body Weight)
+  satusehatHeightId?: string; // LOINC 8302-2 (Body Height)
+  satusehatBmiId?: string; // LOINC 39156-5 (Body Mass Index)
 }
 
 export interface DiagnosisItem {
@@ -191,6 +253,7 @@ export interface DiagnosisItem {
   patientFriendlyName: string; // Mudah dimengerti pasien
   system?: string;
   clinicalStatus?: "active" | "recurrence" | "remission" | "resolved";
+  satusehatConditionId?: string;
 }
 
 export interface ProcedureItem {
@@ -199,6 +262,7 @@ export interface ProcedureItem {
   display: string; // Description (e.g. "General medical consultation")
   category: string;
   notes?: string;
+  satusehatProcedureId?: string;
 }
 
 export interface PrescriptionItem {
@@ -219,6 +283,8 @@ export interface PrescriptionItem {
   unit: string;
   durationDays: number;
   instructions: string;
+  satusehatMedicationRequestId?: string;
+  satusehatMedicationId?: string;
 }
 
 export type SyncStatusType = "synced" | "draft" | "pending" | "partial_failed";
@@ -249,15 +315,21 @@ export interface ResourceSyncItem {
 
 export interface OutpatientEncounter {
   id: string; // Local encounter ID
+  registrationNumber?: string; // Standard Hospital Registration No. (e.g. "RJ-20260913-0001")
   patientId?: string;
+  facilityId?: string;
+  departmentId?: string;
+  doctorId?: string;
   satusehatEncounterId?: string;
   visitDate: string; // ISO String / YYYY-MM-DD HH:mm
   clinicDepartment: string; // e.g. "Poli Penyakit Dalam", "Poli Umum"
+  locationId?: string; // SATUSEHAT Location UUID
+  locationName?: string; // e.g. "Ruang Pelayanan Poli Umum"
   doctorName: string;
   doctorSip: string;
   doctorIhsId?: string; // SATUSEHAT Practitioner ID
-  hospitalName: string;
-  hospitalOrgId: string;
+  hospitalName?: string;
+  hospitalOrgId?: string;
   chiefComplaint: string; // Keluhan Utama
   anamnesis: string; // Riwayat Penyakit
   vitals?: VitalSigns;
@@ -287,8 +359,12 @@ export interface OutpatientEncounter {
 
 export interface ClinicQueuePatientItem {
   id: string;
+  registrationNumber?: string; // Standard Hospital Registration No. (e.g. "RJ-20260913-0001")
   queueNumber: string;
   patient: PatientProfile;
+  departmentId?: string;
+  doctorId?: string;
+  encounterId?: string;
   department: string;
   doctor: string;
   room: string;
@@ -354,3 +430,24 @@ export interface FhirConsent {
   };
 }
 
+/**
+ * Format string SIP dokter agar rapi dan tidak duplikat dengan label "SIP:".
+ * Contoh: "SIP.446/089/DS/Dinkes/2026" -> "SIP.446/089/DS/Dinkes/2026"
+ * Contoh: "446/089" -> "SIP: 446/089"
+ */
+export function formatDoctorSip(sip?: string | null): string {
+  if (!sip) return "";
+  const trimmed = sip.trim();
+  if (/^SIP[\s.:/]/i.test(trimmed)) {
+    return trimmed;
+  }
+  return `SIP: ${trimmed}`;
+}
+
+/**
+ * Membersihkan embel-embel SIP dari nama dokter jika ada sisa string gabungan.
+ */
+export function cleanDoctorName(name?: string | null): string {
+  if (!name) return "";
+  return name.replace(/\s*\(SIP:?[^)]*\)/gi, "").trim();
+}

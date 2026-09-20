@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import { ChevronDown, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface CustomSelectOption<T extends string | number = string> {
   value: T;
@@ -25,6 +26,7 @@ export interface CustomSelectProps<T extends string | number = string> {
   size?: "sm" | "md" | "lg";
   align?: "left" | "right";
   title?: string;
+  accentColor?: "teal" | "blue";
 }
 
 export function CustomSelect<T extends string | number = string>({
@@ -41,6 +43,7 @@ export function CustomSelect<T extends string | number = string>({
   size = "md",
   align = "left",
   title,
+  accentColor = "teal",
 }: CustomSelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -88,13 +91,21 @@ export function CustomSelect<T extends string | number = string>({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between gap-2 rounded-lg border transition-all duration-150 cursor-pointer select-none ${
+        className={cn(
+          "w-full flex items-center justify-between gap-2 rounded-lg border transition-all duration-150 cursor-pointer select-none",
+          "outline-none focus:outline-none focus-visible:outline-none",
           disabled
             ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-70"
             : isOpen
-            ? "bg-white border-teal-500 ring-2 ring-teal-500/20 shadow-xs text-slate-900"
-            : "bg-slate-50/90 hover:bg-white border-slate-200 hover:border-teal-400 shadow-2xs text-slate-700"
-        } ${sizeClasses[size]} ${buttonClassName}`}
+            ? accentColor === "blue"
+              ? "bg-white border-blue-500 ring-2 ring-blue-500/20 shadow-xs text-slate-900"
+              : "bg-white border-teal-500 ring-2 ring-teal-500/20 shadow-xs text-slate-900"
+            : accentColor === "blue"
+            ? "bg-slate-50/90 hover:bg-white border-slate-200 hover:border-blue-400 shadow-2xs text-slate-700 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-500"
+            : "bg-slate-50/90 hover:bg-white border-slate-200 hover:border-teal-400 shadow-2xs text-slate-700 focus-visible:ring-2 focus-visible:ring-teal-500/20 focus-visible:border-teal-500",
+          sizeClasses[size],
+          buttonClassName
+        )}
       >
         <div className="flex items-center gap-1.5 min-w-0 truncate">
           {prefixIcon && <span className="shrink-0">{prefixIcon}</span>}
@@ -109,18 +120,21 @@ export function CustomSelect<T extends string | number = string>({
         </div>
 
         <ChevronDown
-          className={`h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform duration-200 ${
-            isOpen ? "rotate-180 text-teal-600" : ""
-          }`}
+          className={cn(
+            "h-3.5 w-3.5 text-slate-400 shrink-0 transition-transform duration-200",
+            isOpen && (accentColor === "blue" ? "rotate-180 text-blue-600" : "rotate-180 text-teal-600")
+          )}
         />
       </button>
 
       {/* Floating Menu Popover */}
       {isOpen && (
         <div
-          className={`absolute top-full mt-1.5 z-50 min-w-full w-max max-w-xs sm:max-w-sm bg-white rounded-xl shadow-xl border border-slate-200 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150 ${
-            align === "right" ? "right-0" : "left-0"
-          } ${dropdownClassName}`}
+          className={cn(
+            "absolute top-full mt-1.5 z-50 min-w-full w-max max-w-xs sm:max-w-sm bg-white rounded-xl shadow-xl border border-slate-200 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150",
+            align === "right" ? "right-0" : "left-0",
+            dropdownClassName
+          )}
         >
           <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 p-1">
             {options.map((opt) => {
@@ -133,11 +147,14 @@ export function CustomSelect<T extends string | number = string>({
                     onChange(opt.value);
                     setIsOpen(false);
                   }}
-                  className={`w-full text-left px-2.5 py-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                  className={cn(
+                    "w-full text-left px-2.5 py-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer",
                     isSelected
-                      ? "bg-teal-50 text-teal-950 font-bold"
+                      ? accentColor === "blue"
+                        ? "bg-blue-50 text-blue-950 font-bold"
+                        : "bg-teal-50 text-teal-950 font-bold"
                       : "text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium"
-                  }`}
+                  )}
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     {opt.icon && <span className="shrink-0">{opt.icon}</span>}
@@ -154,7 +171,12 @@ export function CustomSelect<T extends string | number = string>({
                   <div className="flex items-center gap-1.5 shrink-0">
                     {opt.badge && <span>{opt.badge}</span>}
                     {isSelected && (
-                      <Check className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                      <Check
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0",
+                          accentColor === "blue" ? "text-blue-600" : "text-teal-600"
+                        )}
+                      />
                     )}
                   </div>
                 </button>

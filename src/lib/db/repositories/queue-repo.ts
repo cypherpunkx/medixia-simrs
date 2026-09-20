@@ -1,34 +1,50 @@
 import { db } from "../index";
-import { queueItems, encounters } from "../schema";
-import { eq, and, asc, desc, gte, lte, SQL } from "drizzle-orm";
+import { queueItems, encounters, departments, users } from "../schema";
+import { eq, and, or, asc, desc, gte, lte, inArray, SQL } from "drizzle-orm";
 import { ClinicQueuePatientItem, PatientProfile } from "@/lib/satusehat/types";
 import { PatientRepository } from "./patient-repo";
 import { MemoryCache, CACHE_CONFIG, InvalidationService } from "@/lib/cache";
+import { generatePrefixedId } from "@/lib/id-generator";
 
 export interface QueueFilterOptions {
   date?: string; // YYYY-MM-DD
   startDate?: string; // YYYY-MM-DD
   endDate?: string; // YYYY-MM-DD
   department?: string;
+  departments?: string[];
+  facilityId?: string;
   all?: boolean; // If true, return all historical queue records
 }
 
 export const QueueRepository = {
-  getQueue(options?: QueueFilterOptions): ClinicQueuePatientItem[] {
+  async getQueue(options?: QueueFilterOptions): Promise<ClinicQueuePatientItem[]> {
     const cacheKey = CACHE_CONFIG.KEYS.QUEUE_FILTER(JSON.stringify(options || {}));
 
-    return MemoryCache.getOrSet(
+    return MemoryCache.getOrSetAsync(
       cacheKey,
-      () => {
-        const { date, startDate, endDate, department, all } = options || {};
+      async () => {
+        const { date, startDate, endDate, department, departments: deptsList, facilityId, all } = options || {};
         const deptFilter =
           department && department !== "Semua Poli" && department !== "all"
             ? department
             : undefined;
 
+        let facilityDeptNames: string[] | undefined = undefined;
+        if (facilityId) {
+          const dRows = await db
+            .select({ name: departments.name })
+            .from(departments)
+            .where(eq(departments.facilityId, facilityId));
+          facilityDeptNames = dRows.map((d) => d.name);
+        }
+
         const conditions: SQL[] = [];
         if (deptFilter) {
           conditions.push(eq(queueItems.department, deptFilter));
+        } else if (deptsList && deptsList.length > 0) {
+          conditions.push(inArray(queueItems.department, deptsList));
+        } else if (facilityDeptNames && facilityDeptNames.length > 0) {
+          conditions.push(inArray(queueItems.department, facilityDeptNames));
         }
 
         if (!all) {
@@ -50,40 +66,92 @@ export const QueueRepository = {
           query = query.where(and(...conditions)) as any;
         }
 
-        let rows = query
-          .orderBy(desc(queueItems.queueDate), asc(queueItems.arrivalTimestamp))
-          .all();
+        let rows = await query
+          .orderBy(desc(queueItems.queueDate), asc(queueItems.arrivalTimestamp));
 
         // Fallback: If no records match today's date yet and no explicit past filter was queried, fetch any active queue items
         if (rows.length === 0 && !date && !startDate && !endDate && !all) {
-          const fallbackQuery = deptFilter
-            ? db
-                .select()
-                .from(queueItems)
-                .where(eq(queueItems.department, deptFilter))
-                .orderBy(asc(queueItems.arrivalTimestamp))
-            : db
-                .select()
-                .from(queueItems)
-                .orderBy(asc(queueItems.arrivalTimestamp));
-          rows = fallbackQuery.all();
+          let fallbackWhere: SQL | undefined = undefined;
+          if (deptFilter) {
+            fallbackWhere = eq(queueItems.department, deptFilter);
+          } else if (deptsList && deptsList.length > 0) {
+            fallbackWhere = inArray(queueItems.department, deptsList);
+          } else if (facilityDeptNames && facilityDeptNames.length > 0) {
+            fallbackWhere = inArray(queueItems.department, facilityDeptNames);
+          }
+
+          let fallbackQuery = db.select().from(queueItems);
+          if (fallbackWhere) {
+            fallbackQuery = fallbackQuery.where(fallbackWhere) as any;
+          }
+          rows = await fallbackQuery.orderBy(asc(queueItems.arrivalTimestamp));
         }
 
         if (rows.length === 0) return [];
 
         // Batch fetch all patients in 1 query (Eliminating N+1)
         const patientIds = rows.map((r) => r.patientId);
-        const patientMap = PatientRepository.getByIds(patientIds);
+        const patientMap = await PatientRepository.getByIds(patientIds);
+
+        // Batch fetch encounters to derive real SATUSEHAT sync status (Single Source of Truth)
+        const encounterIds = rows.map((r) => r.encounterId).filter(Boolean) as string[];
+        const regNumbers = rows.map((r) => r.registrationNumber).filter(Boolean) as string[];
+
+        const encConditions: SQL[] = [];
+        if (encounterIds.length > 0) encConditions.push(inArray(encounters.id, encounterIds));
+        if (regNumbers.length > 0) encConditions.push(inArray(encounters.registrationNumber, regNumbers));
+
+        const encounterByEncId = new Map<string, { id: string; registrationNumber: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
+        const encounterByRegNum = new Map<string, { id: string; registrationNumber: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
+        const encounterByPatientId = new Map<string, { id: string; registrationNumber: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
+
+        if (encConditions.length > 0 || patientIds.length > 0) {
+          const encRows = await db
+            .select({
+              id: encounters.id,
+              registrationNumber: encounters.registrationNumber,
+              patientId: encounters.patientId,
+              syncStatus: encounters.syncStatus,
+              satusehatEncounterId: encounters.satusehatEncounterId,
+            })
+            .from(encounters)
+            .where(
+              encConditions.length > 0
+                ? or(...encConditions, inArray(encounters.patientId, patientIds))
+                : inArray(encounters.patientId, patientIds)
+            );
+
+          for (const enc of encRows) {
+            encounterByEncId.set(enc.id, enc);
+            if (enc.registrationNumber) encounterByRegNum.set(enc.registrationNumber, enc);
+            if (enc.patientId) encounterByPatientId.set(enc.patientId, enc);
+          }
+        }
 
         const result: ClinicQueuePatientItem[] = [];
 
         for (const row of rows) {
           const patient = patientMap.get(row.patientId);
           if (patient) {
+            const matchedEnc =
+              (row.encounterId ? encounterByEncId.get(row.encounterId) : null) ||
+              (row.registrationNumber ? encounterByRegNum.get(row.registrationNumber) : null) ||
+              encounterByPatientId.get(row.patientId);
+
+            // True sync status derived from actual clinical encounter
+            const isSynced =
+              matchedEnc?.syncStatus === "synced" ||
+              Boolean(matchedEnc?.satusehatEncounterId) ||
+              row.satusehatStatus === "synced";
+
             result.push({
               id: row.id,
               queueNumber: row.queueNumber,
+              registrationNumber: row.registrationNumber || matchedEnc?.registrationNumber || undefined,
               patient,
+              departmentId: row.departmentId || undefined,
+              doctorId: row.doctorId || undefined,
+              encounterId: row.encounterId || matchedEnc?.id || undefined,
               department: row.department,
               doctor: row.doctor,
               room: row.room,
@@ -91,7 +159,7 @@ export const QueueRepository = {
               arrivalTimestamp: row.arrivalTimestamp || undefined,
               chiefComplaint: row.chiefComplaint,
               status: row.status as "arrived" | "in-progress" | "finished",
-              satusehatStatus: (row.satusehatStatus as "synced" | "pending") || "pending",
+              satusehatStatus: isSynced ? "synced" : "pending",
               satusehatConsent: (row.satusehatConsent as "opt-in" | "opt-out") || "opt-in",
               triagePriority: (row.triagePriority as ClinicQueuePatientItem["triagePriority"]) || "regular",
             });
@@ -104,32 +172,112 @@ export const QueueRepository = {
     );
   },
 
-  getTodayQueue(department?: string): ClinicQueuePatientItem[] {
+  async getTodayQueue(department?: string): Promise<ClinicQueuePatientItem[]> {
     return this.getQueue({ department });
   },
 
-  add(item: ClinicQueuePatientItem): ClinicQueuePatientItem {
+  async add(item: ClinicQueuePatientItem): Promise<ClinicQueuePatientItem> {
     // 1. Ensure Patient exists or is created/updated
     let patient: PatientProfile | null = null;
     if (item.patient?.id) {
-      patient = PatientRepository.getById(item.patient.id);
+      patient = await PatientRepository.getById(item.patient.id);
     }
     if (!patient && item.patient?.nik) {
-      patient = PatientRepository.getByNik(item.patient.nik);
+      patient = await PatientRepository.getByNik(item.patient.nik);
     }
     if (!patient) {
-      patient = PatientRepository.create(item.patient);
+      patient = await PatientRepository.create(item.patient);
     }
 
     const todayStr = new Date().toISOString().split("T")[0];
-    const id = item.id || `Q-${Date.now().toString(36).toUpperCase()}`;
+    const id = item.id || generatePrefixedId("q_");
 
-    const existing = db.select().from(queueItems).where(eq(queueItems.id, id)).get();
+    // 1. Resolve encounter and its facility context if available
+    let resolvedEncounterId = item.encounterId || null;
+    let encFacilityId: string | null = null;
+    if (resolvedEncounterId) {
+      const encRows = await db
+        .select({
+          id: encounters.id,
+          facilityId: encounters.facilityId,
+          departmentId: encounters.departmentId,
+          doctorId: encounters.doctorId,
+        })
+        .from(encounters)
+        .where(eq(encounters.id, resolvedEncounterId))
+        .limit(1);
+      if (encRows.length > 0) {
+        encFacilityId = encRows[0].facilityId;
+        if (!item.departmentId && encRows[0].departmentId) item.departmentId = encRows[0].departmentId;
+        if (!item.doctorId && encRows[0].doctorId) item.doctorId = encRows[0].doctorId;
+      }
+    } else if (item.registrationNumber) {
+      const encRows = await db
+        .select({
+          id: encounters.id,
+          facilityId: encounters.facilityId,
+          departmentId: encounters.departmentId,
+          doctorId: encounters.doctorId,
+        })
+        .from(encounters)
+        .where(eq(encounters.registrationNumber, item.registrationNumber))
+        .limit(1);
+      if (encRows.length > 0) {
+        resolvedEncounterId = encRows[0].id;
+        encFacilityId = encRows[0].facilityId;
+        if (!item.departmentId && encRows[0].departmentId) item.departmentId = encRows[0].departmentId;
+        if (!item.doctorId && encRows[0].doctorId) item.doctorId = encRows[0].doctorId;
+      }
+    }
+
+    // 2. Resolve departmentId strictly within facility context
+    let resolvedDepartmentId = item.departmentId || null;
+    if (!resolvedDepartmentId && item.department) {
+      const deptCondition = encFacilityId
+        ? and(eq(departments.name, item.department), eq(departments.facilityId, encFacilityId))
+        : eq(departments.name, item.department);
+
+      const deptRows = await db
+        .select({ id: departments.id })
+        .from(departments)
+        .where(deptCondition)
+        .limit(1);
+      if (deptRows.length > 0) {
+        resolvedDepartmentId = deptRows[0].id;
+      }
+    }
+
+    // 3. Resolve doctorId strictly within facility context
+    let resolvedDoctorId = item.doctorId || null;
+    if (!resolvedDoctorId && item.doctor) {
+      const docCleanName = item.doctor.split(" (")[0].trim();
+      const userCondition = encFacilityId
+        ? and(eq(users.name, docCleanName), eq(users.facilityId, encFacilityId))
+        : eq(users.name, docCleanName);
+
+      const userRows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(userCondition)
+        .limit(1);
+      if (userRows.length > 0) {
+        resolvedDoctorId = userRows[0].id;
+      }
+    }
+
+    const existingRows = await db.select().from(queueItems).where(eq(queueItems.id, id)).limit(1);
+    const existing = existingRows[0];
+
     if (existing) {
-      db.update(queueItems)
+      await db
+        .update(queueItems)
         .set({
           queueNumber: item.queueNumber || existing.queueNumber,
+          registrationNumber: item.registrationNumber || existing.registrationNumber,
           patientId: patient.id,
+          departmentId: resolvedDepartmentId !== null ? resolvedDepartmentId : existing.departmentId,
+          doctorId: resolvedDoctorId !== null ? resolvedDoctorId : existing.doctorId,
+          encounterId: resolvedEncounterId !== null ? resolvedEncounterId : existing.encounterId,
           department: item.department || existing.department,
           doctor: item.doctor || existing.doctor,
           room: item.room || existing.room,
@@ -142,33 +290,34 @@ export const QueueRepository = {
           triagePriority: item.triagePriority || existing.triagePriority,
           queueDate: todayStr,
         })
-        .where(eq(queueItems.id, id))
-        .run();
+        .where(eq(queueItems.id, id));
     } else {
-      db.insert(queueItems)
-        .values({
-          id,
-          queueNumber: item.queueNumber,
-          patientId: patient.id,
-          department: item.department,
-          doctor: item.doctor || "dr. Dokter Pemeriksa",
-          room: item.room || "R-101",
-          arrivalTime:
-            item.arrivalTime ||
-            new Date().toLocaleTimeString("id-ID", {
-              hour: "2-digit",
-              minute: "2-digit",
-            }) + " WIB",
-          arrivalTimestamp: item.arrivalTimestamp || Date.now(),
-          chiefComplaint: item.chiefComplaint || "Pemeriksaan Umum",
-          status: item.status || "arrived",
-          satusehatStatus: item.satusehatStatus || "pending",
-          satusehatConsent:
-            item.satusehatConsent || patient.satusehatConsent || "opt-in",
-          triagePriority: item.triagePriority || "regular",
-          queueDate: todayStr,
-        })
-        .run();
+      await db.insert(queueItems).values({
+        id,
+        queueNumber: item.queueNumber,
+        registrationNumber: item.registrationNumber || null,
+        patientId: patient.id,
+        departmentId: resolvedDepartmentId,
+        doctorId: resolvedDoctorId,
+        encounterId: resolvedEncounterId,
+        department: item.department,
+        doctor: item.doctor || "dr. Dokter Pemeriksa",
+        room: item.room || "R-101",
+        arrivalTime:
+          item.arrivalTime ||
+          new Date().toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }) + " WIB",
+        arrivalTimestamp: item.arrivalTimestamp || Date.now(),
+        chiefComplaint: item.chiefComplaint || "Pemeriksaan Umum",
+        status: item.status || "arrived",
+        satusehatStatus: item.satusehatStatus || "pending",
+        satusehatConsent:
+          item.satusehatConsent || patient.satusehatConsent || "opt-in",
+        triagePriority: item.triagePriority || "regular",
+        queueDate: todayStr,
+      });
     }
 
     InvalidationService.invalidateQueue();
@@ -177,50 +326,120 @@ export const QueueRepository = {
       ...item,
       id,
       patient,
+      departmentId: resolvedDepartmentId || undefined,
+      doctorId: resolvedDoctorId || undefined,
+      encounterId: resolvedEncounterId || undefined,
       satusehatStatus: item.satusehatStatus || "pending",
     };
   },
 
-  updateStatus(id: string, status: "arrived" | "in-progress" | "finished"): boolean {
-    const qRow = db.select().from(queueItems).where(eq(queueItems.id, id)).get();
-    const res = db.update(queueItems).set({ status }).where(eq(queueItems.id, id)).run();
+  async updateStatus(
+    id: string,
+    status?: "arrived" | "in-progress" | "finished",
+    satusehatStatus?: "synced" | "pending"
+  ): Promise<boolean> {
+    const qRows = await db.select().from(queueItems).where(eq(queueItems.id, id)).limit(1);
+    const qRow = qRows[0];
+
+    const now = new Date().toISOString();
+    const updateData: {
+      status?: "arrived" | "in-progress" | "finished";
+      calledAt?: string;
+      callCount?: number;
+      satusehatStatus?: "synced" | "pending";
+    } = {};
+
+    if (status) {
+      updateData.status = status;
+    }
+    if (satusehatStatus) {
+      updateData.satusehatStatus = satusehatStatus;
+    }
+
+    // Auto-record called_at and initial call_count when patient enters in-progress status
+    if (status === "in-progress" && (!qRow?.calledAt || (qRow?.callCount || 0) === 0)) {
+      updateData.calledAt = now;
+      updateData.callCount = 1;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await db.update(queueItems).set(updateData).where(eq(queueItems.id, id));
+    }
 
     if (qRow) {
-      const now = new Date().toISOString();
+
+      // Auto-link encounterId if currently null
+      if (!qRow.encounterId && qRow.registrationNumber) {
+        const encRows = await db
+          .select({ id: encounters.id })
+          .from(encounters)
+          .where(eq(encounters.registrationNumber, qRow.registrationNumber))
+          .limit(1);
+        if (encRows.length > 0) {
+          await db
+            .update(queueItems)
+            .set({ encounterId: encRows[0].id })
+            .where(eq(queueItems.id, id));
+        }
+      }
+
       if (qRow.queueNumber) {
-        db.update(encounters)
+        await db
+          .update(encounters)
           .set({ encounterStatus: status, updatedAt: now })
-          .where(eq(encounters.queueNumber, qRow.queueNumber))
-          .run();
+          .where(eq(encounters.queueNumber, qRow.queueNumber));
       }
       if (qRow.patientId) {
-        db.update(encounters)
+        await db
+          .update(encounters)
           .set({ encounterStatus: status, updatedAt: now })
-          .where(eq(encounters.patientId, qRow.patientId))
-          .run();
+          .where(eq(encounters.patientId, qRow.patientId));
       }
     }
 
     InvalidationService.invalidateQueue();
     InvalidationService.invalidateEncounter();
-    return res.changes > 0;
+    return true;
   },
 
-  incrementCallCount(id: string): { callCount: number; calledAt: string } | null {
+  async incrementCallCount(id: string): Promise<{ callCount: number; calledAt: string } | null> {
     const now = new Date().toISOString();
-    const existing = db.select().from(queueItems).where(eq(queueItems.id, id)).get();
+    const existingRows = await db.select().from(queueItems).where(eq(queueItems.id, id)).limit(1);
+    const existing = existingRows[0];
     if (!existing) return null;
 
     const nextCount = (existing.callCount || 0) + 1;
-    db.update(queueItems)
+    await db
+      .update(queueItems)
       .set({
         callCount: nextCount,
         calledAt: now,
       })
-      .where(eq(queueItems.id, id))
-      .run();
+      .where(eq(queueItems.id, id));
 
     InvalidationService.invalidateQueue();
     return { callCount: nextCount, calledAt: now };
+  },
+
+  async updateSatusehatStatus(params: {
+    encounterId?: string;
+    registrationNumber?: string;
+    patientId?: string;
+    status: "synced" | "pending";
+  }): Promise<boolean> {
+    const conditions: SQL[] = [];
+    if (params.encounterId) conditions.push(eq(queueItems.encounterId, params.encounterId));
+    if (params.registrationNumber) conditions.push(eq(queueItems.registrationNumber, params.registrationNumber));
+    if (params.patientId) conditions.push(eq(queueItems.patientId, params.patientId));
+
+    if (conditions.length === 0) return false;
+
+    await db
+      .update(queueItems)
+      .set({ satusehatStatus: params.status })
+      .where(or(...conditions));
+
+    InvalidationService.invalidateQueue();
+    return true;
   },
 };

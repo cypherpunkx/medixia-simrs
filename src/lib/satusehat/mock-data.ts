@@ -1,4 +1,4 @@
-import { OutpatientEncounter, PatientProfile } from "./types";
+import { OutpatientEncounter, PatientProfile, ClinicQueuePatientItem } from "./types";
 
 export const MOCK_PATIENT: PatientProfile = {
   id: "P-10002891902", // SATUSEHAT Patient ID
@@ -27,13 +27,14 @@ export const MOCK_PATIENT: PatientProfile = {
 
 export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
   {
-    id: "ENC-2026-0901",
+    id: "ENC-20260902-0001",
+    registrationNumber: "RJ-20260902-0001",
     patientId: "P-10002891902",
-    satusehatEncounterId: undefined,
+    satusehatEncounterId: "ss-enc-89210-9941a",
     visitDate: "2026-09-02T09:30:00+07:00",
     clinicDepartment: "Poli Penyakit Dalam",
     doctorName: "dr. Rian Pratama, Sp.PD",
-    doctorSip: "SIP.446/089/DS/Dinkes/2023",
+    doctorSip: "SIP.446/089/DS/Dinkes/2026",
     doctorIhsId: "N10009841",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
@@ -55,7 +56,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-1",
+        id: "diag-001-1",
         type: "primary",
         code: "I10",
         display: "Essential (primary) hypertension",
@@ -64,7 +65,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         clinicalStatus: "active",
       },
       {
-        id: "diag-2",
+        id: "diag-001-2",
         type: "secondary",
         code: "R53.83",
         display: "Other fatigue",
@@ -75,14 +76,14 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-1",
+        id: "proc-001-1",
         code: "89.07",
         display: "General medical consultation",
         category: "Konsultasi & Pemeriksaan Fisik",
         notes: "Konsultasi evaluasi kardiovaskular dan gaya hidup",
       },
       {
-        id: "proc-2",
+        id: "proc-001-2",
         code: "89.52",
         display: "Electrocardiogram",
         category: "Pemeriksaan Penunjang",
@@ -91,7 +92,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-1",
+        id: "med-001-1",
         kfaCode: "93000182",
         medicationName: "Amlodipine Besilate 5 mg",
         form: "Tablet",
@@ -110,7 +111,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         instructions: "Diminum 1 tablet tiap malam sebelum tidur sesudah makan.",
       },
       {
-        id: "med-2",
+        id: "med-001-2",
         kfaCode: "93000401",
         medicationName: "Paracetamol 500 mg",
         form: "Kaplet",
@@ -137,7 +138,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnosticOrders: [
       {
-        id: "ord-1",
+        id: "ord-001-1",
         testCode: "58410-2",
         testName: "Darah Lengkap (CBC)",
         category: "laboratory",
@@ -148,7 +149,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         clinicalNotes: "Evaluasi rutin hipertensi dan skrining anemia",
       },
       {
-        id: "ord-2",
+        id: "ord-001-2",
         testCode: "2093-3",
         testName: "Kolesterol Total",
         category: "laboratory",
@@ -159,7 +160,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         clinicalNotes: "Skrining profil lipid",
       },
       {
-        id: "ord-3",
+        id: "ord-001-3",
         testCode: "36554-4",
         testName: "Foto Thorax PA",
         category: "radiology",
@@ -172,7 +173,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     labResults: [
       {
-        id: "lab-1",
+        id: "lab-001-1",
         testCode: "58410-2",
         testName: "Hemoglobin",
         category: "Hematologi",
@@ -185,7 +186,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         notes: "Sampel adekuat, non-hemolisis",
       },
       {
-        id: "lab-2",
+        id: "lab-001-2",
         testCode: "58410-2",
         testName: "Leukosit",
         category: "Hematologi",
@@ -197,7 +198,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         performer: "Laboratorium Patologi RSUD",
       },
       {
-        id: "lab-3",
+        id: "lab-001-3",
         testCode: "58410-2",
         testName: "Trombosit",
         category: "Hematologi",
@@ -209,7 +210,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         performer: "Laboratorium Patologi RSUD",
       },
       {
-        id: "lab-4",
+        id: "lab-001-4",
         testCode: "2093-3",
         testName: "Kolesterol Total",
         category: "Kimia Darah",
@@ -222,7 +223,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         notes: "Batas ambang tinggi (Borderline High)",
       },
       {
-        id: "lab-5",
+        id: "lab-001-5",
         testCode: "1558-6",
         testName: "Glukosa Darah Puasa",
         category: "Kimia Darah",
@@ -236,7 +237,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     radiologyResults: [
       {
-        id: "rad-1",
+        id: "rad-001-1",
         examCode: "36554-4",
         examName: "Foto Thorax PA",
         modality: "X-Ray",
@@ -248,7 +249,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     addendums: [
       {
-        id: "add-1",
+        id: "add-001-1",
         timestamp: "2026-09-02T11:00:00+07:00",
         authorName: "dr. Rian Pratama, Sp.PD",
         authorRole: "Dokter Penanggung Jawab Pelayanan (DPJP)",
@@ -304,14 +305,15 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     ],
   },
   {
-    id: "ENC-2026-0615",
+    id: "ENC-20260615-0008",
+    registrationNumber: "RJ-20260615-0008",
     patientId: "P-10002891902",
     satusehatEncounterId: "ss-enc-71029-8812c",
     visitDate: "2026-06-15T14:10:00+07:00",
     clinicDepartment: "Poli Umum",
     doctorName: "dr. Amanda Putri, M.Biomed",
-    doctorSip: "SIP.446/012/DU/Dinkes/2024",
-    doctorIhsId: "N10004512",
+    doctorSip: "SIP.446/012/DU/Dinkes/2026",
+    doctorIhsId: "N10009842",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
     chiefComplaint: "Batuk berdahak dan radang tenggorokan 4 hari",
@@ -330,7 +332,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-prev-1",
+        id: "diag-prev-001-1",
         type: "primary",
         code: "J00",
         display: "Acute nasopharyngitis [common cold]",
@@ -341,7 +343,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-prev-1",
+        id: "proc-prev-001-1",
         code: "89.07",
         display: "General medical consultation",
         category: "Konsultasi & Pemeriksaan Fisik",
@@ -349,7 +351,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-prev-1",
+        id: "med-prev-001-1",
         kfaCode: "93000551",
         medicationName: "Ambroxol Sirup 15 mg / 5 mL",
         form: "Sirup",
@@ -367,7 +369,7 @@ export const MOCK_ENCOUNTERS: OutpatientEncounter[] = [
         instructions: "Kocok dahulu sebelum diminum, habiskan dalam 5 hari.",
       },
       {
-        id: "med-prev-2",
+        id: "med-prev-001-2",
         kfaCode: "93000889",
         medicationName: "Vitamin C 500 mg",
         form: "Tablet Effervescent",
@@ -399,13 +401,14 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   ...MOCK_ENCOUNTERS,
   // 1. Siti Rahmawati (Poli Penyakit Dalam - Dispepsia & Maag)
   {
-    id: "ENC-2026-0902-SITI",
+    id: "ENC-20260902-0002",
+    registrationNumber: "RJ-20260902-0002",
     patientId: "P-10004581299",
     satusehatEncounterId: undefined,
     visitDate: "2026-09-02T09:00:00+07:00",
     clinicDepartment: "Poli Penyakit Dalam",
     doctorName: "dr. Rian Pratama, Sp.PD",
-    doctorSip: "SIP.446/089/DS/Dinkes/2023",
+    doctorSip: "SIP.446/089/DS/Dinkes/2026",
     doctorIhsId: "N10009841",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
@@ -425,7 +428,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-siti-1",
+        id: "diag-002-1",
         type: "primary",
         code: "K30",
         display: "Functional dyspepsia",
@@ -436,7 +439,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-siti-1",
+        id: "proc-002-1",
         code: "89.07",
         display: "General medical consultation",
         category: "Konsultasi & Pemeriksaan Fisik",
@@ -445,7 +448,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-siti-1",
+        id: "med-002-1",
         kfaCode: "93000620",
         medicationName: "Omeprazole 20 mg",
         form: "Kapsul",
@@ -459,7 +462,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
         instructions: "Diminum 30 menit sebelum sarapan pagi.",
       },
       {
-        id: "med-siti-2",
+        id: "med-002-2",
         kfaCode: "93000115",
         medicationName: "Antasida DOEN",
         form: "Tablet Kunyah",
@@ -486,13 +489,14 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   },
   // 2. H. Ahmad Fauzi (Poli Penyakit Dalam - DM Tipe 2 & Gout)
   {
-    id: "ENC-2026-0902-FAUZI",
+    id: "ENC-20260902-0003",
+    registrationNumber: "RJ-20260902-0003",
     patientId: "P-10007821033",
-    satusehatEncounterId: "ss-enc-fauzi-0902",
+    satusehatEncounterId: "ss-enc-0902-0003",
     visitDate: "2026-09-02T08:00:00+07:00",
     clinicDepartment: "Poli Penyakit Dalam",
     doctorName: "dr. Rian Pratama, Sp.PD",
-    doctorSip: "SIP.446/089/DS/Dinkes/2023",
+    doctorSip: "SIP.446/089/DS/Dinkes/2026",
     doctorIhsId: "N10009841",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
@@ -512,7 +516,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-fauzi-1",
+        id: "diag-003-1",
         type: "primary",
         code: "E11.9",
         display: "Type 2 diabetes mellitus without complications",
@@ -521,7 +525,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
         clinicalStatus: "active",
       },
       {
-        id: "diag-fauzi-2",
+        id: "diag-003-2",
         type: "secondary",
         code: "M10.9",
         display: "Gout, unspecified",
@@ -532,7 +536,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-fauzi-1",
+        id: "proc-003-1",
         code: "89.07",
         display: "General medical consultation",
         category: "Konsultasi Penyakit Dalam",
@@ -540,7 +544,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-fauzi-1",
+        id: "med-003-1",
         kfaCode: "93000781",
         medicationName: "Metformin HCl 500 mg",
         form: "Tablet",
@@ -554,7 +558,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
         instructions: "Diminum saat makan atau segera sesudah makan.",
       },
       {
-        id: "med-fauzi-2",
+        id: "med-003-2",
         kfaCode: "93000910",
         medicationName: "Allopurinol 100 mg",
         form: "Tablet",
@@ -581,14 +585,15 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   },
   // 3. Dewi Lestari (Poli Umum - Faringitis Akut)
   {
-    id: "ENC-2026-0902-DEWI",
+    id: "ENC-20260902-0004",
+    registrationNumber: "RJ-20260902-0004",
     patientId: "P-10009918231",
     satusehatEncounterId: undefined,
     visitDate: "2026-09-02T09:15:00+07:00",
     clinicDepartment: "Poli Umum",
     doctorName: "dr. Amanda Putri, M.Biomed",
-    doctorSip: "SIP.446/012/DU/Dinkes/2024",
-    doctorIhsId: "N10004512",
+    doctorSip: "SIP.446/012/DU/Dinkes/2026",
+    doctorIhsId: "N10009842",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
     chiefComplaint: "Demam sumeng-sumeng dan batuk berdahak 3 hari",
@@ -607,7 +612,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-dewi-1",
+        id: "diag-004-1",
         type: "primary",
         code: "J02.9",
         display: "Acute pharyngitis, unspecified",
@@ -618,7 +623,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-dewi-1",
+        id: "proc-004-1",
         code: "89.07",
         display: "General medical consultation",
         category: "Konsultasi Dokter Umum",
@@ -626,7 +631,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-dewi-1",
+        id: "med-004-1",
         kfaCode: "93000401",
         medicationName: "Paracetamol 500 mg",
         form: "Kaplet",
@@ -640,7 +645,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
         instructions: "Diminum saat demam atau tenggorokan nyeri.",
       },
       {
-        id: "med-dewi-2",
+        id: "med-004-2",
         kfaCode: "93000551",
         medicationName: "Ambroxol 30 mg",
         form: "Tablet",
@@ -667,14 +672,15 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   },
   // 4. Ananda Rizky (Poli Anak - Imunisasi & Tumbuh Kembang)
   {
-    id: "ENC-2026-0902-RIZKY",
+    id: "ENC-20260902-0005",
+    registrationNumber: "RJ-20260902-0005",
     patientId: "P-10003319022",
     satusehatEncounterId: undefined,
     visitDate: "2026-09-02T08:45:00+07:00",
     clinicDepartment: "Poli Anak (Pediatri)",
     doctorName: "dr. Maya Anggraini, Sp.A",
-    doctorSip: "SIP.446/055/DA/Dinkes/2023",
-    doctorIhsId: "N10007812",
+    doctorSip: "SIP.446/033/SPA/Dinkes/2026",
+    doctorIhsId: "N10009843",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
     chiefComplaint: "Imunisasi lanjutan dan evaluasi tumbuh kembang balita",
@@ -693,7 +699,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-rizky-1",
+        id: "diag-005-1",
         type: "primary",
         code: "Z00.1",
         display: "Routine child health examination",
@@ -704,7 +710,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-rizky-1",
+        id: "proc-005-1",
         code: "99.55",
         display: "Prophylactic administration of vaccine",
         category: "Imunisasi Anak",
@@ -712,7 +718,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-rizky-1",
+        id: "med-005-1",
         kfaCode: "93000311",
         medicationName: "Paracetamol Drops 100 mg / mL",
         form: "Drops",
@@ -739,13 +745,14 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   },
   // 5. Hj. Endang Sumarni (Poli Penyakit Dalam - Osteoarthritis Geriatri)
   {
-    id: "ENC-2026-0902-ENDANG",
+    id: "ENC-20260902-0006",
+    registrationNumber: "RJ-20260902-0006",
     patientId: "P-10006719201",
     satusehatEncounterId: undefined,
     visitDate: "2026-09-02T09:20:00+07:00",
     clinicDepartment: "Poli Penyakit Dalam",
     doctorName: "dr. Rian Pratama, Sp.PD",
-    doctorSip: "SIP.446/089/DS/Dinkes/2023",
+    doctorSip: "SIP.446/089/DS/Dinkes/2026",
     doctorIhsId: "N10009841",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
@@ -765,7 +772,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-endang-1",
+        id: "diag-006-1",
         type: "primary",
         code: "M17.9",
         display: "Osteoarthritis of knee, unspecified",
@@ -776,7 +783,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-endang-1",
+        id: "proc-006-1",
         code: "89.07",
         display: "General medical consultation",
         category: "Konsultasi Sendi & Geriatri",
@@ -784,7 +791,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-endang-1",
+        id: "med-006-1",
         kfaCode: "93000492",
         medicationName: "Glucosamine Sulfate 500 mg",
         form: "Kaplet",
@@ -798,7 +805,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
         instructions: "Diminum teratur sesudah makan.",
       },
       {
-        id: "med-endang-2",
+        id: "med-006-2",
         kfaCode: "93000210",
         medicationName: "Natrium Diklofenak 50 mg",
         form: "Tablet",
@@ -825,14 +832,15 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   },
   // 6. dr. Hendra Setiawan (Poli Gigi - Scaling & Dental Plaque - Opt Out)
   {
-    id: "ENC-2026-0902-HENDRA",
+    id: "ENC-20260902-0007",
+    registrationNumber: "RJ-20260902-0007",
     patientId: "P-10008819209",
     satusehatEncounterId: undefined,
     visitDate: "2026-09-02T09:30:00+07:00",
     clinicDepartment: "Poli Gigi & Mulut",
     doctorName: "drg. Kevin Tanuwidjaja",
-    doctorSip: "SIP.446/099/DG/Dinkes/2024",
-    doctorIhsId: "N10003319",
+    doctorSip: "SIP.446/055/DRG/Dinkes/2026",
+    doctorIhsId: "N10009844",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
     chiefComplaint: "Pembersihan karang gigi (scaling) dan kontrol gigi berlubang",
@@ -851,7 +859,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-hendra-1",
+        id: "diag-007-1",
         type: "primary",
         code: "K03.6",
         display: "Deposits on teeth",
@@ -862,7 +870,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-hendra-1",
+        id: "proc-007-1",
         code: "96.54",
         display: "Dental scaling and polishing",
         category: "Tindakan Gigi",
@@ -870,7 +878,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-hendra-1",
+        id: "med-007-1",
         kfaCode: "93000670",
         medicationName: "Chlorhexidine 0.2% Mouthwash",
         form: "Obat Kumur",
@@ -897,14 +905,15 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   },
   // 7. Rudi Hartono (Poli Jantung - Angina Pectoris CITO)
   {
-    id: "ENC-2026-0902-RUDI",
+    id: "ENC-20260902-0008",
+    registrationNumber: "RJ-20260902-0008",
     patientId: "P-10005519803",
     satusehatEncounterId: undefined,
     visitDate: "2026-09-02T08:50:00+07:00",
     clinicDepartment: "Poli Jantung & Pembuluh Darah",
     doctorName: "dr. Rian Hidayat, Sp.JP",
-    doctorSip: "SIP.446/077/DJ/Dinkes/2023",
-    doctorIhsId: "N10006612",
+    doctorSip: "SIP.446/077/DJ/Dinkes/2026",
+    doctorIhsId: "N10009846",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
     chiefComplaint: "Nyeri dada sebelah kiri tembus ke punggung dan berdebar (CITO)",
@@ -923,7 +932,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-rudi-1",
+        id: "diag-008-1",
         type: "primary",
         code: "I20.0",
         display: "Unstable angina",
@@ -934,7 +943,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-rudi-1",
+        id: "proc-008-1",
         code: "89.52",
         display: "Electrocardiogram",
         category: "Pemeriksaan Penunjang Jantung",
@@ -943,7 +952,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-rudi-1",
+        id: "med-008-1",
         kfaCode: "93000812",
         medicationName: "Isosorbide Dinitrate (ISDN) 5 mg",
         form: "Tablet Sublingual",
@@ -957,7 +966,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
         instructions: "Letakkan di bawah lidah saat dada terasa sesak atau nyeri.",
       },
       {
-        id: "med-rudi-2",
+        id: "med-008-2",
         kfaCode: "93000199",
         medicationName: "Aspirin 80 mg",
         form: "Tablet",
@@ -984,14 +993,15 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   },
   // 8. Putri Anggraini (Poli Mata - Konjungtivitis Akut - Opt Out)
   {
-    id: "ENC-2026-0902-PUTRI",
+    id: "ENC-20260902-0009",
+    registrationNumber: "RJ-20260902-0009",
     patientId: "P-10001129481",
     satusehatEncounterId: undefined,
     visitDate: "2026-09-02T09:40:00+07:00",
     clinicDepartment: "Poli Mata",
     doctorName: "dr. Nadia Putri, Sp.M",
-    doctorSip: "SIP.446/044/DM/Dinkes/2023",
-    doctorIhsId: "N10002291",
+    doctorSip: "SIP.446/044/DM/Dinkes/2026",
+    doctorIhsId: "N10009847",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
     chiefComplaint: "Mata merah, berair, dan pandangan silau sejak kemarin",
@@ -1010,7 +1020,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-putri-1",
+        id: "diag-009-1",
         type: "primary",
         code: "H10.9",
         display: "Unspecified conjunctivitis",
@@ -1021,7 +1031,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-putri-1",
+        id: "proc-009-1",
         code: "95.02",
         display: "Comprehensive ophthalmological examination",
         category: "Pemeriksaan Oftalmologi",
@@ -1029,7 +1039,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-putri-1",
+        id: "med-009-1",
         kfaCode: "93000722",
         medicationName: "Cendo Tobroson Tetes Mata",
         form: "Tetes Mata",
@@ -1056,13 +1066,14 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
   },
   // 9. Opa Soetrisno (Poli Penyakit Dalam - BPH & Hipertensi)
   {
-    id: "ENC-730731",
+    id: "ENC-20260902-0010",
+    registrationNumber: "RJ-20260902-0010",
     patientId: "P-10004491023",
     satusehatEncounterId: undefined,
     visitDate: "2026-09-02T09:50:00+07:00",
     clinicDepartment: "Poli Penyakit Dalam",
     doctorName: "dr. Rian Pratama, Sp.PD",
-    doctorSip: "SIP.446/089/DS/Dinkes/2023",
+    doctorSip: "SIP.446/089/DS/Dinkes/2026",
     doctorIhsId: "N10009841",
     hospitalName: "RS Umum Daerah Sehat Sejahtera",
     hospitalOrgId: "10000004",
@@ -1082,7 +1093,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     },
     diagnoses: [
       {
-        id: "diag-opa-1",
+        id: "diag-010-1",
         type: "primary",
         code: "N40",
         display: "Hyperplasia of prostate",
@@ -1091,7 +1102,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
         clinicalStatus: "active",
       },
       {
-        id: "diag-opa-2",
+        id: "diag-010-2",
         type: "secondary",
         code: "I10",
         display: "Essential (primary) hypertension",
@@ -1102,7 +1113,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     procedures: [
       {
-        id: "proc-opa-1",
+        id: "proc-010-1",
         code: "89.07",
         display: "General medical consultation",
         category: "Konsultasi Geriatri",
@@ -1110,7 +1121,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
     ],
     prescriptions: [
       {
-        id: "med-opa-1",
+        id: "med-010-1",
         kfaCode: "93000830",
         medicationName: "Tamsulosin HCl 0.4 mg",
         form: "Kapsul",
@@ -1124,7 +1135,7 @@ export const ALL_SAMPLE_ENCOUNTERS: OutpatientEncounter[] = [
         instructions: "Diminum malam hari 30 menit sesudah makan malam.",
       },
       {
-        id: "med-opa-2",
+        id: "med-010-2",
         kfaCode: "93000182",
         medicationName: "Amlodipine Besilate 10 mg",
         form: "Tablet",
@@ -1532,9 +1543,10 @@ export const SAMPLE_PATIENTS: PatientProfile[] = [
 ];
 
 // Initial Live Worklist of Registered Patients Today in FIFO Order (Earliest Arrival First)
-export const INITIAL_WORKLIST = [
+export const INITIAL_WORKLIST: ClinicQueuePatientItem[] = [
   {
     id: "Q-001",
+    registrationNumber: "RJ-20260913-0001",
     queueNumber: "A-012",
     patient: SAMPLE_PATIENTS[2], // H. Ahmad Fauzi (08:00 WIB)
     department: "Poli Penyakit Dalam",
@@ -1550,6 +1562,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-002",
+    registrationNumber: "RJ-20260913-0002",
     queueNumber: "A-014",
     patient: SAMPLE_PATIENTS[0], // Budi Santoso (08:30 WIB)
     department: "Poli Penyakit Dalam",
@@ -1565,6 +1578,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-003",
+    registrationNumber: "RJ-20260913-0003",
     queueNumber: "C-005",
     patient: SAMPLE_PATIENTS[4], // Ananda Rizky (08:45 WIB)
     department: "Poli Anak (Pediatri)",
@@ -1580,6 +1594,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-004",
+    registrationNumber: "RJ-20260913-0004",
     queueNumber: "E-002",
     patient: SAMPLE_PATIENTS[7], // Rudi Hartono (CITO)
     department: "Poli Jantung & Pembuluh Darah",
@@ -1595,6 +1610,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-005",
+    registrationNumber: "RJ-20260913-0005",
     queueNumber: "A-015",
     patient: SAMPLE_PATIENTS[1], // Siti Rahmawati (09:00 WIB)
     department: "Poli Penyakit Dalam",
@@ -1610,6 +1626,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-006",
+    registrationNumber: "RJ-20260913-0006",
     queueNumber: "B-008",
     patient: SAMPLE_PATIENTS[3], // Dewi Lestari (09:15 WIB)
     department: "Poli Umum",
@@ -1625,6 +1642,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-007",
+    registrationNumber: "RJ-20260913-0007",
     queueNumber: "A-016",
     patient: SAMPLE_PATIENTS[5], // Hj. Endang Sumarni (Geriatri)
     department: "Poli Penyakit Dalam",
@@ -1640,6 +1658,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-008",
+    registrationNumber: "RJ-20260913-0008",
     queueNumber: "D-004",
     patient: SAMPLE_PATIENTS[6], // dr. Hendra Setiawan (Gigi - Opt-Out)
     department: "Poli Gigi & Mulut",
@@ -1655,6 +1674,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-009",
+    registrationNumber: "RJ-20260913-0009",
     queueNumber: "F-003",
     patient: SAMPLE_PATIENTS[8], // Putri Anggraini (Mata - Opt-Out)
     department: "Poli Mata",
@@ -1670,6 +1690,7 @@ export const INITIAL_WORKLIST = [
   },
   {
     id: "Q-010",
+    registrationNumber: "RJ-20260913-0010",
     queueNumber: "A-017",
     patient: SAMPLE_PATIENTS[9], // Opa Soetrisno (Geriatri)
     department: "Poli Penyakit Dalam",

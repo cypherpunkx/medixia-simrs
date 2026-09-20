@@ -13,13 +13,18 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const department = searchParams.get("department") || undefined;
+    const facilityId = searchParams.get("facilityId") || undefined;
+    const deptsParam = searchParams.get("departments");
+    const departments = deptsParam ? deptsParam.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
     const date = searchParams.get("date") || undefined;
     const startDate = searchParams.get("startDate") || undefined;
     const endDate = searchParams.get("endDate") || undefined;
     const all = searchParams.get("all") === "true";
 
-    const list = QueueRepository.getQueue({
+    const list = await QueueRepository.getQueue({
       department,
+      departments,
+      facilityId,
       date,
       startDate,
       endDate,
@@ -62,7 +67,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const created = QueueRepository.add(body);
+    const created = await QueueRepository.add(body);
     return NextResponse.json({ success: true, data: created }, { status: 201 });
   } catch (error) {
     return NextResponse.json(

@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,12 +22,14 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { OutpatientEncounter, MedicalAddendum } from "@/lib/satusehat/types";
+import { generatePrefixedId } from "@/lib/id-generator";
+import { useAuth } from "@/lib/auth/auth-context";
 import { toast } from "sonner";
 
 interface MedicalRecordLockModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  encounter: OutpatientEncounter;
+  encounter?: OutpatientEncounter | null;
   onUpdateEncounter: (updated: OutpatientEncounter) => void;
 }
 
@@ -36,7 +39,40 @@ export function MedicalRecordLockModal({
   encounter,
   onUpdateEncounter,
 }: MedicalRecordLockModalProps) {
+  const { user } = useAuth();
   const [addendumText, setAddendumText] = useState("");
+
+  if (!encounter) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md p-6 bg-white rounded-2xl text-center space-y-4">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-200">
+            <Lock className="h-6 w-6" />
+          </div>
+          <div className="space-y-1">
+            <DialogTitle className="text-base font-bold text-slate-900">
+              Belum Ada Kunjungan Terpilih
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-600 leading-relaxed">
+              Silakan pilih pasien dan data kunjungan rawat jalan terlebih dahulu untuk mengunci atau mencatat addendum rekam medis.
+            </DialogDescription>
+          </div>
+          <div className="flex justify-center pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenChange(false)}
+              className="text-xs font-semibold px-5"
+            >
+              Tutup
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   const isLocked =
     encounter.isLocked !== undefined
       ? encounter.isLocked
@@ -44,21 +80,29 @@ export function MedicalRecordLockModal({
   const addendums = encounter.addendums || [];
 
   const handleToggleLock = () => {
+    if (user && user.role !== "doctor" && user.role !== "admin") {
+      toast.error("Akses Ditolak: Wewenang Dokter DPJP / Admin", {
+        description: `Akun Anda (${user.name}) terdaftar sebagai ${user.role.toUpperCase()}. Penguncian permanen rekam medis hanya dapat dilakukan oleh Dokter DPJP atau Administrator Sistem.`,
+      });
+      return;
+    }
+
     const nextLocked = !isLocked;
     const now = new Date().toISOString();
+    const lockerName = user?.name || encounter.doctorName;
     onUpdateEncounter({
       ...encounter,
       isLocked: nextLocked,
       lockedAt: nextLocked ? now : undefined,
-      lockedBy: nextLocked ? encounter.doctorName : undefined,
+      lockedBy: nextLocked ? lockerName : undefined,
     });
 
     if (nextLocked) {
       toast.success(
-        "Rekam medis berhasil dikunci. Perubahan selanjutnya wajib melalui catatan adendum."
+        `Rekam medis berhasil dikunci oleh ${lockerName}. Perubahan selanjutnya wajib melalui catatan adendum.`
       );
     } else {
-      toast.info("Kunci rekam medis berhasil dibuka oleh Dokter DPJP.");
+      toast.info(`Kunci rekam medis berhasil dibuka oleh ${lockerName}.`);
     }
   };
 
@@ -66,11 +110,20 @@ export function MedicalRecordLockModal({
     e.preventDefault();
     if (!addendumText.trim()) return;
 
+    const authorRole =
+      user?.role === "doctor"
+        ? "Dokter Penanggung Jawab Pelayanan (DPJP)"
+        : user?.role === "nurse"
+        ? "Perawat Poli"
+        : user?.role === "pharmacy"
+        ? "Apoteker Farmasi"
+        : "Tenaga Kesehatan Terotorisasi";
+
     const newAddendum: MedicalAddendum = {
-      id: `ADD-${Date.now().toString().slice(-6)}`,
+      id: generatePrefixedId("add_"),
       timestamp: new Date().toISOString(),
-      authorName: encounter.doctorName,
-      authorRole: "Dokter Penanggung Jawab Pelayanan (DPJP)",
+      authorName: user?.name || encounter.doctorName,
+      authorRole,
       noteText: addendumText.trim(),
     };
 

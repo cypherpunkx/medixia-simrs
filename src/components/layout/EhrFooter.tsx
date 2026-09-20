@@ -33,7 +33,7 @@ export function EhrFooter({ env, hospitalName }: EhrFooterProps) {
       <div className="flex items-center gap-2.5">
         <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
           <ShieldCheck className="h-3.5 w-3.5 text-teal-600" />
-          <span>{hospitalName || "RS Umum Daerah Sehat Sejahtera"}</span>
+          <span>{hospitalName || "Fasilitas Pelayanan Kesehatan"}</span>
         </div>
 
         <div className="hidden md:flex items-center gap-2 text-slate-400">

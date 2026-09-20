@@ -8,7 +8,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const patient = PatientRepository.getById(id);
+    const patient = await PatientRepository.getById(id);
 
     if (!patient) {
       return NextResponse.json(
@@ -38,7 +38,7 @@ export async function PUT(
     const { id } = await params;
     const body = (await req.json()) as Partial<PatientProfile>;
 
-    const updated = PatientRepository.update(id, body);
+    const updated = await PatientRepository.update(id, body);
     if (!updated) {
       return NextResponse.json(
         { success: false, error: "Pasien tidak ditemukan." },
