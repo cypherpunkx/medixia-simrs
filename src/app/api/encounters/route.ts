@@ -5,6 +5,8 @@ import { OutpatientEncounter } from "@/lib/satusehat/types";
 
 import { applyRateLimit } from "@/lib/middleware/rate-limiter";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const rateLimitResponse = applyRateLimit(req);
   if (rateLimitResponse) return rateLimitResponse;
@@ -90,52 +92,59 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 3. Primary diagnosis validation
-    if (!encounter.diagnoses || encounter.diagnoses.length === 0 || !encounter.diagnoses.some((d) => d.type === "primary")) {
-      return NextResponse.json(
-        { success: false, error: "Rekam medis wajib memiliki minimal 1 diagnosis utama (Primary Diagnosis) berstandar ICD-10." },
-        { status: 400 }
-      );
-    }
-
-    // Duplication check for ICD-10 diagnoses
-    const diagCodes = encounter.diagnoses.map((d) => (d.code || "").trim().toUpperCase());
-    const hasDuplicate = diagCodes.some((c, idx) => c && diagCodes.indexOf(c) !== idx);
-    if (hasDuplicate) {
-      return NextResponse.json(
-        { success: false, error: "Terdapat duplikasi kode diagnosis ICD-10 pada kunjungan yang sama." },
-        { status: 400 }
-      );
-    }
-
-    // 4. Clinical disposition & follow-up plan validation
-    if (encounter.dischargeDisposition === "Kontrol Kembali") {
-      const nextDate = encounter.followUpPlan?.nextVisitDate;
-      if (!nextDate) {
+    // 3. Primary diagnosis validation (wajib hanya jika kunjungan telah selesai/difinalisasi oleh dokter DPJP)
+    const isFinished = encounter.encounterStatus === "finished";
+    if (isFinished) {
+      if (!encounter.diagnoses || encounter.diagnoses.length === 0 || !encounter.diagnoses.some((d) => d.type === "primary")) {
         return NextResponse.json(
-          { success: false, error: "Tanggal kontrol wajib diisi untuk pasien dengan disposisi 'Kontrol Kembali'." },
-          { status: 400 }
-        );
-      }
-      const today = new Date().toISOString().split("T")[0];
-      if (nextDate < today) {
-        return NextResponse.json(
-          { success: false, error: "Tanggal rencana kontrol ulang tidak boleh merupakan tanggal lampau." },
+          { success: false, error: "Rekam medis yang telah difinalisasi wajib memiliki minimal 1 diagnosis utama (Primary Diagnosis) berstandar ICD-10." },
           { status: 400 }
         );
       }
     }
 
-    if (
-      encounter.dischargeDisposition === "Dirujuk ke RS Lain" ||
-      encounter.dischargeDisposition === "Konsul Internal Poli Lain"
-    ) {
-      const refTo = encounter.followUpPlan?.referredTo;
-      if (!refTo || !refTo.trim()) {
+    // Duplication check for ICD-10 diagnoses (jika diagnosis diisi)
+    if (encounter.diagnoses && encounter.diagnoses.length > 0) {
+      const diagCodes = encounter.diagnoses.map((d) => (d.code || "").trim().toUpperCase());
+      const hasDuplicate = diagCodes.some((c, idx) => c && diagCodes.indexOf(c) !== idx);
+      if (hasDuplicate) {
         return NextResponse.json(
-          { success: false, error: "Tujuan faskes rujukan atau poliklinik konsul wajib diisi." },
+          { success: false, error: "Terdapat duplikasi kode diagnosis ICD-10 pada kunjungan yang sama." },
           { status: 400 }
         );
+      }
+    }
+
+    // 4. Clinical disposition & follow-up plan validation (hanya jika kunjungan selesai)
+    if (isFinished) {
+      if (encounter.dischargeDisposition === "Kontrol Kembali") {
+        const nextDate = encounter.followUpPlan?.nextVisitDate;
+        if (!nextDate) {
+          return NextResponse.json(
+            { success: false, error: "Tanggal kontrol wajib diisi untuk pasien dengan disposisi 'Kontrol Kembali'." },
+            { status: 400 }
+          );
+        }
+        const today = new Date().toISOString().split("T")[0];
+        if (nextDate < today) {
+          return NextResponse.json(
+            { success: false, error: "Tanggal rencana kontrol ulang tidak boleh merupakan tanggal lampau." },
+            { status: 400 }
+          );
+        }
+      }
+
+      if (
+        encounter.dischargeDisposition === "Dirujuk ke RS Lain" ||
+        encounter.dischargeDisposition === "Konsul Internal Poli Lain"
+      ) {
+        const refTo = encounter.followUpPlan?.referredTo;
+        if (!refTo || !refTo.trim()) {
+          return NextResponse.json(
+            { success: false, error: "Tujuan faskes rujukan atau poliklinik konsul wajib diisi." },
+            { status: 400 }
+          );
+        }
       }
     }
 

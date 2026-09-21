@@ -29,7 +29,7 @@ export function EhrFooter({ env, hospitalName }: EhrFooterProps) {
   }, []);
 
   return (
-    <footer className="h-8 border-t border-slate-200 bg-white px-4 sm:px-6 flex items-center justify-between text-[11px] text-slate-500 shrink-0 font-medium z-40">
+    <footer className="h-8 border-t border-slate-200 bg-white px-4 sm:px-6 flex items-center justify-between text-[11px] text-slate-500 shrink-0 font-medium relative z-10">
       <div className="flex items-center gap-2.5">
         <div className="flex items-center gap-1.5 text-slate-700 font-semibold">
           <ShieldCheck className="h-3.5 w-3.5 text-teal-600" />

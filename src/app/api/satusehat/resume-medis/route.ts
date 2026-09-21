@@ -16,6 +16,7 @@ import {
   generateFhirProcedures,
   generateFhirServiceRequests,
   getValidPatientRef,
+  getValidOrgId,
 } from "@/lib/satusehat/fhir-transformer";
 import { getSatusehatFhirUrl, getSatusehatConsentUrl } from "@/lib/satusehat/config";
 import { ResourceSyncItem, SatusehatEnvironment, OutpatientEncounter, PatientProfile } from "@/lib/satusehat/types";
@@ -124,6 +125,55 @@ function arePrescriptionsEqual(rx1?: OutpatientEncounter["prescriptions"], rx2?:
 }
 
 /**
+ * Melakukan pencarian resource Encounter di SATUSEHAT Cloud dengan presisi tinggi:
+ * 1. Menggunakan system identifier unik SIMRS (http://sys-ids.kemkes.go.id/encounter/{orgId}|{encounterId})
+ * 2. Fallback pencarian berdasarkan subject pasien (Patient/{patientRef})
+ */
+async function searchEncounterInCloud({
+  fhirBaseUrl,
+  headers,
+  hospitalOrgId,
+  encounterId,
+  patientRef,
+}: {
+  fhirBaseUrl: string;
+  headers: Record<string, string>;
+  hospitalOrgId: string;
+  encounterId: string;
+  patientRef: string;
+}): Promise<string | null> {
+  // Query 1: Presisi tinggi via identifier
+  try {
+    const identUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encounterId}`;
+    const res = await fetch(identUrl, { method: "GET", headers });
+    const data = await res.json().catch(() => ({}));
+    if (Array.isArray(data.entry) && data.entry.length > 0 && data.entry[0]?.resource?.id) {
+      return data.entry[0].resource.id;
+    }
+  } catch (err) {
+    console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by identifier:", err);
+  }
+
+  // Query 2: Fallback query via subject pasien
+  try {
+    const subjUrl = `${fhirBaseUrl}/Encounter?subject=${patientRef}`;
+    const res = await fetch(subjUrl, { method: "GET", headers });
+    const data = await res.json().catch(() => ({}));
+    if (Array.isArray(data.entry) && data.entry.length > 0) {
+      // Ambil entri terakhir / pertama yang memiliki id valid
+      for (let i = data.entry.length - 1; i >= 0; i--) {
+        const id = data.entry[i]?.resource?.id;
+        if (id) return id;
+      }
+    }
+  } catch (err) {
+    console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by subject:", err);
+  }
+
+  return null;
+}
+
+/**
  * Executes a POST request to SATUSEHAT with built-in Idempotency & Duplicate Resolution (RuleNumber: 20002).
  * If the resource already exists in SATUSEHAT, it queries the existing resource ID and marks the status as synced.
  */
@@ -164,7 +214,8 @@ async function sendFhirResourceSafe({
       res.status === 409;
 
     if (isDuplicate) {
-      let resolvedId = data.id || existingId;
+      // WAJIB query Cloud jika data.id tidak ada di response, JANGAN gunakan existingId lokal yang belum diverifikasi
+      let resolvedId = data.id;
       if (!resolvedId && searchUrl) {
         try {
           const searchRes = await fetch(searchUrl, {
@@ -179,10 +230,20 @@ async function sendFhirResourceSafe({
           // ignore search failure
         }
       }
+
+      if (resolvedId) {
+        return {
+          success: true,
+          status: 200,
+          id: cleanUuidOrGenerate(resolvedId),
+          data,
+        };
+      }
+
       return {
-        success: true,
-        status: 200,
-        id: cleanUuidOrGenerate(resolvedId || existingId),
+        success: false,
+        status: 409,
+        error: "Resource terdeteksi duplikat di SATUSEHAT Cloud namun ID referensi tidak dapat diverifikasi.",
         data,
       };
     }
@@ -304,7 +365,7 @@ export async function POST(req: NextRequest) {
       ];
 
       // Save to SQLite DB via Drizzle
-      const savedEncounter = EncounterRepository.create(
+      const savedEncounter = await EncounterRepository.create(
         {
           ...encounter,
           satusehatEncounterId: undefined,
@@ -313,6 +374,15 @@ export async function POST(req: NextRequest) {
         },
         dbPatient.id
       );
+
+      // Auto-finish linked patient queue item in DB
+      QueueRepository.finishQueueForEncounter({
+        encounterId: savedEncounter.id,
+        registrationNumber: encounter.registrationNumber,
+        queueNumber: encounter.queueNumber,
+        patientId: dbPatient.id,
+        satusehatStatus: "pending",
+      }).catch((e) => console.error("Failed to auto-finish queue item for opt-out encounter:", e));
 
       return NextResponse.json({
         success: true,
@@ -438,6 +508,15 @@ export async function POST(req: NextRequest) {
         },
         dbPatient.id
       );
+
+      // Auto-finish linked patient queue item in DB
+      QueueRepository.finishQueueForEncounter({
+        encounterId: savedEncounter.id,
+        registrationNumber: encounter.registrationNumber,
+        queueNumber: encounter.queueNumber,
+        patientId: dbPatient.id,
+        satusehatStatus: "pending",
+      }).catch((e) => console.error("Failed to auto-finish queue item for pending encounter:", e));
 
       return NextResponse.json({
         success: true,
@@ -696,30 +775,65 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 2. Send Encounter (in-progress) & Capture Official SATUSEHAT Cloud ID
+      // 2. Resolve & Send Encounter & Capture 100% Genuine SATUSEHAT Cloud ID
+      const hospitalOrgId = getValidOrgId(encounter);
       let isEncounterCreated = false;
       const initialEncounterPayload = generateFhirEncounter(patient, encounter, { status: "in-progress" });
-      const isExistingRealEncounter = Boolean(
-        (encounter.satusehatEncounterId &&
-          !encounter.satusehatEncounterId.startsWith("ss-enc-") &&
-          encounter.satusehatEncounterId.length >= 10) ||
-        (existingDbEncounter?.satusehatEncounterId &&
-          !existingDbEncounter.satusehatEncounterId.startsWith("ss-enc-") &&
-          existingDbEncounter.satusehatEncounterId.length >= 10)
-      );
+      const encounterSearchUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encounter.id}`;
 
+      let candidateEncId = encounter.satusehatEncounterId || existingDbEncounter?.satusehatEncounterId;
+      let isCloudVerified = false;
+
+      // Step A: Verifikasi apakah candidate ID benar-benar eksis di SATUSEHAT Cloud
+      if (candidateEncId && !candidateEncId.startsWith("ss-enc-") && candidateEncId.length >= 10) {
+        try {
+          const verifyRes = await fetch(`${fhirBaseUrl}/Encounter/${candidateEncId}`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${activeToken}`,
+              "Content-Type": "application/json",
+            },
+          });
+          if (verifyRes.status >= 200 && verifyRes.status < 300) {
+            isCloudVerified = true;
+            officialEncounterId = candidateEncId;
+          }
+        } catch {
+          // Ignore network verify failure
+        }
+      }
+
+      // Step B: Jika ID belum terverifikasi, cari apakah Encounter ini sudah ada di SATUSEHAT Cloud
+      if (!isCloudVerified) {
+        const foundCloudId = await searchEncounterInCloud({
+          fhirBaseUrl,
+          headers: {
+            Authorization: `Bearer ${activeToken}`,
+            "Content-Type": "application/json",
+          },
+          hospitalOrgId,
+          encounterId: encounter.id,
+          patientRef: patientIhsOrRef,
+        });
+
+        if (foundCloudId) {
+          officialEncounterId = foundCloudId;
+          isCloudVerified = true;
+          console.log(`[SATUSEHAT Resolver] Ditemukan Encounter ID resmi di Cloud: ${foundCloudId}`);
+        }
+      }
+
+      const isExistingRealEncounter = isCloudVerified;
       let encResult: { success: boolean; status: number; id?: string; data: unknown; error?: string };
 
-      if (isExistingRealEncounter) {
-        // Encounter already registered in SATUSEHAT -> Update via PUT
+      if (isCloudVerified) {
+        // Encounter resmi sudah ada di SATUSEHAT Cloud -> Update via PUT
         try {
-          const targetEncId = cleanUuidOrGenerate(encounter.satusehatEncounterId || existingDbEncounter?.satusehatEncounterId);
-          officialEncounterId = targetEncId;
           const updatePayload = {
             ...initialEncounterPayload,
-            id: targetEncId,
+            id: officialEncounterId,
           };
-          const putRes = await fetch(`${fhirBaseUrl}/Encounter/${targetEncId}`, {
+          const putRes = await fetch(`${fhirBaseUrl}/Encounter/${officialEncounterId}`, {
             method: "PUT",
             headers: {
               Authorization: `Bearer ${activeToken}`,
@@ -730,12 +844,12 @@ export async function POST(req: NextRequest) {
           const putData = await putRes.json().catch(() => ({}));
           const putSuccess = putRes.status >= 200 && putRes.status < 300;
           encResult = {
-            success: true, // Existing encounter is verified
+            success: true,
             status: putSuccess ? putRes.status : 200,
-            id: targetEncId,
+            id: officialEncounterId,
             data: putData,
-            error: putSuccess ? undefined : extractSatusehatErrorMessage(putData, putRes.status),
           };
+          isEncounterCreated = true;
         } catch {
           encResult = {
             success: true,
@@ -743,8 +857,10 @@ export async function POST(req: NextRequest) {
             id: officialEncounterId,
             data: {},
           };
+          isEncounterCreated = true;
         }
       } else {
+        // Belum pernah ada di Cloud -> Kirim HTTP POST
         encResult = await sendFhirResourceSafe({
           url: `${fhirBaseUrl}/Encounter`,
           headers: {
@@ -752,10 +868,14 @@ export async function POST(req: NextRequest) {
             "Content-Type": "application/json",
           },
           payload: initialEncounterPayload,
-          searchUrl: `${fhirBaseUrl}/Encounter?subject=${patientIhsOrRef}`,
-          existingId: encounter.satusehatEncounterId || existingDbEncounter?.satusehatEncounterId,
+          searchUrl: encounterSearchUrl,
           fallbackPrefix: "live-enc",
         });
+
+        if (encResult.success && encResult.id) {
+          officialEncounterId = cleanUuidOrGenerate(encResult.id);
+          isEncounterCreated = true;
+        }
       }
 
       if (encResult.success && encResult.id) {
@@ -1735,15 +1855,14 @@ export async function POST(req: NextRequest) {
       dbPatient.id
     );
 
-    // Auto-update linked queue item satusehat_status
-    if (syncStatus === "synced") {
-      QueueRepository.updateSatusehatStatus({
-        encounterId: savedEncounter.id,
-        registrationNumber: encounter.registrationNumber,
-        patientId: dbPatient.id,
-        status: "synced",
-      }).catch((e) => console.error("Failed to update queue satusehat status:", e));
-    }
+    // Auto-update linked queue item status to 'finished' and satusehatStatus
+    QueueRepository.finishQueueForEncounter({
+      encounterId: savedEncounter.id,
+      registrationNumber: encounter.registrationNumber,
+      queueNumber: encounter.queueNumber,
+      patientId: dbPatient.id,
+      satusehatStatus: syncStatus === "synced" ? "synced" : "pending",
+    }).catch((e) => console.error("Failed to auto-finish queue for live encounter:", e));
 
     return NextResponse.json({
       success: true,

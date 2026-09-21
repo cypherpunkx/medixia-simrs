@@ -58,3 +58,6 @@ export async function PUT(
     );
   }
 }
+
+export const PATCH = PUT;
+

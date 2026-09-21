@@ -32,18 +32,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Fetch facilities
         const facRes = await fetch("/api/facilities");
-        const facData = await facRes.json();
-        if (facData.success && facData.data?.length > 0) {
-          setAllFacilities(facData.data);
+        if (facRes.ok) {
+          const text = await facRes.text();
+          if (text) {
+            try {
+              const facData = JSON.parse(text);
+              if (facData.success && facData.data?.length > 0) {
+                setAllFacilities(facData.data);
+              }
+            } catch {
+              // Ignored during dev hot reload
+            }
+          }
         }
 
         // Fetch current session
         const authRes = await fetch("/api/auth/me");
         if (authRes.ok) {
-          const authData = await authRes.json();
-          if (authData.success && authData.data) {
-            if (authData.data.user) setUser(authData.data.user);
-            if (authData.data.facility) setFacility(authData.data.facility);
+          const authText = await authRes.text();
+          if (authText) {
+            try {
+              const authData = JSON.parse(authText);
+              if (authData.success && authData.data) {
+                if (authData.data.user) setUser(authData.data.user);
+                if (authData.data.facility) setFacility(authData.data.facility);
+              }
+            } catch {
+              // Ignored during dev hot reload
+            }
           }
         } else {
           setUser(null);

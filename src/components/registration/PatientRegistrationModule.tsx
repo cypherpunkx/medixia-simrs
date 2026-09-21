@@ -63,6 +63,7 @@ import {
   validateIHS,
   validateBPJS,
   validatePhone,
+  sanitizePhoneNumber,
 } from "@/lib/satusehat/validation";
 import {
   speakIndonesianQueueCall,
@@ -75,8 +76,11 @@ import {
   generateMRN,
   generateQueueNumber,
   generateRegistrationNumber,
+  getLocalCompactDate,
+  getLocalDateString,
 } from "@/lib/id-generator";
 import { toast } from "sonner";
+import { calculatePatientAge } from "@/lib/utils";
 
 interface PatientRegistrationModuleProps {
   currentPatient?: PatientProfile | null;
@@ -183,22 +187,22 @@ export function PatientRegistrationModule({
         : "";
       let queryUrl = `/api/queue?${facQuery}`;
       const today = new Date();
-      const todayStr = today.toISOString().split("T")[0];
+      const todayStr = getLocalDateString(today);
 
       if (preset === "today") {
         queryUrl += `date=${todayStr}`;
       } else if (preset === "yesterday") {
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        queryUrl += `date=${yesterday.toISOString().split("T")[0]}`;
+        queryUrl += `date=${getLocalDateString(yesterday)}`;
       } else if (preset === "last-7") {
         const start = new Date(today);
         start.setDate(start.getDate() - 7);
-        queryUrl += `startDate=${start.toISOString().split("T")[0]}&endDate=${todayStr}`;
+        queryUrl += `startDate=${getLocalDateString(start)}&endDate=${todayStr}`;
       } else if (preset === "last-30") {
         const start = new Date(today);
         start.setDate(start.getDate() - 30);
-        queryUrl += `startDate=${start.toISOString().split("T")[0]}&endDate=${todayStr}`;
+        queryUrl += `startDate=${getLocalDateString(start)}&endDate=${todayStr}`;
       } else if (preset === "all") {
         queryUrl += `all=true`;
       } else if (preset === "custom" && customDate) {
@@ -443,7 +447,7 @@ export function PatientRegistrationModule({
     if (authDepartments && authDepartments.length > 0) {
       return authDepartments.map((d) => ({
         value: d.name,
-        label: `${d.name}${d.room ? ` (${d.room})` : ""}`,
+        label: `[${d.code || d.queuePrefix || "POLI"}] ${d.name}${d.room ? ` (${d.room})` : ""}`,
       }));
     }
     return [
@@ -578,9 +582,7 @@ export function PatientRegistrationModule({
     }
   }, [facilityDoctors, selectedClinic, selectedDoctor]);
 
-  const [payerType, setPayerType] = useState(
-    "BPJS Kesehatan (JKN-PBI / Non-PBI)",
-  );
+  const [payerType, setPayerType] = useState<string>("");
   const [bpjsNumber, setBpjsNumber] = useState("");
   const [chiefComplaint, setChiefComplaint] = useState("");
   const [triagePriorityInput, setTriagePriorityInput] = useState<
@@ -610,13 +612,14 @@ export function PatientRegistrationModule({
 
   const handleSelectPatient = (p: PatientProfile) => {
     onSelectPatient(p);
+    setPayerType(p.paymentPayer || "");
     toast.info(
       `Pasien aktif: ${p.name} (No. RM ${p.mrn.replace(/^RM-?/i, "")})`,
     );
   };
 
   // Real-time Validations
-  const isBpjsPayer = payerType.includes("BPJS");
+  const isBpjsPayer = Boolean(payerType && payerType.includes("BPJS"));
   const bpjsValResult = validateBPJS(bpjsNumber, isBpjsPayer);
   const nikValResult = validateNIK(nikInput);
   const existingPatientByNik =
@@ -708,8 +711,7 @@ export function PatientRegistrationModule({
       // 5. Age Filter
       let matchesAge = true;
       if (returningAgeFilter !== "all") {
-        const age =
-          new Date().getFullYear() - new Date(p.birthDate).getFullYear();
+        const age = calculatePatientAge(p.birthDate);
         if (returningAgeFilter === "pediatric") matchesAge = age < 18;
         else if (returningAgeFilter === "adult")
           matchesAge = age >= 18 && age < 60;
@@ -864,6 +866,8 @@ export function PatientRegistrationModule({
           .includes(worklistSearch.toLowerCase()) ||
         item.patient.mrn.toLowerCase().includes(worklistSearch.toLowerCase()) ||
         item.queueNumber.toLowerCase().includes(worklistSearch.toLowerCase()) ||
+        (item.registrationNumber &&
+          item.registrationNumber.toLowerCase().includes(worklistSearch.toLowerCase())) ||
         item.doctor.toLowerCase().includes(worklistSearch.toLowerCase()) ||
         item.department.toLowerCase().includes(worklistSearch.toLowerCase()) ||
         item.patient.nik.includes(worklistSearch);
@@ -1061,12 +1065,23 @@ export function PatientRegistrationModule({
       return;
     }
 
-    // 4. Validasi Telepon
+    // 4. Validasi Telepon Pasien
     if (newPatientData.phone) {
       const phoneCheck = validatePhone(newPatientData.phone);
       if (!phoneCheck.isValid) {
-        toast.error("Format Nomor Telepon Tidak Valid", {
+        toast.error("Format Nomor Telepon Pasien Tidak Valid", {
           description: phoneCheck.message,
+        });
+        return;
+      }
+    }
+
+    // 5. Validasi Telepon Kontak Darurat (jika diisi)
+    if (emergencyPhone.trim()) {
+      const emPhoneCheck = validatePhone(emergencyPhone);
+      if (!emPhoneCheck.isValid) {
+        toast.error("Format No. HP Kontak Darurat Tidak Valid", {
+          description: emPhoneCheck.message,
         });
         return;
       }
@@ -1088,6 +1103,7 @@ export function PatientRegistrationModule({
         relation: emergencyRelation || "Keluarga",
         phone: emergencyPhone.trim(),
       },
+      totalVisitsCount: 0,
       satusehatConsent: newPatientData.satusehatConsent || "opt-in",
     };
 
@@ -1103,6 +1119,13 @@ export function PatientRegistrationModule({
   // Submit New Encounter
   const handleRegisterEncounter = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!payerType.trim()) {
+      toast.error("Validasi Penjamin Wajib", {
+        description: "Silakan pilih jenis penjamin / payer terlebih dahulu.",
+      });
+      return;
+    }
+
     if (!chiefComplaint.trim()) {
       toast.error("Mohon isi keluhan awal saat mendaftar poli.");
       return;
@@ -1143,9 +1166,21 @@ export function PatientRegistrationModule({
         ? `${payerType} (No. Kartu: ${bpjsNumber.trim()})`
         : payerType;
 
+    const chosenDeptObj =
+      authDepartments?.find(
+        (d) =>
+          d.name === selectedClinic ||
+          (selectedClinic && d.name.toLowerCase() === selectedClinic.toLowerCase()) ||
+          (selectedClinic && selectedClinic.toLowerCase().includes(d.name.toLowerCase()))
+      );
+
     // Hitung nomor urut antrean tertinggi di poli ini hari ini
     const existingQueueSeqs = worklist
-      .filter((w) => w.department === selectedClinic)
+      .filter(
+        (w) =>
+          (chosenDeptObj?.id && w.departmentId === chosenDeptObj.id) ||
+          w.department === selectedClinic
+      )
       .map((w) => {
         const parts = (w.queueNumber || "").split("-");
         const last = parseInt(parts[parts.length - 1], 10);
@@ -1156,12 +1191,19 @@ export function PatientRegistrationModule({
       existingQueueSeqs.length > 0 ? Math.max(...existingQueueSeqs) : 0;
     const nextQueueSeq = Math.max(
       maxQueueSeq + 1,
-      worklist.filter((w) => w.department === selectedClinic).length + 1,
+      worklist.filter(
+        (w) =>
+          (chosenDeptObj?.id && w.departmentId === chosenDeptObj.id) ||
+          w.department === selectedClinic
+      ).length + 1,
     );
-    const newQueueNum = generateQueueNumber(selectedClinic, nextQueueSeq);
+
+    // Gunakan queuePrefix resmi dari master departemen faskes (contoh: "A", "B", "C", "D")
+    const targetPrefix = chosenDeptObj?.queuePrefix || selectedClinic;
+    const newQueueNum = generateQueueNumber(targetPrefix, nextQueueSeq);
 
     // Hitung nomor registrasi tertinggi hari ini
-    const todayPrefix = `RJ-${new Date().toISOString().split("T")[0].replace(/-/g, "")}`;
+    const todayPrefix = `RJ-${getLocalCompactDate()}`;
     const existingRegSeqs = worklist
       .map((w) => {
         if (
@@ -1190,15 +1232,7 @@ export function PatientRegistrationModule({
       ) ||
       facilityDoctors.find((d) => d.department === selectedClinic);
 
-    const chosenDeptObj =
-      authDepartments?.find(
-        (d) =>
-          d.name === selectedClinic ||
-          (selectedClinic && d.name.toLowerCase() === selectedClinic.toLowerCase()) ||
-          (selectedClinic && selectedClinic.toLowerCase().includes(d.name.toLowerCase()))
-      );
-
-    const resolvedFacilityId = facility?.id || "fac-rsud-01";
+    const resolvedFacilityId = facility?.id || chosenDeptObj?.facilityId || "fac-rsud-01";
     const resolvedDepartmentId = chosenDeptObj?.id;
     const resolvedDoctorId = chosenDoctorObj?.id;
 
@@ -1241,11 +1275,21 @@ export function PatientRegistrationModule({
       now.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) +
       " WIB";
 
+    const updatedPatient: PatientProfile = {
+      ...currentPatient,
+      paymentPayer: payerType,
+      totalVisitsCount: (currentPatient.totalVisitsCount ?? 0) + 1,
+      lastVisitDate: getLocalDateString(),
+      lastVisitDepartment: selectedClinic,
+      lastVisitDoctor: chosenDoctorObj ? chosenDoctorObj.name : cleanDocName,
+    };
+
     const newQueueItem: ClinicQueuePatientItem = {
       id: generatePrefixedId("q_"),
       queueNumber: newQueueNum,
       registrationNumber: newRegNum,
-      patient: currentPatient,
+      patient: updatedPatient,
+      paymentPayer: payerType,
       departmentId: resolvedDepartmentId,
       doctorId: resolvedDoctorId,
       encounterId: newEnc.id,
@@ -1253,7 +1297,7 @@ export function PatientRegistrationModule({
       doctor: chosenDoctorObj
         ? chosenDoctorObj.name
         : cleanDocName,
-      room: CLINIC_QUOTAS[selectedClinic]?.room || "Ruang 204 (Lt. 2)",
+      room: chosenDeptObj?.room || CLINIC_QUOTAS[selectedClinic]?.room || "Ruang 204 (Lt. 2)",
       arrivalTime: newArrivalTime,
       arrivalTimestamp: newArrivalTimestamp,
       chiefComplaint: chiefComplaint,
@@ -1263,22 +1307,44 @@ export function PatientRegistrationModule({
       triagePriority: triagePriorityInput,
     };
 
+    // Update patient lokal & list
+    onSelectPatient(updatedPatient);
+    setPatientsList((prev) =>
+      prev.map((p) => (p.id === currentPatient.id ? updatedPatient : p))
+    );
+
     // Menambahkan pasien baru ke urutan antrean FIFO paling akhir
     setWorklist((prev) => [...prev, newQueueItem]);
     onCreateEncounter(newEnc);
 
-    // Persist ke Database SQLite via API
-    fetch("/api/queue", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newQueueItem),
-    }).catch((err) => console.error("Gagal simpan queue baru ke DB:", err));
-
+    // 1. Persist encounter ke database terlebih dahulu
     fetch("/api/encounters", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ encounter: newEnc, patientId: currentPatient.id }),
-    }).catch((err) => console.error("Gagal simpan encounter baru ke DB:", err));
+    })
+      .then(() => {
+        // 2. Persist queue ke database setelah encounter terdaftar
+        return fetch("/api/queue", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newQueueItem),
+        });
+      })
+      .catch((err) =>
+        console.error("Gagal sinkronisasi encounter/queue ke DB:", err)
+      );
+
+    // Persist update penjamin pasien ke database
+    if (payerType !== currentPatient.paymentPayer) {
+      fetch(`/api/patients/${currentPatient.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentPayer: payerType }),
+      }).catch((err) =>
+        console.error("Gagal update paymentPayer pasien ke DB:", err)
+      );
+    }
 
     toast.success(
       `Pendaftaran kunjungan (${newQueueNum}) ke ${selectedClinic} berhasil. Membuka karcis antrean cetak...`,
@@ -1657,7 +1723,7 @@ export function PatientRegistrationModule({
                 <Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" />
                 <Input
                   type="text"
-                  placeholder="Cari nama pasien, NIK, No. RM, atau dokter DPJP..."
+                  placeholder="Cari nama pasien, NIK, No. RM, No. Reg, atau dokter DPJP..."
                   value={worklistSearch}
                   onChange={(e) => {
                     setWorklistSearch(e.target.value);
@@ -2076,9 +2142,9 @@ export function PatientRegistrationModule({
                     {paginatedWorklist.map((item) => {
                       const isSelectedEncounter = Boolean(
                         activeEncounter &&
-                        ((activeEncounter.queueNumber &&
-                          item.queueNumber &&
-                          item.queueNumber === activeEncounter.queueNumber) ||
+                        ((activeEncounter.id &&
+                          item.encounterId &&
+                          item.encounterId === activeEncounter.id) ||
                           (activeEncounter.registrationNumber &&
                             item.registrationNumber &&
                             item.registrationNumber ===
@@ -2368,9 +2434,9 @@ export function PatientRegistrationModule({
               {paginatedWorklist.map((item) => {
                 const isSelectedEncounter = Boolean(
                   activeEncounter &&
-                  ((activeEncounter.queueNumber &&
-                    item.queueNumber &&
-                    item.queueNumber === activeEncounter.queueNumber) ||
+                  ((activeEncounter.id &&
+                    item.encounterId &&
+                    item.encounterId === activeEncounter.id) ||
                     (activeEncounter.registrationNumber &&
                       item.registrationNumber &&
                       item.registrationNumber ===
@@ -2429,11 +2495,7 @@ export function PatientRegistrationModule({
                                 {item.patient.name}
                               </h3>
                               <span className="text-xs font-semibold text-slate-500 shrink-0">
-                                (
-                                {new Date().getFullYear() -
-                                  new Date(
-                                    item.patient.birthDate,
-                                  ).getFullYear()}{" "}
+                                ({calculatePatientAge(item.patient.birthDate)}{" "}
                                 Thn /{" "}
                                 {item.patient.gender === "male" ? "L" : "P"})
                               </span>
@@ -3309,9 +3371,7 @@ export function PatientRegistrationModule({
                 const isCurrentActive = Boolean(
                   currentPatient && p.id === currentPatient.id,
                 );
-                const birthYear = new Date(p.birthDate).getFullYear();
-                const currentYear = new Date().getFullYear();
-                const age = currentYear - birthYear;
+                const age = calculatePatientAge(p.birthDate);
                 const initials = p.name
                   .split(" ")
                   .map((n) => n[0])
@@ -3622,9 +3682,7 @@ export function PatientRegistrationModule({
                       const isCurrentActive = Boolean(
                         currentPatient && p.id === currentPatient.id,
                       );
-                      const age =
-                        new Date().getFullYear() -
-                        new Date(p.birthDate).getFullYear();
+                      const age = calculatePatientAge(p.birthDate);
                       const todayQueue = worklist.find(
                         (w) => w.patient.id === p.id,
                       );
@@ -4029,20 +4087,40 @@ export function PatientRegistrationModule({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">
-                Nomor Telepon / WhatsApp
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-slate-700">
+                  Nomor Telepon / WhatsApp
+                </Label>
+                {newPatientData.phone && (
+                  <span
+                    className={`text-[10px] font-semibold flex items-center gap-1 ${
+                      validatePhone(newPatientData.phone).isValid
+                        ? "text-emerald-600"
+                        : "text-amber-600"
+                    }`}
+                  >
+                    {validatePhone(newPatientData.phone).isValid
+                      ? "✓ Format Valid"
+                      : "Format: 08xx / +628xx (10–13 digit)"}
+                  </span>
+                )}
+              </div>
               <Input
                 type="tel"
                 placeholder="Contoh: 081234567890"
                 value={newPatientData.phone || ""}
-                onChange={(e) =>
+                onChange={(e) => {
+                  const cleaned = sanitizePhoneNumber(e.target.value);
                   setNewPatientData((prev) => ({
                     ...prev,
-                    phone: e.target.value,
-                  }))
-                }
-                className="text-xs h-9 bg-white"
+                    phone: cleaned,
+                  }));
+                }}
+                className={`text-xs h-9 bg-white font-mono transition-colors ${
+                  newPatientData.phone && !validatePhone(newPatientData.phone).isValid
+                    ? "border-amber-400 focus:border-amber-500"
+                    : ""
+                }`}
               />
             </div>
 
@@ -4116,15 +4194,37 @@ export function PatientRegistrationModule({
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">
-                No. HP Kontak Darurat
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-slate-700">
+                  No. HP Kontak Darurat
+                </Label>
+                {emergencyPhone && (
+                  <span
+                    className={`text-[10px] font-semibold flex items-center gap-1 ${
+                      validatePhone(emergencyPhone).isValid
+                        ? "text-emerald-600"
+                        : "text-amber-600"
+                    }`}
+                  >
+                    {validatePhone(emergencyPhone).isValid
+                      ? "✓ Format Valid"
+                      : "Format: 08xx / +628xx (10–13 digit)"}
+                  </span>
+                )}
+              </div>
               <Input
                 type="tel"
                 placeholder="08xxxxxxxxxx"
                 value={emergencyPhone}
-                onChange={(e) => setEmergencyPhone(e.target.value)}
-                className="text-xs h-9 bg-white"
+                onChange={(e) => {
+                  const cleaned = sanitizePhoneNumber(e.target.value);
+                  setEmergencyPhone(cleaned);
+                }}
+                className={`text-xs h-9 bg-white font-mono transition-colors ${
+                  emergencyPhone && !validatePhone(emergencyPhone).isValid
+                    ? "border-amber-400 focus:border-amber-500"
+                    : ""
+                }`}
               />
             </div>
 
@@ -4319,16 +4419,17 @@ export function PatientRegistrationModule({
                   value={payerType}
                   onChange={(val) => setPayerType(val)}
                   size="lg"
+                  placeholder="Pilih Jenis Penjamin / Payer *"
                   className="w-full"
                   buttonClassName="h-10 bg-white border-slate-300"
                   options={[
                     {
-                      value: "BPJS Kesehatan (JKN-PBI / Non-PBI)",
-                      label: "BPJS Kesehatan (JKN-PBI / Non-PBI)",
-                    },
-                    {
                       value: "Pasien Umum / Mandiri",
                       label: "Pasien Umum / Mandiri",
+                    },
+                    {
+                      value: "BPJS Kesehatan (JKN-PBI / Non-PBI)",
+                      label: "BPJS Kesehatan (JKN-PBI / Non-PBI)",
                     },
                     {
                       value: "Asuransi Swasta / AdMedika",
@@ -4510,7 +4611,11 @@ export function PatientRegistrationModule({
 
             <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
               <div className="text-[11px] text-slate-500">
-                {isBpjsPayer && bpjsNumber.length !== 13 ? (
+                {!payerType ? (
+                  <span className="text-amber-600 font-semibold flex items-center gap-1">
+                    ⚠️ Silakan pilih jenis penjamin / payer terlebih dahulu.
+                  </span>
+                ) : isBpjsPayer && bpjsNumber.length !== 13 ? (
                   <span className="text-rose-600 font-semibold flex items-center gap-1">
                     ⚠️ Wajib mengisi 13 digit nomor kartu BPJS untuk mendaftar
                     antrean.
@@ -4528,6 +4633,7 @@ export function PatientRegistrationModule({
                 disabled={
                   isDuplicateQueue ||
                   !chiefComplaint.trim() ||
+                  !payerType ||
                   (isBpjsPayer && bpjsNumber.length !== 13)
                 }
                 className="text-xs font-bold gap-2 cursor-pointer shadow-sm"

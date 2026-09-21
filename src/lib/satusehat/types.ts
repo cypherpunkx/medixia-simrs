@@ -22,6 +22,8 @@ export interface FacilityProfile {
 export interface DepartmentItem {
   id: string;
   facilityId: string;
+  code?: string;
+  queuePrefix?: string;
   name: string;
   room: string;
   quota: number;
@@ -375,6 +377,7 @@ export interface ClinicQueuePatientItem {
   satusehatStatus: "synced" | "pending";
   satusehatConsent?: "opt-in" | "opt-out";
   triagePriority?: "regular" | "urgent" | "geriatric" | "pediatric";
+  paymentPayer?: string;
 }
 
 // ==========================================

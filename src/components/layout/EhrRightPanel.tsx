@@ -175,10 +175,11 @@ export function EhrRightPanel({
       ? 1
       : 0;
 
+  const totalCategoriesCount = canonicalTypes.length;
   const syncedCategoriesCount = isSynced
-    ? 9
+    ? totalCategoriesCount
     : isPartialFailed
-    ? Math.max(0, 9 - failedCategoriesCount)
+    ? Math.max(0, totalCategoriesCount - failedCategoriesCount)
     : 0;
 
   const handleQuickRetry = async () => {
@@ -293,7 +294,9 @@ export function EhrRightPanel({
           </div>
           <span
             className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors duration-200 ${
-              isSynced
+              !hasSelectedPatient
+                ? "bg-slate-100 text-slate-600 border-slate-200"
+                : isSynced
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                 : isPartialFailed
                 ? "bg-rose-50 text-rose-700 border-rose-300"
@@ -303,15 +306,17 @@ export function EhrRightPanel({
             }`}
           >
             <span className="relative flex h-2 w-2">
-              {isSynced && (
+              {hasSelectedPatient && isSynced && (
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               )}
-              {isPartialFailed && (
+              {hasSelectedPatient && isPartialFailed && (
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
               )}
               <span
                 className={`relative inline-flex rounded-full h-2 w-2 ${
-                  isSynced
+                  !hasSelectedPatient
+                    ? "bg-slate-400"
+                    : isSynced
                     ? "bg-emerald-500"
                     : isPartialFailed
                     ? "bg-rose-500"
@@ -322,7 +327,9 @@ export function EhrRightPanel({
               />
             </span>
             <span>
-              {isSynced
+              {!hasSelectedPatient
+                ? "Standby"
+                : isSynced
                 ? "Tersinkron 100%"
                 : isPartialFailed
                 ? "Perlu Kirim Ulang"
@@ -334,7 +341,7 @@ export function EhrRightPanel({
         </div>
 
         {/* Konteks Identitas Pasien & Poliklinik Aktif */}
-        {patient ? (
+        {hasSelectedPatient && patient ? (
           <div className="p-2.5 rounded-lg bg-teal-50/70 border border-teal-200/80 space-y-1">
             <div className="flex items-center justify-between gap-1.5">
               <div className="flex items-center gap-1.5 min-w-0">
@@ -359,8 +366,12 @@ export function EhrRightPanel({
             </div>
           </div>
         ) : (
-          <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center text-xs text-slate-500 italic">
-            Pilih salah satu pasien di antrean untuk mengelola data SATUSEHAT.
+          <div className="p-3 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center space-y-1">
+            <User className="h-4 w-4 text-slate-400 mx-auto" />
+            <p className="text-xs font-bold text-slate-700">Belum Ada Pasien Dipilih</p>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              Pilih pasien dari antrean atau buat pendaftaran baru untuk mengelola rekam medis &amp; integrasi SATUSEHAT.
+            </p>
           </div>
         )}
 
@@ -372,25 +383,31 @@ export function EhrRightPanel({
             </span>
             <span
               className={`text-[11px] font-bold transition-all duration-300 ${
-                isPartialFailed
+                !hasSelectedPatient
+                  ? "text-slate-500"
+                  : isPartialFailed
                   ? "text-rose-700"
                   : isSynced
                   ? "text-emerald-700"
                   : "text-blue-700"
               }`}
             >
-              {isPartialFailed
-                ? `${syncedCategoriesCount}/9 Kategori (${syncedResources}/${totalResources} Resource)`
+              {!hasSelectedPatient
+                ? "Belum Ada Data"
+                : isPartialFailed
+                ? `${syncedCategoriesCount}/${totalCategoriesCount} Domain (${syncedResources}/${totalResources} Resource)`
                 : isSynced
-                ? `9/9 Kategori Lengkap`
+                ? `${totalCategoriesCount}/${totalCategoriesCount} Domain Selesai`
                 : isOptOut
                 ? "Disimpan Internal"
-                : "9 Kategori Disiapkan"}
+                : `${totalCategoriesCount} Domain Disiapkan`}
             </span>
           </div>
 
           <p className="text-[11px] text-slate-600 leading-relaxed">
-            {isSynced
+            {!hasSelectedPatient
+              ? "Pemeriksaan medis pasien akan otomatis dikonversi ke standar HL7 FHIR SATUSEHAT."
+              : isSynced
               ? "Seluruh resume medis dan intervensi telah tervalidasi di SATUSEHAT Kemenkes."
               : isPartialFailed
               ? `${failedResources} resource tertunda. Sistem akan mengulang pengiriman otomatis via Outbox Queue.`
@@ -402,7 +419,11 @@ export function EhrRightPanel({
           <div className="pt-1 border-t border-slate-200/60 flex items-center justify-between text-[10px] text-slate-500 font-mono">
             <span>ID Kunjungan Kemenkes:</span>
             <span className="font-bold text-slate-700 truncate max-w-[140px]">
-              {encounter?.satusehatEncounterId || "Terbit Saat Finalisasi"}
+              {hasSelectedPatient && encounter?.satusehatEncounterId
+                ? encounter.satusehatEncounterId
+                : hasSelectedPatient
+                ? "Terbit Saat Finalisasi"
+                : "-"}
             </span>
           </div>
         </div>

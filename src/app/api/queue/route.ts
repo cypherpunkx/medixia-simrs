@@ -4,6 +4,8 @@ import { ClinicQueuePatientItem } from "@/lib/satusehat/types";
 
 import { applyRateLimit } from "@/lib/middleware/rate-limiter";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const rateLimitResponse = applyRateLimit(req);
   if (rateLimitResponse) return rateLimitResponse;

@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PatientProfile, OutpatientEncounter } from "@/lib/satusehat/types";
+import { calculatePatientAge } from "@/lib/utils";
 
 interface PatientProfileBannerProps {
   patient?: PatientProfile | null;
@@ -45,9 +46,7 @@ export function PatientProfileBanner({
 
   if (!patient || !patient.id) return null;
 
-  const birthYear = new Date(patient.birthDate).getFullYear();
-  const currentYear = new Date().getFullYear();
-  const age = currentYear - birthYear;
+  const age = calculatePatientAge(patient.birthDate);
 
   return (
     <div className="ehr-card p-5 space-y-3.5">

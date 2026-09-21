@@ -183,6 +183,54 @@ const DEFAULT_FHIR_RESOURCES_BLUEPRINT: Array<{
  * Executes a POST request to SATUSEHAT with built-in Idempotency & Duplicate Resolution (RuleNumber: 20002).
  * If the resource already exists in SATUSEHAT, it queries the existing resource ID and marks the status as synced.
  */
+/**
+ * Melakukan pencarian resource Encounter di SATUSEHAT Cloud dengan presisi tinggi:
+ * 1. Menggunakan system identifier unik SIMRS (http://sys-ids.kemkes.go.id/encounter/{orgId}|{encounterId})
+ * 2. Fallback pencarian berdasarkan subject pasien (Patient/{patientRef})
+ */
+async function searchEncounterInCloud({
+  fhirBaseUrl,
+  headers,
+  hospitalOrgId,
+  encounterId,
+  patientRef,
+}: {
+  fhirBaseUrl: string;
+  headers: Record<string, string>;
+  hospitalOrgId: string;
+  encounterId: string;
+  patientRef: string;
+}): Promise<string | null> {
+  // Query 1: Presisi tinggi via identifier
+  try {
+    const identUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encounterId}`;
+    const res = await fetch(identUrl, { method: "GET", headers });
+    const data = await res.json().catch(() => ({}));
+    if (Array.isArray(data.entry) && data.entry.length > 0 && data.entry[0]?.resource?.id) {
+      return data.entry[0].resource.id;
+    }
+  } catch (err) {
+    console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by identifier:", err);
+  }
+
+  // Query 2: Fallback query via subject pasien
+  try {
+    const subjUrl = `${fhirBaseUrl}/Encounter?subject=${patientRef}`;
+    const res = await fetch(subjUrl, { method: "GET", headers });
+    const data = await res.json().catch(() => ({}));
+    if (Array.isArray(data.entry) && data.entry.length > 0) {
+      for (let i = data.entry.length - 1; i >= 0; i--) {
+        const id = data.entry[i]?.resource?.id;
+        if (id) return id;
+      }
+    }
+  } catch (err) {
+    console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by subject:", err);
+  }
+
+  return null;
+}
+
 async function sendFhirWithDuplicateResolution({
   url,
   method = "POST",
@@ -226,7 +274,8 @@ async function sendFhirWithDuplicateResolution({
       res.status === 409;
 
     if (isDuplicate) {
-      let resolvedId = data.id || existingId;
+      // WAJIB query Cloud jika data.id tidak ada di response
+      let resolvedId = data.id;
       if (!resolvedId && searchUrl) {
         try {
           const searchRes = await fetch(searchUrl, {
@@ -241,10 +290,17 @@ async function sendFhirWithDuplicateResolution({
           // Search failed, fallback gracefully
         }
       }
+      if (resolvedId) {
+        return {
+          success: true,
+          status: 200,
+          id: cleanUuidOrGenerate(resolvedId),
+        };
+      }
       return {
-        success: true,
-        status: 200,
-        id: cleanUuidOrGenerate(resolvedId || existingId),
+        success: false,
+        status: 409,
+        error: "Resource terdeteksi duplikat di SATUSEHAT Cloud namun ID referensi tidak dapat diverifikasi.",
       };
     }
 
@@ -303,8 +359,8 @@ export async function POST(req: NextRequest) {
     const hospitalOrgId = getValidOrgId(encounter);
     const patientIhsOrRef = getValidPatientRef(patient);
 
-    // CRITICAL: Preserve existing satusehatEncounterId so child resources point to the same encounter!
-    const satusehatEncounterId = cleanUuidOrGenerate(
+    // CRITICAL: Preserve or self-heal satusehatEncounterId so child resources point to the same encounter!
+    let satusehatEncounterId = cleanUuidOrGenerate(
       encounter.satusehatEncounterId,
     );
 
@@ -453,7 +509,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const boundEncounter: OutpatientEncounter = {
+    let boundEncounter: OutpatientEncounter = {
       ...encounter,
       satusehatEncounterId,
     };
@@ -515,42 +571,122 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 2. Retry Encounter
-      if (resourcesToRetry.some((r) => r.resourceType === "Encounter")) {
-        const isExistingRealEncounter = Boolean(
-          encounter.satusehatEncounterId &&
-          !encounter.satusehatEncounterId.startsWith("ss-enc-") &&
-          encounter.satusehatEncounterId.length >= 10,
-        );
+      // 2. Cloud Verification & Self-Healing for Parent Encounter
+      let isEncounterValidInCloud = false;
+      const isCandidateRealEncounter = Boolean(
+        satusehatEncounterId &&
+        !satusehatEncounterId.startsWith("ss-enc-") &&
+        satusehatEncounterId.length >= 10,
+      );
 
-        let result: {
-          success: boolean;
-          status: number;
-          id?: string;
-          error?: string;
-        };
-
-        if (isExistingRealEncounter) {
-          result = {
-            success: true,
-            status: 200,
-            id: encounter.satusehatEncounterId,
-          };
-        } else {
-          const encPayload = generateFhirEncounter(patient, boundEncounter);
-          result = await sendFhirWithDuplicateResolution({
-            url: `${fhirBaseUrl}/Encounter`,
+      // Step A: Verifikasi apakah satusehatEncounterId ada di Cloud
+      if (isCandidateRealEncounter) {
+        try {
+          const checkRes = await fetch(`${fhirBaseUrl}/Encounter/${satusehatEncounterId}`, {
+            method: "GET",
             headers,
-            payload: encPayload,
-            searchUrl: `${fhirBaseUrl}/Encounter?subject=${patientIhsOrRef}`,
-            existingId: encounter.satusehatEncounterId,
-            fallbackPrefix: "live-enc",
           });
+          if (checkRes.status >= 200 && checkRes.status < 300) {
+            isEncounterValidInCloud = true;
+          } else if (checkRes.status === 404) {
+            console.warn(
+              `[Sync-Retry Self-Healing] Encounter ID ${satusehatEncounterId} tidak ditemukan di Cloud (HTTP 404). Mencari ID resmi di Cloud...`,
+            );
+            isEncounterValidInCloud = false;
+          }
+        } catch (checkErr) {
+          console.warn("[Sync-Retry] Gagal verifikasi Encounter di Cloud:", checkErr);
         }
-        liveResultsMap.set("Encounter", result);
       }
 
-      // 3. Retry Condition (Diagnosis)
+      // Step B: Jika belum terverifikasi di Cloud, cari apakah sudah pernah ada di SATUSEHAT via identifier RS
+      if (!isEncounterValidInCloud) {
+        const foundCloudId = await searchEncounterInCloud({
+          fhirBaseUrl,
+          headers,
+          hospitalOrgId,
+          encounterId: encounter.id,
+          patientRef: patientIhsOrRef,
+        });
+
+        if (foundCloudId) {
+          satusehatEncounterId = foundCloudId;
+          boundEncounter = {
+            ...boundEncounter,
+            satusehatEncounterId: foundCloudId,
+          };
+          isEncounterValidInCloud = true;
+          console.log(`[Sync-Retry Resolver] Ditemukan Encounter ID resmi di Cloud: ${foundCloudId}`);
+        }
+      }
+
+      const shouldCreateEncounter =
+        !isEncounterValidInCloud ||
+        resourcesToRetry.some((r) => r.resourceType === "Encounter");
+
+      if (shouldCreateEncounter) {
+        const encPayload = generateFhirEncounter(patient, boundEncounter);
+        const encounterSearchUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encounter.id}`;
+        const encResult = await sendFhirWithDuplicateResolution({
+          url: `${fhirBaseUrl}/Encounter`,
+          headers,
+          payload: encPayload,
+          searchUrl: encounterSearchUrl,
+          fallbackPrefix: "live-enc",
+        });
+
+        if (encResult.success && encResult.id) {
+          satusehatEncounterId = cleanUuidOrGenerate(encResult.id);
+          boundEncounter = {
+            ...boundEncounter,
+            satusehatEncounterId,
+          };
+          isEncounterValidInCloud = true;
+          liveResultsMap.set("Encounter", {
+            success: true,
+            status: encResult.status,
+            id: satusehatEncounterId,
+          });
+          const encItem = currentBreakdown.find((b) => b.resourceType === "Encounter");
+          if (encItem) {
+            encItem.status = "synced";
+            encItem.httpStatus = encResult.status;
+            encItem.fhirId = satusehatEncounterId;
+            encItem.errorMessage = undefined;
+          }
+        } else {
+          liveResultsMap.set("Encounter", encResult);
+        }
+      } else {
+        liveResultsMap.set("Encounter", {
+          success: true,
+          status: 200,
+          id: satusehatEncounterId,
+        });
+        const encItem = currentBreakdown.find((b) => b.resourceType === "Encounter");
+        if (encItem) {
+          encItem.status = "synced";
+          encItem.httpStatus = 200;
+          encItem.fhirId = satusehatEncounterId;
+          encItem.errorMessage = undefined;
+        }
+      }
+
+      if (!isEncounterValidInCloud) {
+        // Fail-Fast: Hentikan pengiriman resource turunan karena Encounter induk tidak ada di Cloud
+        const failMsg =
+          "Encounter induk belum terdaftar di SATUSEHAT Cloud (HTTP 424 Failed Dependency). Silakan periksa koneksi dan kredensial Faskes & Nakes.";
+        for (const rt of resourcesToRetry) {
+          if (rt.resourceType !== "Consent" && rt.resourceType !== "Encounter") {
+            liveResultsMap.set(rt.resourceType, {
+              success: false,
+              status: 424,
+              error: failMsg,
+            });
+          }
+        }
+      } else {
+        // 3. Retry Condition (Diagnosis)
       if (resourcesToRetry.some((r) => r.resourceType === "Condition")) {
         const condResources = generateFhirConditions(patient, boundEncounter);
         const condBreakdownItems = currentBreakdown.filter(
@@ -1241,17 +1377,18 @@ export async function POST(req: NextRequest) {
         liveResultsMap.set("CarePlan", result);
       }
 
-      // 11. Retry Composition
-      if (resourcesToRetry.some((r) => r.resourceType === "Composition")) {
-        const compPayload = generateFhirComposition(patient, boundEncounter);
-        const result = await sendFhirWithDuplicateResolution({
-          url: `${fhirBaseUrl}/Composition`,
-          headers,
-          payload: compPayload,
-          searchUrl: `${fhirBaseUrl}/Composition?encounter=${satusehatEncounterId}`,
-          fallbackPrefix: "live-comp",
-        });
-        liveResultsMap.set("Composition", result);
+        // 11. Retry Composition
+        if (resourcesToRetry.some((r) => r.resourceType === "Composition")) {
+          const compPayload = generateFhirComposition(patient, boundEncounter);
+          const result = await sendFhirWithDuplicateResolution({
+            url: `${fhirBaseUrl}/Composition`,
+            headers,
+            payload: compPayload,
+            searchUrl: `${fhirBaseUrl}/Composition?encounter=${satusehatEncounterId}`,
+            fallbackPrefix: "live-comp",
+          });
+          liveResultsMap.set("Composition", result);
+        }
       }
     }
 

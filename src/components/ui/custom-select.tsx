@@ -114,7 +114,12 @@ export function CustomSelect<T extends string | number = string>({
               {prefixLabel}
             </span>
           )}
-          <span className="truncate font-semibold text-slate-800">
+          <span
+            className={cn(
+              "truncate font-semibold",
+              selectedOption ? "text-slate-800" : "text-slate-400 font-normal"
+            )}
+          >
             {selectedOption ? selectedOption.label : placeholder}
           </span>
         </div>

@@ -25,6 +25,8 @@ export const FacilityRepository = {
         const depts: DepartmentItem[] = deptRows.map((d) => ({
           id: d.id,
           facilityId: d.facilityId,
+          code: d.code,
+          queuePrefix: d.queuePrefix,
           name: d.name,
           room: d.room,
           quota: d.quota,
@@ -60,12 +62,12 @@ export const FacilityRepository = {
           licenseNumber: "440/012/Dinkes/RS-B/2024",
           isActive: true,
           departments: [
-            { id: "dept-rs-01", facilityId: "fac-rsud-01", name: "Poli Penyakit Dalam", room: "Ruang 204 (Lt. 2)", quota: 30, defaultDoctorName: "dr. Rian Pratama, Sp.PD", isActive: true },
-            { id: "dept-rs-02", facilityId: "fac-rsud-01", name: "Poli Umum", room: "Ruang 102 (Lt. 1)", quota: 35, defaultDoctorName: "dr. Amanda Putri, M.Biomed", isActive: true },
-            { id: "dept-rs-03", facilityId: "fac-rsud-01", name: "Poli Anak (Pediatri)", room: "Ruang 105 (Lt. 1)", quota: 20, defaultDoctorName: "dr. Maya Anggraini, Sp.A", isActive: true },
-            { id: "dept-rs-04", facilityId: "fac-rsud-01", name: "Poli Gigi & Mulut", room: "Ruang 201 (Lt. 2)", quota: 20, defaultDoctorName: "drg. Kevin Tanuwidjaja", isActive: true },
-            { id: "dept-rs-05", facilityId: "fac-rsud-01", name: "Poli Jantung & Pembuluh Darah", room: "Ruang 208 (Lt. 2)", quota: 15, defaultDoctorName: "dr. Rian Hidayat, Sp.JP", isActive: true },
-            { id: "dept-rs-06", facilityId: "fac-rsud-01", name: "Poli Mata", room: "Ruang 210 (Lt. 2)", quota: 20, defaultDoctorName: "dr. Nadia Putri, Sp.M", isActive: true },
+            { id: "dept-rs-01", facilityId: "fac-rsud-01", code: "INT", queuePrefix: "A", name: "Poli Penyakit Dalam", room: "Ruang 204 (Lt. 2)", quota: 30, defaultDoctorName: "dr. Rian Pratama, Sp.PD", isActive: true },
+            { id: "dept-rs-02", facilityId: "fac-rsud-01", code: "UMU", queuePrefix: "B", name: "Poli Umum", room: "Ruang 102 (Lt. 1)", quota: 35, defaultDoctorName: "dr. Amanda Putri, M.Biomed", isActive: true },
+            { id: "dept-rs-03", facilityId: "fac-rsud-01", code: "ANA", queuePrefix: "C", name: "Poli Anak (Pediatri)", room: "Ruang 105 (Lt. 1)", quota: 20, defaultDoctorName: "dr. Maya Anggraini, Sp.A", isActive: true },
+            { id: "dept-rs-04", facilityId: "fac-rsud-01", code: "GIG", queuePrefix: "D", name: "Poli Gigi & Mulut", room: "Ruang 201 (Lt. 2)", quota: 20, defaultDoctorName: "drg. Kevin Tanuwidjaja", isActive: true },
+            { id: "dept-rs-05", facilityId: "fac-rsud-01", code: "JAN", queuePrefix: "E", name: "Poli Jantung & Pembuluh Darah", room: "Ruang 208 (Lt. 2)", quota: 15, defaultDoctorName: "dr. Rian Hidayat, Sp.JP", isActive: true },
+            { id: "dept-rs-06", facilityId: "fac-rsud-01", code: "MAT", queuePrefix: "F", name: "Poli Mata", room: "Ruang 210 (Lt. 2)", quota: 20, defaultDoctorName: "dr. Nadia Putri, Sp.M", isActive: true },
           ],
         },
         {
@@ -173,6 +175,8 @@ export const FacilityRepository = {
           await db.insert(departments).values({
             id: dept.id || generatePrefixedId("dept_"),
             facilityId: facId,
+            code: dept.code?.trim().toUpperCase() || dept.name.substring(0, 3).toUpperCase(),
+            queuePrefix: dept.queuePrefix?.trim().toUpperCase() || "A",
             name: dept.name,
             room: dept.room || "Ruang Periksa 1",
             quota: dept.quota || 30,
@@ -227,14 +231,18 @@ export const FacilityRepository = {
     }
   },
 
-  async addDepartment(facilityId: string, data: { name: string; room?: string; quota?: number; defaultDoctorName?: string }): Promise<DepartmentItem | null> {
+  async addDepartment(facilityId: string, data: { name: string; code?: string; queuePrefix?: string; room?: string; quota?: number; defaultDoctorName?: string }): Promise<DepartmentItem | null> {
     try {
       const deptId = generatePrefixedId("dept_");
       const now = new Date().toISOString();
+      const code = data.code?.trim().toUpperCase() || data.name.trim().substring(0, 3).toUpperCase();
+      const queuePrefix = data.queuePrefix?.trim().toUpperCase() || "A";
 
       await db.insert(departments).values({
         id: deptId,
         facilityId,
+        code,
+        queuePrefix,
         name: data.name.trim(),
         room: data.room?.trim() || "Ruang Periksa 1",
         quota: data.quota || 30,
@@ -246,6 +254,8 @@ export const FacilityRepository = {
       return {
         id: deptId,
         facilityId,
+        code,
+        queuePrefix,
         name: data.name.trim(),
         room: data.room?.trim() || "Ruang Periksa 1",
         quota: data.quota || 30,
@@ -264,6 +274,8 @@ export const FacilityRepository = {
         .update(departments)
         .set({
           name: data.name,
+          ...(data.code ? { code: data.code.trim().toUpperCase() } : {}),
+          ...(data.queuePrefix ? { queuePrefix: data.queuePrefix.trim().toUpperCase() } : {}),
           room: data.room,
           quota: data.quota,
           defaultDoctorName: data.defaultDoctorName || null,

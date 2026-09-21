@@ -97,6 +97,26 @@ export function validatePhone(phone: string): ValidationResult {
 }
 
 /**
+ * Sanitasi Input Nomor Telepon Real-time
+ * Hanya mempertahankan karakter angka dan tanda '+' jika di posisi pertama.
+ * Mencegah karakter alfabet atau simbol non-telepon masuk ke state.
+ */
+export function sanitizePhoneNumber(phone: string): string {
+  if (!phone) return '';
+  let clean = phone.replace(/[^\d+]/g, '');
+  if (clean.includes('+')) {
+    const hasLeadingPlus = clean.startsWith('+');
+    clean = clean.replace(/\+/g, '');
+    if (hasLeadingPlus) {
+      clean = '+' + clean;
+    }
+  }
+  // Batasi panjang maksimum standar nomor telepon internasional (E.164: maks 15 digit angka + optional '+')
+  const maxLength = clean.startsWith('+') ? 16 : 15;
+  return clean.slice(0, maxLength);
+}
+
+/**
  * Validasi Rentang Fisiologis Tanda-Tanda Vital & Early Warning
  */
 export function evaluateVitalSigns(vitals: {

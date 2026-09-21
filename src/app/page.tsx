@@ -43,7 +43,7 @@ import {
 } from "@/components/ui/dialog";
 import { QrCode, Loader2, Hospital, Pill, Activity, Calendar } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
-import { generateUUIDv7 } from "@/lib/id-generator";
+import { generateUUIDv7, generatePrefixedId } from "@/lib/id-generator";
 import { toast } from "sonner";
 
 gsap.registerPlugin(useGSAP);
@@ -143,9 +143,9 @@ export default function HomePage() {
         const queueUrl = activeFacId ? `/api/queue?facilityId=${encodeURIComponent(activeFacId)}` : "/api/queue";
 
         const [pRes, qRes, encRes] = await Promise.all([
-          fetch("/api/patients"),
-          fetch(queueUrl),
-          fetch("/api/encounters"),
+          fetch("/api/patients", { cache: "no-store" }),
+          fetch(queueUrl, { cache: "no-store" }),
+          fetch("/api/encounters", { cache: "no-store" }),
         ]);
 
         let loadedPatients: PatientProfile[] = [];
@@ -234,6 +234,10 @@ export default function HomePage() {
                   (w.registrationNumber && e.registrationNumber && w.registrationNumber === e.registrationNumber)
               );
               if (matchedQ) {
+                // If encounter in DB is already finished, do NOT downgrade it back to in-progress or arrived
+                if (e.encounterStatus === "finished" && matchedQ.status !== "finished") {
+                  return e;
+                }
                 return { ...e, encounterStatus: matchedQ.status as any };
               }
               return e;
@@ -428,24 +432,41 @@ export default function HomePage() {
 
   const mainCanvasRef = useRef<HTMLDivElement>(null);
   const selectedEncounter: OutpatientEncounter | null = (() => {
+    // 0. Filter encounters strictly within active patient context
+    const patientEncounters = patient
+      ? encounters.filter((e) => e.patientId === patient.id || !e.patientId)
+      : encounters;
+
     // 1. Explicit match by selectedEncounterId
     if (selectedEncounterId) {
-      const match = encounters.find((e) => e.id === selectedEncounterId);
+      const match = patientEncounters.find((e) => e.id === selectedEncounterId);
       if (match) return match;
     }
-    // 2. Prefer active (in-progress / arrived) encounter over finished encounter
-    const activeMatch = encounters.find(
+
+    // 2. In Resume Medis module, prioritize finished encounters that contain clinical data (TTV / diagnosa)
+    if (activeModule === "resume") {
+      const finishedWithData = patientEncounters.find(
+        (e) => e.encounterStatus === "finished" && (e.vitals || (e.diagnoses && e.diagnoses.length > 0))
+      );
+      if (finishedWithData) return finishedWithData;
+
+      const anyFinished = patientEncounters.find((e) => e.encounterStatus === "finished");
+      if (anyFinished) return anyFinished;
+    }
+
+    // 3. For Entry/Doctor module, prefer active (in-progress / arrived) encounter
+    const activeMatch = patientEncounters.find(
       (e) => e.encounterStatus === "in-progress" || e.encounterStatus === "arrived"
     );
     if (activeMatch) return activeMatch;
 
-    // 3. Department match if filtered
+    // 4. Department match if filtered
     if (activeDepartment && activeDepartment !== "Semua Poli") {
-      const deptMatch = encounters.find((e) => e.clinicDepartment === activeDepartment);
+      const deptMatch = patientEncounters.find((e) => e.clinicDepartment === activeDepartment);
       if (deptMatch) return deptMatch;
     }
 
-    return encounters[0] || null;
+    return patientEncounters[0] || null;
   })();
 
   // GSAP animation when switching modules (with explicit fromTo and clearProps to prevent stuck opacity)
@@ -795,13 +816,13 @@ export default function HomePage() {
 
     if (localMatch.length > 0) {
       setEncounters(localMatch);
-      let targetEncId = localMatch[0].id;
+      let targetEncId: string | undefined = undefined;
       if (targetQueue) {
         const matchEnc = localMatch.find(
           (e) =>
-            (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
-            (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
             (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
+            (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
+            (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
             (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId))
         );
         if (matchEnc) {
@@ -811,15 +832,15 @@ export default function HomePage() {
         const activeEnc = localMatch.find(
           (e) => e.encounterStatus === "in-progress" || e.encounterStatus === "arrived"
         );
-        if (activeEnc) {
-          targetEncId = activeEnc.id;
-        }
+        targetEncId = activeEnc?.id || localMatch[0]?.id;
       }
-      setSelectedEncounterId(targetEncId);
-      if (typeof window !== "undefined") {
-        try {
-          sessionStorage.setItem("simrs_active_encounter_id", targetEncId);
-        } catch {}
+      if (targetEncId) {
+        setSelectedEncounterId(targetEncId);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem("simrs_active_encounter_id", targetEncId);
+          } catch {}
+        }
       }
     }
 
@@ -941,20 +962,78 @@ export default function HomePage() {
         const matchEnc =
           patientEncounters.find(
             (e) =>
-              (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
-              (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
               (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
+              (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
+              (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
               (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId))
           ) ||
           localMatch.find(
             (e) =>
-              (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
-              (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
               (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
+              (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
+              (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
               (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId))
           );
+
         if (matchEnc) {
           targetEncId = matchEnc.id;
+        } else {
+          // Antrean spesifik ini belum memiliki encounter di DB maupun local state.
+          // Buatkan sesi encounter baru khusus untuk antrean ini (BUKAN mengambil encounter lama yang sudah selesai!)
+          const deptName =
+            targetQueue.department ||
+            (activeDepartment !== "Semua Poli" ? activeDepartment : (departments[0]?.name || "Poli Rawat Jalan"));
+          const docInfo = resolveDepartmentDoctor(deptName);
+          const doctorName = targetQueue.doctor || docInfo.doctorName;
+          const newTargetEncId = targetQueue.encounterId || generatePrefixedId("enc_");
+
+          const newTargetEnc: OutpatientEncounter = {
+            id: newTargetEncId,
+            patientId: selectedPat.id,
+            facilityId: facility?.id || user?.facilityId,
+            departmentId: targetQueue.departmentId || docInfo.departmentId,
+            doctorId: targetQueue.doctorId || docInfo.doctorId,
+            visitDate: new Date().toISOString(),
+            clinicDepartment: deptName,
+            doctorName: doctorName,
+            doctorSip: docInfo.doctorSip,
+            doctorIhsId: docInfo.doctorIhsId,
+            hospitalName: facility?.name || user?.facilityName || "Fasilitas Pelayanan Kesehatan",
+            hospitalOrgId: facility?.satusehatOrgId || "",
+            chiefComplaint: targetQueue.chiefComplaint || "Pemeriksaan dan konsultasi rawat jalan",
+            anamnesis: targetQueue.chiefComplaint
+              ? `Pasien mendaftar dengan keluhan: ${targetQueue.chiefComplaint}.`
+              : "Menunggu asesmen anamnesis dokter DPJP.",
+            vitals: undefined,
+            diagnoses: [],
+            procedures: [],
+            prescriptions: [],
+            followUpPlan: {
+              instruction: "Menunggu pemeriksaan & instruksi dokter DPJP.",
+            },
+            dischargeDisposition: effectiveStatus === "finished" ? "Pulang Berobat Jalan" : "Dalam Pelayanan Poli",
+            encounterStatus: effectiveStatus || (targetQueue.status as any) || "in-progress",
+            queueNumber: targetQueue.queueNumber,
+            registrationNumber: targetQueue.registrationNumber,
+            consentStatus: selectedPat.satusehatConsent || "opt-in",
+            syncStatus: "pending",
+            syncedAt: undefined,
+            satusehatEncounterId: undefined,
+          };
+
+          targetEncId = newTargetEnc.id;
+          if (!targetQueue.encounterId) {
+            targetQueue.encounterId = newTargetEnc.id;
+          }
+
+          setEncounters((prev) => [newTargetEnc, ...prev.filter((e) => e.id !== newTargetEnc.id)]);
+
+          // Simpan encounter baru ini ke DB agar persisten
+          fetch("/api/encounters", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ encounter: newTargetEnc, patientId: selectedPat.id }),
+          }).catch((err) => console.error("Gagal simpan encounter baru ke DB:", err));
         }
       }
 
@@ -1029,40 +1108,51 @@ export default function HomePage() {
     if (typeof window !== "undefined") {
       try {
         sessionStorage.setItem("simrs_active_encounter_id", finalizedEnc.id);
+        if (finalizedEnc.patientId) {
+          sessionStorage.setItem("simrs_active_patient_id", finalizedEnc.patientId);
+        }
       } catch {}
     }
 
     // Otomatis sinkronkan status pasien di master worklist menjadi "finished" & "synced" untuk antrean terkait
     const isSynced = finalizedEnc.syncStatus === "synced" || Boolean(finalizedEnc.satusehatEncounterId);
+
+    const isQueueMatching = (item: ClinicQueuePatientItem) => {
+      const isDirectMatch =
+        (newEncounter.queueNumber && item.queueNumber === newEncounter.queueNumber) ||
+        (newEncounter.registrationNumber && item.registrationNumber === newEncounter.registrationNumber) ||
+        (item.encounterId && item.encounterId === newEncounter.id) ||
+        (item.id === newEncounter.id);
+
+      const isPatientActiveQueue =
+        (item.patient.id === newEncounter.patientId || (patient && (item.patient.id === patient.id || item.patient.mrn === patient.mrn))) &&
+        (item.status === "in-progress" || item.status === "arrived") &&
+        (!newEncounter.clinicDepartment || item.department === newEncounter.clinicDepartment || newEncounter.clinicDepartment === "Semua Poli");
+
+      return isDirectMatch || isPatientActiveQueue;
+    };
+
     setWorklist((prev) =>
       prev.map((item) => {
-        const isMatch =
-          (newEncounter.queueNumber && item.queueNumber === newEncounter.queueNumber) ||
-          (newEncounter.registrationNumber && item.registrationNumber === newEncounter.registrationNumber) ||
-          (item.encounterId && item.encounterId === newEncounter.id) ||
-          (item.id === newEncounter.id);
-        return isMatch
+        return isQueueMatching(item)
           ? {
               ...item,
               status: "finished",
+              encounterId: finalizedEnc.id,
               satusehatStatus: isSynced ? "synced" : item.satusehatStatus,
             }
           : item;
       })
     );
 
-    const matchingQueue = worklist.find((item) =>
-      (newEncounter.queueNumber && item.queueNumber === newEncounter.queueNumber) ||
-      (newEncounter.registrationNumber && item.registrationNumber === newEncounter.registrationNumber) ||
-      (item.encounterId && item.encounterId === newEncounter.id) ||
-      (item.id === newEncounter.id)
-    );
+    const matchingQueue = worklist.find(isQueueMatching);
     if (matchingQueue) {
       fetch(`/api/queue/${matchingQueue.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: "finished",
+          encounterId: finalizedEnc.id,
           satusehatStatus: isSynced ? "synced" : undefined,
         }),
       }).catch((err) => console.error("Gagal update queue status ke DB:", err));
@@ -1184,7 +1274,7 @@ export default function HomePage() {
       />
 
       {/* 2. HOLY GRAIL LAYOUT BODY (Left Sidebar + Center Canvas + Right Panel) */}
-      <div className="flex-1 w-full max-w-[1600px] mx-auto p-4 sm:p-6 flex flex-col lg:flex-row gap-6">
+      <div className="flex-1 w-full max-w-[1600px] mx-auto p-4 sm:p-6 pb-24 flex flex-col lg:flex-row gap-6">
         {/* Left Sidebar (280px) */}
         <EhrLeftSidebar
           activeModule={activeModule}
@@ -1206,7 +1296,7 @@ export default function HomePage() {
           {activeModule === "resume" && (
             <div className="space-y-5">
               {/* Patient Profile & Clinical Content OR Empty State */}
-              {departmentWorklist.length === 0 || !patient ? (
+              {!patient ? (
                 <div className="canvas-content">
                   <ClinicEmptyState
                     department={activeDepartment}
@@ -1428,16 +1518,37 @@ export default function HomePage() {
           {activeModule === "entry" && (
             <div className="space-y-5">
               <div className="canvas-content">
-                <OutpatientEntryForm
-                  patient={patient}
-                  activeEncounter={selectedEncounter || undefined}
-                  activeDepartment={activeDepartment}
-                  onEncounterCreated={handleEncounterFinalized}
-                  onOpenRegistration={() => handleModuleChange("registration")}
-                  token={session?.accessToken}
-                  session={session}
-                  onNavigateToBridging={() => setActiveModule("auth")}
-                />
+                {(() => {
+                  const currentActiveQueue = patient
+                    ? worklist.find(
+                        (w) =>
+                          (w.patient.id === patient.id || w.patient.mrn === patient.mrn) &&
+                          (w.status === "in-progress" || w.status === "arrived")
+                      )
+                    : null;
+
+                  const enrichedEncounter: OutpatientEncounter | undefined = selectedEncounter
+                    ? {
+                        ...selectedEncounter,
+                        queueNumber: selectedEncounter.queueNumber || currentActiveQueue?.queueNumber,
+                        registrationNumber:
+                          selectedEncounter.registrationNumber || currentActiveQueue?.registrationNumber,
+                      }
+                    : undefined;
+
+                  return (
+                    <OutpatientEntryForm
+                      patient={patient}
+                      activeEncounter={enrichedEncounter}
+                      activeDepartment={activeDepartment}
+                      onEncounterCreated={handleEncounterFinalized}
+                      onOpenRegistration={() => handleModuleChange("registration")}
+                      token={session?.accessToken}
+                      session={session}
+                      onNavigateToBridging={() => setActiveModule("auth")}
+                    />
+                  );
+                })()}
               </div>
             </div>
           )}

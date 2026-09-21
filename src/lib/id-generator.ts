@@ -22,7 +22,8 @@ export type EntityPrefix =
   | "rad_"
   | "sync_"
   | "add_"
-  | "obx_";
+  | "obx_"
+  | "sess_";
 
 /**
  * Generates an RFC 9562 compliant UUID v7 (Time-Ordered Monotonic UUID)
@@ -79,27 +80,48 @@ export function generateMRN(seqNumber?: number): string {
 }
 
 /**
+ * Mengembalikan string tanggal lokal kompak YYYYMMDD sesuai zona waktu lokal (WIB/WITA/WIT)
+ * Menghindari bug UTC toISOString() yang tertinggal 1 hari saat jam 00:00 - 06:59 WIB.
+ */
+export function getLocalCompactDate(date?: Date | string): string {
+  const d = date ? new Date(date) : new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}${month}${day}`;
+}
+
+/**
+ * Mengembalikan string tanggal lokal YYYY-MM-DD sesuai zona waktu lokal (WIB/WITA/WIT)
+ */
+export function getLocalDateString(date?: Date | string): string {
+  const d = date ? new Date(date) : new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Generates a human-readable Encounter Document Code for printouts & barcodes
- * Format: "ENC-YYYYMMDD-XXXX" (e.g. "ENC-20260913-0001")
+ * Format: "ENC-YYYYMMDD-XXXX" (e.g. "ENC-20260922-0001")
  */
 export function generateEncounterCode(date?: Date | string, sequence: number = 1): string {
-  const d = date ? new Date(date) : new Date();
-  const yyyymmdd = d.toISOString().split("T")[0].replace(/-/g, "");
+  const yyyymmdd = getLocalCompactDate(date);
   const seqStr = String(sequence).padStart(4, "0");
   return `ENC-${yyyymmdd}-${seqStr}`;
 }
 
 /**
  * Generates a standard Hospital Outpatient Registration Number (No. Registrasi / No. Rawat)
- * Format: "RJ-YYYYMMDD-XXXX" (e.g. "RJ-20260913-0001")
+ * Format: "RJ-YYYYMMDD-XXXX" (e.g. "RJ-20260922-0001")
  */
 export function generateRegistrationNumber(
   date?: Date | string,
   sequence: number = 1,
   prefix: "RJ" | "RI" | "IGD" = "RJ"
 ): string {
-  const d = date ? new Date(date) : new Date();
-  const yyyymmdd = d.toISOString().split("T")[0].replace(/-/g, "");
+  const yyyymmdd = getLocalCompactDate(date);
   const seqStr = String(sequence).padStart(4, "0");
   return `${prefix}-${yyyymmdd}-${seqStr}`;
 }
@@ -108,19 +130,77 @@ export function generateRegistrationNumber(
  * Generates a clinic queue display number
  * Format: "[Poli Code]-[3 digit number]" (e.g. "A-001", "B-012")
  */
-export function generateQueueNumber(department: string, sequence: number = 1): string {
-  const prefixMap: Record<string, string> = {
-    "Poli Penyakit Dalam": "A",
-    "Poli Umum": "B",
-    "Poli Anak (Pediatri)": "C",
-    "Poli Gigi & Mulut": "D",
-    "Poli Jantung & Pembuluh Darah": "E",
-    "Poli Mata": "F",
-    "Poli KIA / KB": "G",
-  };
-
-  const prefix = prefixMap[department] || "A";
+export function generateQueueNumber(departmentOrPrefix: string, sequence: number = 1): string {
+  const trimmed = (departmentOrPrefix || "").trim();
   const seqStr = String(sequence).padStart(3, "0");
+
+  // Jika parameter sudah berupa prefix singkat 1-3 huruf (misal "A", "B", "INT")
+  if (/^[A-Za-z]{1,3}$/.test(trimmed)) {
+    return `${trimmed.toUpperCase()}-${seqStr}`;
+  }
+
+  const deptLower = trimmed.toLowerCase();
+
+  let prefix = "A";
+  if (deptLower.includes("penyakit dalam") || deptLower.includes("interna")) {
+    prefix = "A";
+  } else if (deptLower.includes("umum")) {
+    prefix = "B";
+  } else if (deptLower.includes("anak") || deptLower.includes("pediatri")) {
+    prefix = "C";
+  } else if (
+    deptLower.includes("gigi") ||
+    deptLower.includes("dental") ||
+    deptLower.includes("mulut")
+  ) {
+    prefix = "D";
+  } else if (
+    deptLower.includes("jantung") ||
+    deptLower.includes("kardiologi") ||
+    deptLower.includes("pembuluh darah")
+  ) {
+    prefix = "E";
+  } else if (deptLower.includes("mata") || deptLower.includes("oftalmologi")) {
+    prefix = "F";
+  } else if (
+    deptLower.includes("kia") ||
+    deptLower.includes("kb") ||
+    deptLower.includes("kandungan") ||
+    deptLower.includes("obgyn")
+  ) {
+    prefix = "G";
+  } else if (
+    deptLower.includes("saraf") ||
+    deptLower.includes("syaraf") ||
+    deptLower.includes("neurologi")
+  ) {
+    prefix = "H";
+  } else if (deptLower.includes("bedah")) {
+    prefix = "I";
+  } else if (deptLower.includes("tht")) {
+    prefix = "J";
+  } else if (
+    deptLower.includes("kulit") ||
+    deptLower.includes("kelamin") ||
+    deptLower.includes("dermatologi")
+  ) {
+    prefix = "K";
+  } else if (deptLower.includes("jiwa") || deptLower.includes("psikiatri")) {
+    prefix = "L";
+  } else if (deptLower.includes("paru") || deptLower.includes("pulmonologi")) {
+    prefix = "M";
+  } else if (
+    deptLower.includes("rehabilitasi") ||
+    deptLower.includes("fisioterapi")
+  ) {
+    prefix = "R";
+  } else if (deptLower.includes("igd") || deptLower.includes("darurat")) {
+    prefix = "U";
+  } else {
+    const cleanName = trimmed.replace(/^Poli\s+/i, "").trim();
+    prefix = (cleanName[0] || "A").toUpperCase();
+  }
+
   return `${prefix}-${seqStr}`;
 }
 
@@ -129,19 +209,17 @@ export function generateQueueNumber(department: string, sequence: number = 1): s
  * Format: "ORD-LAB-YYYYMMDD-XXXX" or "ORD-RAD-YYYYMMDD-XXXX"
  */
 export function generateDiagnosticOrderCode(type: "lab" | "rad", date?: Date | string, seq: number = 1): string {
-  const d = date ? new Date(date) : new Date();
-  const yyyymmdd = d.toISOString().split("T")[0].replace(/-/g, "");
+  const yyyymmdd = getLocalCompactDate(date);
   const seqStr = String(seq).padStart(4, "0");
   return `ORD-${type.toUpperCase()}-${yyyymmdd}-${seqStr}`;
 }
 
 /**
  * Generates an Electronic Prescription (CPOE) Code
- * Format: "RX-YYYYMMDD-XXXX" (e.g. "RX-20260913-0001")
+ * Format: "RX-YYYYMMDD-XXXX" (e.g. "RX-20260922-0001")
  */
 export function generatePrescriptionCode(date?: Date | string, seq: number = 1): string {
-  const d = date ? new Date(date) : new Date();
-  const yyyymmdd = d.toISOString().split("T")[0].replace(/-/g, "");
+  const yyyymmdd = getLocalCompactDate(date);
   const seqStr = String(seq).padStart(4, "0");
   return `RX-${yyyymmdd}-${seqStr}`;
 }

@@ -27,6 +27,8 @@ export const departments = pgTable(
   {
     id: text("id").primaryKey(), // e.g. "dept-rs-01"
     facilityId: text("facility_id").notNull().references(() => facilities.id, { onDelete: "cascade" }),
+    code: text("code").notNull().default(""), // e.g. "INT", "UMU", "ANA", "GIG"
+    queuePrefix: text("queue_prefix").notNull().default("A"), // e.g. "A", "B", "C", "D"
     name: text("name").notNull(), // e.g. "Poli Penyakit Dalam", "Poli Umum"
     room: text("room").notNull(), // e.g. "Ruang 204 (Lt. 2)"
     quota: integer("quota").notNull().default(30),
@@ -37,6 +39,7 @@ export const departments = pgTable(
   (table) => [
     index("idx_departments_facility_id").on(table.facilityId),
     index("idx_departments_active").on(table.isActive),
+    index("idx_departments_code").on(table.code),
   ]
 );
 
@@ -80,12 +83,12 @@ export const patients = pgTable(
     emergencyContactName: text("emergency_contact_name").notNull(),
     emergencyContactRelation: text("emergency_contact_relation").notNull(),
     emergencyContactPhone: text("emergency_contact_phone").notNull(),
-    paymentPayer: text("payment_payer").default("BPJS Kesehatan"),
+    paymentPayer: text("payment_payer"),
     lastVisitDate: text("last_visit_date"),
     lastVisitDepartment: text("last_visit_department"),
     lastVisitDoctor: text("last_visit_doctor"),
     lastVisitDiagnosis: text("last_visit_diagnosis"),
-    totalVisitsCount: integer("total_visits_count").default(1),
+    totalVisitsCount: integer("total_visits_count").default(0),
     satusehatConsent: text("satusehat_consent").default("opt-in"), // "opt-in" | "opt-out"
     createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
     updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
@@ -351,6 +354,7 @@ export const queueItems = pgTable(
     satusehatStatus: text("satusehat_status").notNull().default("synced"),
     satusehatConsent: text("satusehat_consent").default("opt-in"),
     triagePriority: text("triage_priority").default("regular"),
+    paymentPayer: text("payment_payer"),
     calledAt: text("called_at"),
     callCount: integer("call_count").default(0),
     queueDate: text("queue_date").notNull(), // YYYY-MM-DD

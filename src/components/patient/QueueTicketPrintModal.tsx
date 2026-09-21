@@ -14,6 +14,7 @@ import { Printer, Ticket, QrCode, Clock, ShieldCheck, Activity } from "lucide-re
 import { PatientProfile, OutpatientEncounter, ClinicQueuePatientItem } from "@/lib/satusehat/types";
 import { printHtmlElement } from "@/lib/print/print-service";
 import { useAuth } from "@/lib/auth/auth-context";
+import { getLocalCompactDate } from "@/lib/id-generator";
 
 interface QueueTicketPrintModalProps {
   isOpen: boolean;
@@ -72,7 +73,7 @@ export function QueueTicketPrintModal({
     queueItem?.registrationNumber ||
     matchingQueueItem?.registrationNumber ||
     encounter?.registrationNumber ||
-    `RJ-${new Date().toISOString().split("T")[0].replace(/-/g, "")}-0001`;
+    `RJ-${getLocalCompactDate()}-0001`;
 
   const effectiveQueueNumber =
     queueNumber ||
@@ -217,7 +218,13 @@ export function QueueTicketPrintModal({
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 text-[11px]">Jenis Penjamin:</span>
-              <span className="font-semibold text-teal-700">{patient.paymentPayer || "BPJS Kesehatan"}</span>
+              <span className="font-semibold text-teal-700">
+                {matchingQueueItem?.paymentPayer ||
+                  (matchingQueueItem as any)?.patient?.paymentPayer ||
+                  queueItem?.paymentPayer ||
+                  patient.paymentPayer ||
+                  "Pasien Umum / Mandiri"}
+              </span>
             </div>
             <div className="flex justify-between items-center pt-1 border-t border-slate-100">
               <span className="text-slate-500 text-[11px] flex items-center gap-1">

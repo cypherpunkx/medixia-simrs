@@ -940,10 +940,10 @@ export function DiagnosticSupportModule({
                       {isDropdownOpen && (
                         <>
                           <div
-                            className="fixed inset-0 z-20"
+                            className="fixed inset-0 z-40"
                             onClick={() => setIsDropdownOpen(false)}
                           />
-                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
+                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
                             <div className="p-1.5 sticky top-0 bg-white z-10">
                               <div className="relative">
                                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
@@ -1436,10 +1436,10 @@ export function DiagnosticSupportModule({
                     {isLabPresetOpen && (
                       <>
                         <div
-                          className="fixed inset-0 z-20"
+                          className="fixed inset-0 z-40"
                           onClick={() => setIsLabPresetOpen(false)}
                         />
-                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
+                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
                           <div className="p-1.5 sticky top-0 bg-white z-10">
                             <div className="relative">
                               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
@@ -2004,10 +2004,10 @@ export function DiagnosticSupportModule({
                     {isRadPresetOpen && (
                       <>
                         <div
-                          className="fixed inset-0 z-20"
+                          className="fixed inset-0 z-40"
                           onClick={() => setIsRadPresetOpen(false)}
                         />
-                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
+                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
                           <div className="p-1.5 sticky top-0 bg-white z-10">
                             <div className="relative">
                               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />

@@ -184,7 +184,7 @@ export function PrescriptionPrintModal({
             </div>
             <div>
               <span className="text-[9px] text-slate-500 block">Penjamin:</span>
-              <span className="font-semibold text-teal-700">{patient.paymentPayer || "BPJS Kesehatan"}</span>
+              <span className="font-semibold text-teal-700">{patient.paymentPayer || "Pasien Umum / Mandiri"}</span>
             </div>
           </div>
 

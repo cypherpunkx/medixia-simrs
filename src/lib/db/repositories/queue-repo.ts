@@ -4,7 +4,7 @@ import { eq, and, or, asc, desc, gte, lte, inArray, SQL } from "drizzle-orm";
 import { ClinicQueuePatientItem, PatientProfile } from "@/lib/satusehat/types";
 import { PatientRepository } from "./patient-repo";
 import { MemoryCache, CACHE_CONFIG, InvalidationService } from "@/lib/cache";
-import { generatePrefixedId } from "@/lib/id-generator";
+import { generatePrefixedId, getLocalDateString } from "@/lib/id-generator";
 import { getNextRegistrationNumber } from "../sequence";
 
 export interface QueueFilterOptions {
@@ -55,7 +55,7 @@ export const QueueRepository = {
           } else if (date) {
             conditions.push(eq(queueItems.queueDate, date));
           } else {
-            const todayStr = new Date().toISOString().split("T")[0];
+            const todayStr = getLocalDateString();
             conditions.push(eq(queueItems.queueDate, todayStr));
           }
         }
@@ -86,6 +86,55 @@ export const QueueRepository = {
             fallbackQuery = fallbackQuery.where(fallbackWhere) as any;
           }
           rows = await fallbackQuery.orderBy(asc(queueItems.arrivalTimestamp));
+        }
+
+        // Fallback 2 (Auto-Recovery & Sync): Ensure all registered clinical encounters exist in queueItems
+        const todayStr = getLocalDateString();
+        const allEncs = await db.select().from(encounters).limit(50);
+        if (allEncs.length > 0) {
+          const existingRegs = new Set(rows.map((r) => r.registrationNumber).filter(Boolean));
+          const missingEncs = allEncs.filter(
+            (enc) => enc.registrationNumber && !existingRegs.has(enc.registrationNumber)
+          );
+
+          if (missingEncs.length > 0) {
+            for (const enc of missingEncs) {
+              const qDate = enc.visitDate ? enc.visitDate.split("T")[0] : todayStr;
+              await db
+                .insert(queueItems)
+                .values({
+                  id: generatePrefixedId("q_"),
+                  queueNumber: enc.queueNumber || "A-001",
+                  registrationNumber: enc.registrationNumber,
+                  patientId: enc.patientId,
+                  departmentId: enc.departmentId || null,
+                  doctorId: enc.doctorId || null,
+                  encounterId: enc.id,
+                  department: enc.clinicDepartment || "Poli Umum",
+                  doctor: enc.doctorName || "dr. Dokter DPJP",
+                  room: "Ruang 101",
+                  arrivalTime:
+                    new Date().toLocaleTimeString("id-ID", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }) + " WIB",
+                  arrivalTimestamp: Date.now(),
+                  chiefComplaint:
+                    enc.chiefComplaint ||
+                    "Pemeriksaan dan konsultasi rawat jalan",
+                  status: (enc.encounterStatus as any) || "arrived",
+                  satusehatStatus: enc.satusehatEncounterId ? "synced" : "pending",
+                  satusehatConsent: "opt-in",
+                  triagePriority: "regular",
+                  queueDate: qDate,
+                })
+                .catch(() => {});
+            }
+            rows = await query.orderBy(
+              desc(queueItems.queueDate),
+              asc(queueItems.arrivalTimestamp)
+            );
+          }
         }
 
         if (rows.length === 0) return [];
@@ -150,6 +199,7 @@ export const QueueRepository = {
               queueNumber: row.queueNumber,
               registrationNumber: row.registrationNumber || matchedEnc?.registrationNumber || undefined,
               patient,
+              paymentPayer: row.paymentPayer || patient.paymentPayer || undefined,
               departmentId: row.departmentId || undefined,
               doctorId: row.doctorId || undefined,
               encounterId: row.encounterId || matchedEnc?.id || undefined,
@@ -190,7 +240,7 @@ export const QueueRepository = {
       patient = await PatientRepository.create(item.patient);
     }
 
-    const todayStr = new Date().toISOString().split("T")[0];
+    const todayStr = getLocalDateString();
     const id = item.id || generatePrefixedId("q_");
 
     // 1. Resolve encounter and its facility context if available
@@ -211,8 +261,13 @@ export const QueueRepository = {
         encFacilityId = encRows[0].facilityId;
         if (!item.departmentId && encRows[0].departmentId) item.departmentId = encRows[0].departmentId;
         if (!item.doctorId && encRows[0].doctorId) item.doctorId = encRows[0].doctorId;
+      } else {
+        // Encounter belum ada di database, jangan jadikan FK agar tidak error FK constraint
+        resolvedEncounterId = null;
       }
-    } else if (item.registrationNumber) {
+    }
+    
+    if (!resolvedEncounterId && item.registrationNumber) {
       const encRows = await db
         .select({
           id: encounters.id,
@@ -291,6 +346,7 @@ export const QueueRepository = {
           arrivalTimestamp: item.arrivalTimestamp || existing.arrivalTimestamp,
           chiefComplaint: item.chiefComplaint || existing.chiefComplaint,
           status: item.status || existing.status,
+          paymentPayer: item.paymentPayer || existing.paymentPayer || patient.paymentPayer || null,
           satusehatStatus: item.satusehatStatus || existing.satusehatStatus,
           satusehatConsent: item.satusehatConsent || existing.satusehatConsent,
           triagePriority: item.triagePriority || existing.triagePriority,
@@ -303,6 +359,7 @@ export const QueueRepository = {
         queueNumber: item.queueNumber,
         registrationNumber: regNumToUse,
         patientId: patient.id,
+        paymentPayer: item.paymentPayer || patient.paymentPayer || null,
         departmentId: resolvedDepartmentId,
         doctorId: resolvedDoctorId,
         encounterId: resolvedEncounterId,
@@ -332,6 +389,7 @@ export const QueueRepository = {
       ...item,
       id,
       patient,
+      paymentPayer: item.paymentPayer || patient.paymentPayer || undefined,
       departmentId: resolvedDepartmentId || undefined,
       doctorId: resolvedDoctorId || undefined,
       encounterId: resolvedEncounterId || undefined,
@@ -389,17 +447,21 @@ export const QueueRepository = {
         }
       }
 
-      if (qRow.queueNumber) {
+      if (qRow.encounterId) {
+        await db
+          .update(encounters)
+          .set({ encounterStatus: status, updatedAt: now })
+          .where(eq(encounters.id, qRow.encounterId));
+      } else if (qRow.registrationNumber) {
+        await db
+          .update(encounters)
+          .set({ encounterStatus: status, updatedAt: now })
+          .where(eq(encounters.registrationNumber, qRow.registrationNumber));
+      } else if (qRow.queueNumber) {
         await db
           .update(encounters)
           .set({ encounterStatus: status, updatedAt: now })
           .where(eq(encounters.queueNumber, qRow.queueNumber));
-      }
-      if (qRow.patientId) {
-        await db
-          .update(encounters)
-          .set({ encounterStatus: status, updatedAt: now })
-          .where(eq(encounters.patientId, qRow.patientId));
       }
     }
 
@@ -446,6 +508,82 @@ export const QueueRepository = {
       .where(or(...conditions));
 
     InvalidationService.invalidateQueue();
+    return true;
+  },
+
+  async finishQueueForEncounter(params: {
+    encounterId: string;
+    registrationNumber?: string;
+    queueNumber?: string;
+    patientId: string;
+    satusehatStatus?: "synced" | "pending";
+  }): Promise<boolean> {
+    const conditions: SQL[] = [];
+    if (params.encounterId) conditions.push(eq(queueItems.encounterId, params.encounterId));
+    if (params.registrationNumber) conditions.push(eq(queueItems.registrationNumber, params.registrationNumber));
+    if (params.queueNumber) conditions.push(eq(queueItems.queueNumber, params.queueNumber));
+
+    // Also match any active waiting/in-progress queue for this patient to ensure 100% completion
+    const activePatientCondition = and(
+      eq(queueItems.patientId, params.patientId),
+      or(eq(queueItems.status, "in-progress"), eq(queueItems.status, "arrived"))
+    );
+    if (activePatientCondition) {
+      conditions.push(activePatientCondition);
+    }
+
+    const updated = await db
+      .update(queueItems)
+      .set({
+        status: "finished",
+        encounterId: params.encounterId,
+        satusehatStatus: params.satusehatStatus || "pending",
+      })
+      .where(or(...conditions))
+      .returning({ id: queueItems.id });
+
+    // Self-healing: Jika antrean belum pernah dibuat di database, buatkan record antrean selesai agar muncul di riwayat antrean hari ini
+    if (updated.length === 0) {
+      const encRows = await db
+        .select()
+        .from(encounters)
+        .where(eq(encounters.id, params.encounterId))
+        .limit(1);
+      const enc = encRows[0];
+      const todayStr = getLocalDateString();
+
+      await db.insert(queueItems).values({
+        id: generatePrefixedId("q_"),
+        queueNumber: params.queueNumber || enc?.queueNumber || "A-001",
+        registrationNumber:
+          params.registrationNumber ||
+          enc?.registrationNumber ||
+          `RJ-${todayStr.replace(/-/g, "")}-0001`,
+        patientId: params.patientId,
+        departmentId: enc?.departmentId || null,
+        doctorId: enc?.doctorId || null,
+        encounterId: params.encounterId,
+        department: enc?.clinicDepartment || "Poli Umum",
+        doctor: enc?.doctorName || "dr. Dokter Pemeriksa",
+        room: "Ruang 204 (Lt. 2)",
+        arrivalTime:
+          new Date().toLocaleTimeString("id-ID", {
+            hour: "2-digit",
+            minute: "2-digit",
+          }) + " WIB",
+        arrivalTimestamp: Date.now(),
+        chiefComplaint:
+          enc?.chiefComplaint || "Pemeriksaan dan konsultasi rawat jalan",
+        status: "finished",
+        satusehatStatus: params.satusehatStatus || "synced",
+        satusehatConsent: "opt-in",
+        triagePriority: "regular",
+        queueDate: enc?.visitDate ? enc.visitDate.split("T")[0] : todayStr,
+      });
+    }
+
+    InvalidationService.invalidateQueue();
+    InvalidationService.invalidateEncounter();
     return true;
   },
 };

@@ -17,7 +17,7 @@ import {
 } from "../schema";
 import { eq, desc, sql, inArray, and } from "drizzle-orm";
 import { MemoryCache, CACHE_CONFIG, InvalidationService } from "@/lib/cache";
-import { generatePrefixedId } from "@/lib/id-generator";
+import { generatePrefixedId, getLocalDateString } from "@/lib/id-generator";
 import { getNextRegistrationNumber } from "../sequence";
 import {
   OutpatientEncounter,
@@ -962,7 +962,7 @@ export const EncounterRepository = {
 
       // Update Patient Last Visit Metadata
       const primaryDiag = enc.diagnoses?.find((d) => d.type === "primary");
-      const visitDatePart = (enc.visitDate || now).split("T")[0];
+      const visitDatePart = getLocalDateString(enc.visitDate || now);
       await tx
         .update(patients)
         .set({
@@ -972,7 +972,7 @@ export const EncounterRepository = {
           lastVisitDiagnosis: primaryDiag
             ? `${primaryDiag.patientFriendlyName} (${primaryDiag.code})`
             : undefined,
-          totalVisitsCount: sql`total_visits_count + 1`,
+          totalVisitsCount: sql`(SELECT COUNT(*)::int FROM encounters WHERE encounters.patient_id = ${patientId})`,
           updatedAt: now,
         })
         .where(eq(patients.id, patientId));

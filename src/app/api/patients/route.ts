@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PatientRepository } from "@/lib/db/repositories/patient-repo";
 import { PatientProfile } from "@/lib/satusehat/types";
+import { validatePhone } from "@/lib/satusehat/validation";
 
 import { applyRateLimit } from "@/lib/middleware/rate-limiter";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
   const rateLimitResponse = applyRateLimit(req);
@@ -96,6 +99,34 @@ export async function POST(req: NextRequest) {
             error: `Nomor Rekam Medis (RM) ${body.mrn} sudah digunakan oleh pasien ${existingMrn.name}.`,
           },
           { status: 409 }
+        );
+      }
+    }
+
+    // Validasi format nomor telepon pasien
+    if (body.phone && body.phone.trim()) {
+      const phoneCheck = validatePhone(body.phone);
+      if (!phoneCheck.isValid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: phoneCheck.message,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
+    // Validasi format nomor telepon kontak darurat jika diisi
+    if (body.emergencyContact?.phone && body.emergencyContact.phone.trim()) {
+      const emPhoneCheck = validatePhone(body.emergencyContact.phone);
+      if (!emPhoneCheck.isValid) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Kontak Darurat: ${emPhoneCheck.message}`,
+          },
+          { status: 400 }
         );
       }
     }

@@ -41,6 +41,7 @@ import {
   ResourceSyncItem,
 } from "@/lib/satusehat/types";
 import { toast } from "sonner";
+import { calculatePatientAge } from "@/lib/utils";
 
 interface SatusehatFhirDetailModalProps {
   isOpen: boolean;
@@ -459,7 +460,7 @@ export function SatusehatFhirDetailModal({
                 )}
               </DialogTitle>
               <p className="text-xs text-slate-500">
-                Rincian transmisi 9 Kategori Rekam Medis Standar Kemenkes RI ({totalResourcesCount} Resource FHIR)
+                Monitoring integrasi data klinis SATUSEHAT Kemenkes RI ({totalCategoriesCount} Domain Klinis • {syncedResourcesCount}/{totalResourcesCount} Resource Terkirim)
               </p>
             </div>
           </div>
@@ -485,7 +486,7 @@ export function SatusehatFhirDetailModal({
                     )}
                     {patient?.birthDate && (
                       <span className="text-[11px] text-slate-500 font-medium shrink-0">
-                        {new Date().getFullYear() - new Date(patient.birthDate).getFullYear()} thn
+                        {calculatePatientAge(patient.birthDate)} thn
                       </span>
                     )}
                   </div>
@@ -690,7 +691,7 @@ export function SatusehatFhirDetailModal({
                 </span>
               </div>
               <p className="text-[11px] text-amber-800 leading-relaxed pl-6">
-                Data klinis terstruktur kunjungan ini telah siap dikirimkan. Paket transmisi mencakup <strong>9 Kategori Standar</strong> ({totalResourcesCount} resource FHIR individual) yang akan diproses saat DPJP menekan tombol <strong>Simpan &amp; Kirim ke SATUSEHAT</strong>.
+                Data klinis terstruktur kunjungan ini telah siap dikirimkan. Paket transmisi mencakup <strong>{totalCategoriesCount} Domain Klinis</strong> ({totalResourcesCount} resource FHIR individual) yang akan diproses saat DPJP menekan tombol <strong>Simpan &amp; Kirim ke SATUSEHAT</strong>.
               </p>
             </div>
           )}
@@ -700,7 +701,7 @@ export function SatusehatFhirDetailModal({
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                 <FileCode className="h-4 w-4 text-teal-600" />
-                <span>Rincian 9 Kategori Interoperabilitas Standar Kemenkes RI</span>
+                <span>Rincian {totalCategoriesCount} Domain Interoperabilitas Standar Kemenkes RI</span>
               </span>
               <span
                 className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border transition-colors duration-200 ${

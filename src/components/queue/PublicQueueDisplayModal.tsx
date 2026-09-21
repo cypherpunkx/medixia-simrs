@@ -56,7 +56,9 @@ interface PublicQueueDisplayModalProps {
 }
 
 interface DepartmentConfig {
+  id?: string;
   code: string;
+  deptCode?: string;
   department: string;
   room: string;
   defaultDoctor: string;
@@ -64,42 +66,73 @@ interface DepartmentConfig {
 
 const DEPARTMENTS: DepartmentConfig[] = [
   {
+    id: "dept-rs-01",
     code: "A",
+    deptCode: "INT",
     department: "Poli Penyakit Dalam",
     room: "Ruang 204 (Lt. 2)",
     defaultDoctor: "dr. Rian Pratama, Sp.PD",
   },
   {
+    id: "dept-rs-02",
     code: "B",
+    deptCode: "UMU",
     department: "Poli Umum",
     room: "Ruang 102 (Lt. 1)",
     defaultDoctor: "dr. Amanda Putri, M.Biomed",
   },
   {
+    id: "dept-rs-03",
     code: "C",
+    deptCode: "ANA",
     department: "Poli Anak (Pediatri)",
     room: "Ruang 105 (Lt. 1)",
     defaultDoctor: "dr. Maya Anggraini, Sp.A",
   },
   {
+    id: "dept-rs-04",
     code: "D",
+    deptCode: "GIG",
     department: "Poli Gigi & Mulut",
     room: "Ruang 201 (Lt. 2)",
     defaultDoctor: "drg. Kevin Tanuwidjaja",
   },
   {
+    id: "dept-rs-05",
     code: "E",
+    deptCode: "JAN",
     department: "Poli Jantung & Pembuluh Darah",
     room: "Ruang 208 (Lt. 2)",
     defaultDoctor: "dr. Rian Hidayat, Sp.JP",
   },
   {
+    id: "dept-rs-06",
     code: "F",
+    deptCode: "MAT",
     department: "Poli Mata",
     room: "Ruang 210 (Lt. 2)",
     defaultDoctor: "dr. Nadia Putri, Sp.M",
   },
 ];
+
+export function matchesDepartment(itemDept?: string, targetDept?: string): boolean {
+  if (!itemDept || !targetDept) return false;
+  const a = itemDept.toLowerCase().trim();
+  const b = targetDept.toLowerCase().trim();
+  if (a === b) return true;
+  const cleanA = a.replace(/\s*\([^)]*\).*/g, "").trim();
+  const cleanB = b.replace(/\s*\([^)]*\).*/g, "").trim();
+  if (cleanA === cleanB) return true;
+  if (cleanA && cleanB && (cleanA.includes(cleanB) || cleanB.includes(cleanA))) return true;
+  return false;
+}
+
+export function isQueueItemForDept(item: ClinicQueuePatientItem, dept: DepartmentConfig): boolean {
+  if (item.departmentId && dept.id && item.departmentId === dept.id) {
+    return true;
+  }
+  return matchesDepartment(item.department, dept.department);
+}
 
 export function PublicQueueDisplayModal({
   isOpen,
@@ -113,9 +146,11 @@ export function PublicQueueDisplayModal({
 
   const activeDepartmentsList: DepartmentConfig[] = React.useMemo(() => {
     if (authDepartments && authDepartments.length > 0) {
-      const codeLetters = ["A", "B", "C", "D", "E", "F", "G", "H"];
+      const fallbackLetters = ["A", "B", "C", "D", "E", "F", "G", "H"];
       return authDepartments.map((d, idx) => ({
-        code: codeLetters[idx % codeLetters.length],
+        id: d.id,
+        code: d.queuePrefix || fallbackLetters[idx % fallbackLetters.length],
+        deptCode: d.code || d.name.substring(0, 3).toUpperCase(),
         department: d.name,
         room: d.room || `Ruang ${idx + 1}`,
         defaultDoctor: d.defaultDoctorName || "dr. Dokter DPJP",
@@ -272,8 +307,8 @@ export function PublicQueueDisplayModal({
   };
 
   const handleCallClinicPatient = (dept: DepartmentConfig) => {
-    const deptWorklist = facilityScopedLiveWorklist.filter(
-      (w) => w.department === dept.department
+    const deptWorklist = facilityScopedLiveWorklist.filter((w) =>
+      isQueueItemForDept(w, dept)
     );
 
     const inProgress = deptWorklist.find((w) => w.status === "in-progress");
@@ -304,8 +339,8 @@ export function PublicQueueDisplayModal({
   };
 
   const handleAdvanceClinicQueue = (dept: DepartmentConfig) => {
-    const deptWorklist = facilityScopedLiveWorklist.filter(
-      (w) => w.department === dept.department
+    const deptWorklist = facilityScopedLiveWorklist.filter((w) =>
+      isQueueItemForDept(w, dept)
     );
 
     const inProgress = deptWorklist.find((w) => w.status === "in-progress");
@@ -348,14 +383,12 @@ export function PublicQueueDisplayModal({
     }
   };
 
-  const allowedDeptNames = React.useMemo(() => {
-    return activeDepartmentsList.map((d) => d.department);
-  }, [activeDepartmentsList]);
-
   const facilityScopedLiveWorklist = React.useMemo(() => {
-    if (allowedDeptNames.length === 0) return liveWorklist;
-    return liveWorklist.filter((w) => allowedDeptNames.includes(w.department));
-  }, [liveWorklist, allowedDeptNames]);
+    if (activeDepartmentsList.length === 0) return liveWorklist;
+    return liveWorklist.filter((w) =>
+      activeDepartmentsList.some((dept) => isQueueItemForDept(w, dept))
+    );
+  }, [liveWorklist, activeDepartmentsList]);
 
   const totalHariIni = facilityScopedLiveWorklist.length;
   const sedangDiperiksa = facilityScopedLiveWorklist.filter((w) => w.status === "in-progress").length;
@@ -634,8 +667,8 @@ export function PublicQueueDisplayModal({
           {/* Grid of Clinic Queue Boxes */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {activeDepartmentsList.map((dept) => {
-              const deptWorklist = facilityScopedLiveWorklist.filter(
-                (w) => w.department === dept.department
+              const deptWorklist = facilityScopedLiveWorklist.filter((w) =>
+                isQueueItemForDept(w, dept)
               );
 
               const inProgress = deptWorklist.find((w) => w.status === "in-progress");
@@ -669,7 +702,7 @@ export function PublicQueueDisplayModal({
 
               return (
                 <div
-                  key={dept.code}
+                  key={dept.id || dept.code}
                   className={`p-3 rounded-xl border card-interactive transition-all duration-200 ${
                     inProgress
                       ? "bg-slate-800 border-teal-400 shadow-md ring-1 ring-teal-500/50"
@@ -681,11 +714,16 @@ export function PublicQueueDisplayModal({
                   {/* Poli Header */}
                   <div className="flex items-start justify-between border-b border-slate-700/60 pb-1.5 mb-2">
                     <div>
-                      <h3 className="font-bold text-xs text-white truncate max-w-[170px]">
-                        {dept.department}
-                      </h3>
-                      <p className="text-[9px] text-teal-400 font-mono">
-                        {dept.room}
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-black bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                          {dept.deptCode || dept.code}
+                        </span>
+                        <h3 className="font-bold text-xs text-white truncate max-w-[150px]">
+                          {dept.department}
+                        </h3>
+                      </div>
+                      <p className="text-[9px] text-teal-400 font-mono mt-0.5">
+                        {dept.room} • Prefix: <strong>{dept.code}</strong>
                       </p>
                     </div>
                     <Badge

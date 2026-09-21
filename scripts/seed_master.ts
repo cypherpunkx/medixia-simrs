@@ -92,15 +92,17 @@ async function seedMasterData() {
     // ------------------------------------------------------------------------
     console.log("🏥 Menyinkronkan Master Poliklinik & Ruang Pelayanan (Departments)...");
     await sql`
-      INSERT INTO departments (id, facility_id, name, room, quota, default_doctor_name, is_active)
+      INSERT INTO departments (id, facility_id, code, queue_prefix, name, room, quota, default_doctor_name, is_active)
       VALUES
-        ('dept-rs-01', 'fac-rsud-01', 'Poli Penyakit Dalam', 'Ruang 204 (Lt. 2)', 35, 'dr. Rian Pratama, Sp.PD', true),
-        ('dept-rs-02', 'fac-rsud-01', 'Poli Umum', 'Ruang 101 (Lt. 1)', 50, 'dr. Rian Pratama, Sp.PD', true),
-        ('dept-rs-03', 'fac-rsud-01', 'Poli Anak', 'Ruang 208 (Lt. 2)', 30, 'dr. Sarah Amanda, Sp.A', true),
-        ('dept-rs-04', 'fac-rsud-01', 'Poli Gigi & Mulut', 'Ruang 105 (Lt. 1)', 25, 'drg. Hendra Wijaya', true),
-        ('dept-rs-05', 'fac-rsud-01', 'Poli Jantung & Pembuluh Darah', 'Ruang 301 (Lt. 3)', 20, 'dr. Maya Kartika, Sp.JP', true),
-        ('dept-rs-06', 'fac-rsud-01', 'Poli Mata', 'Ruang 107 (Lt. 1)', 25, 'dr. Budi Setiawan, Sp.M', true)
+        ('dept-rs-01', 'fac-rsud-01', 'INT', 'A', 'Poli Penyakit Dalam', 'Ruang 204 (Lt. 2)', 35, 'dr. Rian Pratama, Sp.PD', true),
+        ('dept-rs-02', 'fac-rsud-01', 'UMU', 'B', 'Poli Umum', 'Ruang 101 (Lt. 1)', 50, 'dr. Rian Pratama, Sp.PD', true),
+        ('dept-rs-03', 'fac-rsud-01', 'ANA', 'C', 'Poli Anak', 'Ruang 208 (Lt. 2)', 30, 'dr. Sarah Amanda, Sp.A', true),
+        ('dept-rs-04', 'fac-rsud-01', 'GIG', 'D', 'Poli Gigi & Mulut', 'Ruang 105 (Lt. 1)', 25, 'drg. Hendra Wijaya', true),
+        ('dept-rs-05', 'fac-rsud-01', 'JAN', 'E', 'Poli Jantung & Pembuluh Darah', 'Ruang 301 (Lt. 3)', 20, 'dr. Maya Kartika, Sp.JP', true),
+        ('dept-rs-06', 'fac-rsud-01', 'MAT', 'F', 'Poli Mata', 'Ruang 107 (Lt. 1)', 25, 'dr. Budi Setiawan, Sp.M', true)
       ON CONFLICT (id) DO UPDATE SET
+        code = EXCLUDED.code,
+        queue_prefix = EXCLUDED.queue_prefix,
         name = EXCLUDED.name,
         room = EXCLUDED.room,
         quota = EXCLUDED.quota,

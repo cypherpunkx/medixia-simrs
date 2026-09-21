@@ -405,10 +405,39 @@ export function OutpatientEntryForm({
 
   // -------------------------------------------------------------
   // Production Feature: Draft Auto-Save & Local Recovery (localStorage)
+  // Architecture: Session-bounded, Encounter-scoped, Anti-race-condition
   // -------------------------------------------------------------
   const [savedDraftAvailable, setSavedDraftAvailable] = useState(false);
   const [draftTimestamp, setDraftTimestamp] = useState<string | null>(null);
   const [storedDraft, setStoredDraft] = useState<any | null>(null);
+  const [lastAutoSavedTime, setLastAutoSavedTime] = useState<string | null>(null);
+  
+  // Unique session ID per form lifecycle to strictly distinguish active edits from previous uncommitted sessions
+  const currentSessionIdRef = React.useRef<string>(generatePrefixedId("sess_"));
+  const activeTargetRef = React.useRef<{ patientId?: string; encounterId?: string }>({
+    patientId: patient?.id,
+    encounterId: activeEncounter?.id,
+  });
+
+  // Helper to resolve prioritized storage keys (encounter-first, patient-fallback, legacy-safe)
+  const getDraftKeys = React.useCallback((patId?: string, encId?: string) => {
+    const keys: string[] = [];
+    if (encId) keys.push(`medixia_soap_draft_enc_${encId}`);
+    if (patId) {
+      keys.push(`medixia_soap_draft_pat_${patId}`);
+      keys.push(`medixia_soap_draft_${patId}`); // legacy key fallback
+    }
+    return keys;
+  }, []);
+
+  React.useEffect(() => {
+    currentSessionIdRef.current = generatePrefixedId("sess_");
+    activeTargetRef.current = {
+      patientId: patient?.id,
+      encounterId: activeEncounter?.id,
+    };
+    setLastAutoSavedTime(null);
+  }, [patient?.id, activeEncounter?.id]);
 
   // Dynamic Clinic Options for Dropdown
   const clinicOptions = React.useMemo(() => {
@@ -621,7 +650,7 @@ export function OutpatientEntryForm({
 
   // Check for unsaved draft when patient or encounter changes
   React.useEffect(() => {
-    if (typeof window === "undefined" || !patient?.id) {
+    if (typeof window === "undefined" || (!patient?.id && !activeEncounter?.id)) {
       setSavedDraftAvailable(false);
       setStoredDraft(null);
       return;
@@ -635,11 +664,24 @@ export function OutpatientEntryForm({
     }
 
     try {
-      const draftKey = `medixia_soap_draft_${patient.id}`;
-      const raw = localStorage.getItem(draftKey);
+      const keys = getDraftKeys(patient?.id, activeEncounter?.id);
+      let raw: string | null = null;
+      for (const k of keys) {
+        const item = localStorage.getItem(k);
+        if (item) {
+          raw = item;
+          break;
+        }
+      }
+
       if (raw) {
         const parsed = JSON.parse(raw);
+        // Only trigger recovery notice banner if the draft was created from a PREVIOUS uncommitted session (not the currently active editing session)
+        const isFromPreviousSession =
+          !parsed.sessionId || parsed.sessionId !== currentSessionIdRef.current;
+
         if (
+          isFromPreviousSession &&
           parsed &&
           (parsed.chiefComplaint ||
             parsed.anamnesis ||
@@ -658,13 +700,17 @@ export function OutpatientEntryForm({
     }
     setSavedDraftAvailable(false);
     setStoredDraft(null);
-  }, [patient?.id, activeEncounter?.id, activeEncounter?.encounterStatus]);
+  }, [patient?.id, activeEncounter?.id, activeEncounter?.encounterStatus, getDraftKeys]);
 
-  // Debounced auto-save to localStorage
+  // Debounced auto-save to localStorage with Session ID and Anti-Race-Condition Guard
   React.useEffect(() => {
     if (typeof window === "undefined" || !patient?.id || isReadOnly || isSubmitting) return;
 
-    // Only auto-save if clinical fields have inputs
+    // Snapshot target IDs at the moment of trigger
+    const targetPatientId = patient.id;
+    const targetEncounterId = activeEncounter?.id;
+
+    // Only auto-save if clinical fields have meaningful inputs
     const hasAnyInput = Boolean(
       chiefComplaint.trim() ||
       anamnesis.trim() ||
@@ -680,12 +726,26 @@ export function OutpatientEntryForm({
     if (!hasAnyInput) return;
 
     const timer = setTimeout(() => {
+      // Guard against race conditions when switching active patient or encounter
+      if (
+        activeTargetRef.current.patientId !== targetPatientId ||
+        activeTargetRef.current.encounterId !== targetEncounterId
+      ) {
+        return;
+      }
+
       try {
-        const draftKey = `medixia_soap_draft_${patient.id}`;
+        const primaryKey = targetEncounterId
+          ? `medixia_soap_draft_enc_${targetEncounterId}`
+          : `medixia_soap_draft_pat_${targetPatientId}`;
+
+        const draftTime = new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
         const draftPayload = {
-          patientId: patient.id,
+          sessionId: currentSessionIdRef.current,
+          encounterId: targetEncounterId,
+          patientId: targetPatientId,
           savedAt: new Date().toISOString(),
-          savedAtFormatted: new Date().toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }),
+          savedAtFormatted: draftTime,
           department,
           doctorName,
           doctorSip,
@@ -711,7 +771,8 @@ export function OutpatientEntryForm({
           dischargeDisposition,
           consentStatus,
         };
-        localStorage.setItem(draftKey, JSON.stringify(draftPayload));
+        localStorage.setItem(primaryKey, JSON.stringify(draftPayload));
+        setLastAutoSavedTime(draftTime);
       } catch {
         // ignore localStorage quota errors
       }
@@ -720,6 +781,7 @@ export function OutpatientEntryForm({
     return () => clearTimeout(timer);
   }, [
     patient?.id,
+    activeEncounter?.id,
     isReadOnly,
     isSubmitting,
     department,
@@ -780,8 +842,13 @@ export function OutpatientEntryForm({
   };
 
   const handleDismissDraft = () => {
-    if (typeof window !== "undefined" && patient?.id) {
-      localStorage.removeItem(`medixia_soap_draft_${patient.id}`);
+    if (typeof window !== "undefined") {
+      const keys = getDraftKeys(patient?.id, activeEncounter?.id);
+      for (const k of keys) {
+        try {
+          localStorage.removeItem(k);
+        } catch {}
+      }
     }
     setSavedDraftAvailable(false);
     setStoredDraft(null);
@@ -1005,8 +1072,6 @@ export function OutpatientEntryForm({
   // Expanded Clinical Templates
   const handleLoadPreset = (type: "hipertensi" | "ispa" | "gastritis" | "diabetes") => {
     if (type === "hipertensi") {
-      setDepartment("Poli Penyakit Dalam");
-      handleDoctorChange("dr. Rian Pratama, Sp.PD");
       setChiefComplaint("Sakit kepala tengkuk dan badan pegal sejak 3 hari");
       setAnamnesis("Pasien rutin konsumsi obat antihipertensi, saat ini obat habis 4 hari. Keluhan pusing melayang saat bangun tidur.");
       setPastMedicalHistory("Hipertensi grade 1 sejak 2021. Alergi: Tidak ada.");
@@ -1059,8 +1124,6 @@ export function OutpatientEntryForm({
       ]);
       setFollowUpNotes("Edukasi pembatasan konsumsi garam (< 5 gram/hari), olahraga teratur 150 menit/minggu, dan kontrol tensi ulang 1 bulan kemudian.");
     } else if (type === "ispa") {
-      setDepartment("Poli Umum");
-      handleDoctorChange("dr. Amanda Putri, M.Biomed");
       setChiefComplaint("Batuk pilek, bersin, dan sakit menelan sejak 3 hari");
       setAnamnesis("Demam sumeng hari ke-1 dan 2. Sekret hidung encer bening. Tidak ada sesak napas. Nafsu makan menurun.");
       setPastMedicalHistory("Riwayat asma disangkal. Alergi amoxicillin disangkal.");
@@ -1126,8 +1189,6 @@ export function OutpatientEntryForm({
       ]);
       setFollowUpNotes("Istirahat cukup, perbanyak minum air hangat, gunakan masker, dan kontrol kembali bila demam menetap > 3 hari.");
     } else if (type === "gastritis") {
-      setDepartment("Poli Penyakit Dalam");
-      handleDoctorChange("dr. Rian Pratama, Sp.PD");
       setChiefComplaint("Nyeri ulu hati perih dan mual sejak 2 hari");
       setAnamnesis("Keluhan memberat sesudah makan makanan pedas dan kopi. Terkadang terasa begah dan kembung. BAB warna normal.");
       setPastMedicalHistory("Riwayat maag kronis.");
@@ -1174,8 +1235,6 @@ export function OutpatientEntryForm({
       ]);
       setFollowUpNotes("Hindari makanan pedas, asam, bersantan, dan kopi. Makan dengan porsi kecil tapi sering.");
     } else if (type === "diabetes") {
-      setDepartment("Poli Penyakit Dalam");
-      handleDoctorChange("dr. Rian Pratama, Sp.PD");
       setChiefComplaint("Kontrol rutin gula darah dan lemas badan");
       setAnamnesis("Pasien rutin minum obat DM. Akhir-akhir ini sering haus dan sering buang air kecil di malam hari.");
       setPastMedicalHistory("Diabetes Melitus Tipe 2 sejak 2020.");
@@ -1276,7 +1335,8 @@ export function OutpatientEntryForm({
 
       const data = await res.json();
       if (data.success) {
-        const finalizedEncounter: OutpatientEncounter = {
+        const dbEncounter = data.data?.savedEncounter as OutpatientEncounter | undefined;
+        const finalizedEncounter: OutpatientEncounter = dbEncounter || {
           ...encounterToSave,
           satusehatEncounterId:
             data.data?.satusehatEncounterId ||
@@ -1298,13 +1358,17 @@ export function OutpatientEntryForm({
         }
         // Smooth grace delay so doctor sees final stage completion checkmark
         await new Promise((resolve) => setTimeout(resolve, 350));
-        if (patient?.id && typeof window !== "undefined") {
-          try {
-            localStorage.removeItem(`medixia_soap_draft_${patient.id}`);
-          } catch {}
+        if (typeof window !== "undefined") {
+          const keys = getDraftKeys(patient?.id, activeEncounter?.id);
+          for (const k of keys) {
+            try {
+              localStorage.removeItem(k);
+            } catch {}
+          }
         }
         setSavedDraftAvailable(false);
         setStoredDraft(null);
+        setLastAutoSavedTime(null);
         onEncounterCreated(finalizedEncounter);
       } else {
         toast.error("Gagal menyimpan rekam medis", { description: data.error });
@@ -1929,6 +1993,14 @@ export function OutpatientEntryForm({
               Abaikan
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* Subtle Auto-Save Status Indicator */}
+      {lastAutoSavedTime && !isReadOnly && (
+        <div className="flex items-center justify-end gap-1.5 text-[11px] text-slate-500 font-medium px-1 animate-fade-in">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <span>Tersimpan otomatis di browser pukul {lastAutoSavedTime}</span>
         </div>
       )}
 
@@ -2655,7 +2727,7 @@ export function OutpatientEntryForm({
                 </div>
 
                 {showIcdDropdown && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-52 overflow-y-auto divide-y divide-slate-100">
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl z-50 max-h-52 overflow-y-auto divide-y divide-slate-100">
                     {filteredIcdOptions.map((item) => (
                       <button
                         key={item.code}
@@ -2785,7 +2857,7 @@ export function OutpatientEntryForm({
                 </div>
 
                 {showIcd9Dropdown && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-52 overflow-y-auto divide-y divide-slate-100">
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl z-50 max-h-52 overflow-y-auto divide-y divide-slate-100">
                     {filteredIcd9Options.map((item) => (
                       <button
                         key={item.code}
@@ -2914,7 +2986,7 @@ export function OutpatientEntryForm({
                 </div>
 
                 {showKfaDropdown && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-30 max-h-56 overflow-y-auto divide-y divide-slate-100">
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100">
                     <div className="p-2 bg-slate-50/90 text-[10px] font-bold text-slate-500 border-b border-slate-100 flex items-center justify-between">
                       <span>DAFTAR OBAT KAMUS FARMASI (KFA)</span>
                       <span>{filteredKfaOptions.length} Obat Tersedia</span>

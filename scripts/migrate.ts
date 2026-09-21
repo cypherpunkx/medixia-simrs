@@ -39,6 +39,8 @@ export async function runMigrations(): Promise<void> {
       CREATE TABLE IF NOT EXISTS departments (
         id TEXT PRIMARY KEY,
         facility_id TEXT NOT NULL REFERENCES facilities(id) ON DELETE CASCADE,
+        code TEXT NOT NULL DEFAULT '',
+        queue_prefix TEXT NOT NULL DEFAULT 'A',
         name TEXT NOT NULL,
         room TEXT NOT NULL,
         quota INTEGER NOT NULL DEFAULT 30,
@@ -255,6 +257,7 @@ export async function runMigrations(): Promise<void> {
         satusehat_status TEXT NOT NULL DEFAULT 'synced',
         satusehat_consent TEXT DEFAULT 'opt-in',
         triage_priority TEXT DEFAULT 'regular',
+        payment_payer TEXT,
         called_at TEXT,
         call_count INTEGER DEFAULT 0,
         queue_date TEXT NOT NULL
@@ -343,6 +346,9 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE encounters ADD COLUMN IF NOT EXISTS locked_by TEXT;
       ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS registration_number TEXT;
       ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS triage_priority TEXT DEFAULT 'regular';
+      ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS payment_payer TEXT;
+      ALTER TABLE departments ADD COLUMN IF NOT EXISTS code TEXT DEFAULT '';
+      ALTER TABLE departments ADD COLUMN IF NOT EXISTS queue_prefix TEXT DEFAULT 'A';
 
       -- Granular SATUSEHAT ID
       ALTER TABLE vitals ADD COLUMN IF NOT EXISTS satusehat_bp_id TEXT;

@@ -7,19 +7,19 @@ import { db } from "./index";
  * untuk lingkungan konkurensi tinggi (misal: pendaftaran serentak di multi-loket admisi).
  */
 
+import { getLocalCompactDate } from "@/lib/id-generator";
+
 /**
- * Mendapatkan Nomor Registrasi Rawat Jalan / Inap / IGD berikutnya secara atomik langsung dari PostgreSQL.
- * Format standar Kemenkes & SIMRS: [PREFIX]-[YYYYMMDD]-[0001...] (contoh: RJ-20260921-0042)
- *
- * @param date Tanggal pelayanan (default: hari ini)
+ * Mendapatkan Nomor Registrasi Layanan (No. Rawat / Registration Number) berikutnya secara atomik.
+ * Format standar Rumah Sakit Indonesia: "[Tipe]-YYYYMMDD-XXXX" (contoh: "RJ-20260922-0001")
+ * @param date Tanggal registrasi
  * @param prefix Tipe layanan: "RJ" (Rawat Jalan), "RI" (Rawat Inap), "IGD" (Gawat Darurat)
  */
 export async function getNextRegistrationNumber(
   date: Date | string = new Date(),
   prefix: "RJ" | "RI" | "IGD" = "RJ"
 ): Promise<string> {
-  const d = typeof date === "string" ? new Date(date) : date;
-  const yyyymmdd = d.toISOString().split("T")[0].replace(/-/g, "");
+  const yyyymmdd = getLocalCompactDate(date);
 
   try {
     // 1. Eksekusi nextval sequence atomic PostgreSQL

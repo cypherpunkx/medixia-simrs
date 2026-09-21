@@ -143,7 +143,7 @@ export function generateFhirEncounter(
     identifier: [
       {
         system: `http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}`,
-        value: encounterId,
+        value: encounter.registrationNumber || encounterId,
       },
     ],
     status: encStatus,
