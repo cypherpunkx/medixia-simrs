@@ -172,6 +172,13 @@ export interface PatientProfile {
   lastVisitDiagnosis?: string; // e.g. "Hipertensi Primer (I10)"
   totalVisitsCount?: number; // Total riwayat kunjungan pasien
   satusehatConsent?: "opt-in" | "opt-out"; // Persetujuan Berbagi Data SATUSEHAT (Informed Consent UU PDP)
+  patientStatus?: "outpatient" | "inpatient" | "deceased"; // Status admisi & kondisi klinis aktif pasien
+  inpatientDetails?: {
+    room: string;
+    bed: string;
+    admissionDate: string;
+    dpjp: string;
+  };
 }
 
 export interface DiagnosticOrder {
@@ -378,6 +385,8 @@ export interface ClinicQueuePatientItem {
   satusehatConsent?: "opt-in" | "opt-out";
   triagePriority?: "regular" | "urgent" | "geriatric" | "pediatric";
   paymentPayer?: string;
+  isSequentialMultiClinic?: boolean; // Pendaftaran konsul antar-poli berurutan di hari yang sama
+  pausedReason?: string; // Alasan penundaan pemeriksaan (misal: "Menunggu Hasil Lab/Radiologi")
 }
 
 // ==========================================

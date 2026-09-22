@@ -585,10 +585,16 @@ export default function HomePage() {
     setWorklist((prev) =>
       prev.map((item) => {
         if (item.id === itemId) {
-          return { ...item, status: nextStatus };
+          return { ...item, status: nextStatus, pausedReason: undefined };
         }
         if (previousActiveInSameDept && item.id === previousActiveInSameDept.id) {
-          return { ...item, status: "finished" };
+          // KESELAMATAN KLINIS: Pasien aktif sebelumnya TIDAK BOLEH difinish tanpa diagnosa/SOAP.
+          // Kembalikan ke antrean menunggu dengan catatan ditunda sementara.
+          return {
+            ...item,
+            status: "arrived",
+            pausedReason: "Pemeriksaan ditunda sementara (ruang periksa dialihkan)",
+          };
         }
         return item;
       })
@@ -619,7 +625,7 @@ export default function HomePage() {
             (previousActiveInSameDept.encounterId && e.id === previousActiveInSameDept.encounterId) ||
             (previousActiveInSameDept.id && (e.id === previousActiveInSameDept.id || e.id === previousActiveInSameDept.encounterId));
           if (isPrevMatch) {
-            return { ...e, encounterStatus: "finished" };
+            return { ...e, encounterStatus: "arrived" };
           }
           return e;
         })
@@ -644,9 +650,12 @@ export default function HomePage() {
       fetch(`/api/queue/${previousActiveInSameDept.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "finished" }),
+        body: JSON.stringify({
+          status: "arrived",
+          pausedReason: "Pemeriksaan ditunda sementara",
+        }),
       }).catch((err) => {
-        console.error("Gagal auto-finish previous patient di DB:", err);
+        console.error("Gagal menunda previous patient di DB:", err);
       });
     }
 
@@ -783,7 +792,18 @@ export default function HomePage() {
               (w.patient.id === selectedPat.id || w.patient.mrn === selectedPat.mrn) &&
               (w.status === "in-progress" || w.status === "arrived")
           ) ||
-          // 2. Department match if filtered
+          // 2. Currently active encounter if already selected for this patient
+          (selectedEncounter && selectedEncounter.patientId === selectedPat.id
+            ? worklist.find(
+                (w) =>
+                  (w.patient.id === selectedPat.id || w.patient.mrn === selectedPat.mrn) &&
+                  (w.id === selectedEncounter.id ||
+                    (w.queueNumber && w.queueNumber === selectedEncounter.queueNumber) ||
+                    (w.registrationNumber && w.registrationNumber === selectedEncounter.registrationNumber) ||
+                    (w.encounterId && w.encounterId === selectedEncounter.id))
+              )
+            : null) ||
+          // 3. Department match if filtered
           (activeDepartment && activeDepartment !== "Semua Poli"
             ? worklist.find(
                 (w) =>
@@ -791,7 +811,7 @@ export default function HomePage() {
                   w.department === activeDepartment
               )
             : null) ||
-          // 3. Fallback: most recent queue item for this patient
+          // 4. Fallback: most recent queue item for this patient
           [...worklist]
             .reverse()
             .find((w) => w.patient.id === selectedPat.id || w.patient.mrn === selectedPat.mrn);
@@ -1268,6 +1288,7 @@ export default function HomePage() {
         onSelectPatient={(p, mod, queueItem, dept) =>
           handleSelectPatient(p, mod || "entry", undefined, queueItem, dept)
         }
+        onUpdateQueueStatus={handleUpdateQueueStatus}
         onOpenRegistration={() => handleModuleChange("registration")}
         isDbSyncing={isDbSyncing}
         isBridgingActive={isBridgingActive}

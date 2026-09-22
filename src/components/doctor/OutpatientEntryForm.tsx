@@ -31,6 +31,7 @@ import {
   RotateCcw,
   Save,
   Star,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -3508,12 +3509,17 @@ export function OutpatientEntryForm({
               disabled={isSubmitting}
               className="h-9 px-4 text-xs font-bold gap-1.5 shadow-sm cursor-pointer bg-amber-600 hover:bg-amber-700 text-white"
             >
-              <Save className="h-3.5 w-3.5" />
-              <span>
-                {isSubmitting
-                  ? "Menyimpan Perubahan..."
-                  : "Simpan Perubahan (Ctrl+↵)"}
-              </span>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Menyimpan Perubahan...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="h-3.5 w-3.5" />
+                  <span>Simpan Perubahan (Ctrl+↵)</span>
+                </>
+              )}
             </Button>
           ) : (
             <Button
@@ -3528,23 +3534,24 @@ export function OutpatientEntryForm({
                   : "bg-teal-700 hover:bg-teal-800 text-white"
               }`}
             >
-              {consentStatus === "opt-out" ? (
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>
+                    {consentStatus === "opt-out"
+                      ? "Menyimpan Internal..."
+                      : "Menyimpan Resume Medis..."}
+                  </span>
+                </>
+              ) : consentStatus === "opt-out" ? (
                 <>
                   <Lock className="h-3.5 w-3.5" />
-                  <span>
-                    {isSubmitting
-                      ? "Menyimpan..."
-                      : "Simpan Rekam Medis (Ctrl+↵)"}
-                  </span>
+                  <span>Simpan Rekam Medis (Ctrl+↵)</span>
                 </>
               ) : (
                 <>
                   <Send className="h-3.5 w-3.5" />
-                  <span>
-                    {isSubmitting
-                      ? "Menyimpan Resume Medis..."
-                      : "Simpan Resume Medis (Ctrl+↵)"}
-                  </span>
+                  <span>Simpan Resume Medis (Ctrl+↵)</span>
                 </>
               )}
             </Button>
@@ -3554,16 +3561,16 @@ export function OutpatientEntryForm({
           {(!user || user.role === "doctor") && !isReadOnly && activeSoapTab !== "P" && isTabSComplete && isTabOComplete && isTabAComplete && (
             <Button
               type="button"
-              variant="outline"
+              variant="medical"
               size="sm"
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className={`h-9 px-3 text-xs font-bold gap-1 cursor-pointer ${
+              className={`h-9 px-3.5 text-xs font-bold gap-1.5 cursor-pointer shadow-sm ${
                 isCorrectionMode
-                  ? "text-amber-900 bg-amber-50 border-amber-300 hover:bg-amber-100"
+                  ? "bg-amber-600 hover:bg-amber-700 text-white"
                   : consentStatus === "opt-out"
-                  ? "text-amber-900 bg-amber-50 border-amber-300 hover:bg-amber-100"
-                  : "text-teal-800 bg-teal-50 border-teal-300 hover:bg-teal-100"
+                  ? "bg-slate-800 hover:bg-slate-900 text-amber-200 border border-slate-700"
+                  : "bg-teal-700 hover:bg-teal-800 text-white"
               }`}
               title={
                 isCorrectionMode
@@ -3571,20 +3578,33 @@ export function OutpatientEntryForm({
                   : "Kelengkapan SOAP terpenuhi. Simpan rekam medis."
               }
             >
-              {isCorrectionMode ? (
-                <Save className="h-3.5 w-3.5 text-amber-600" />
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="hidden sm:inline">
+                    {isCorrectionMode
+                      ? "Menyimpan Perubahan..."
+                      : consentStatus === "opt-out"
+                      ? "Menyimpan Internal..."
+                      : "Menyimpan Resume Medis..."}
+                  </span>
+                </>
+              ) : isCorrectionMode ? (
+                <>
+                  <Save className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Simpan Pembaruan</span>
+                </>
               ) : consentStatus === "opt-out" ? (
-                <Lock className="h-3.5 w-3.5 text-amber-600" />
+                <>
+                  <Lock className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Simpan Internal</span>
+                </>
               ) : (
-                <CheckCircle2 className="h-3.5 w-3.5 text-teal-600" />
+                <>
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Langsung Simpan</span>
+                </>
               )}
-              <span className="hidden sm:inline">
-                {isCorrectionMode
-                  ? "Simpan Pembaruan"
-                  : consentStatus === "opt-out"
-                  ? "Simpan Internal"
-                  : "Langsung Simpan"}
-              </span>
             </Button>
           )}
         </div>

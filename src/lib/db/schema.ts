@@ -89,6 +89,8 @@ export const patients = pgTable(
     lastVisitDoctor: text("last_visit_doctor"),
     lastVisitDiagnosis: text("last_visit_diagnosis"),
     totalVisitsCount: integer("total_visits_count").default(0),
+    patientStatus: text("patient_status").default("outpatient"), // "outpatient" | "inpatient" | "deceased"
+    inpatientDetails: text("inpatient_details"), // JSON string { room, bed, admissionDate, dpjp }
     satusehatConsent: text("satusehat_consent").default("opt-in"), // "opt-in" | "opt-out"
     createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
     updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
@@ -358,6 +360,8 @@ export const queueItems = pgTable(
     calledAt: text("called_at"),
     callCount: integer("call_count").default(0),
     queueDate: text("queue_date").notNull(), // YYYY-MM-DD
+    isSequentialMultiClinic: boolean("is_sequential_multi_clinic").default(false),
+    pausedReason: text("paused_reason"),
   },
   (table) => [
     index("idx_queue_items_queue_date").on(table.queueDate),

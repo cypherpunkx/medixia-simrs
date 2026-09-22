@@ -83,6 +83,8 @@ export async function runMigrations(): Promise<void> {
         last_visit_doctor TEXT,
         last_visit_diagnosis TEXT,
         total_visits_count INTEGER DEFAULT 1,
+        patient_status TEXT DEFAULT 'outpatient',
+        inpatient_details TEXT,
         satusehat_consent TEXT DEFAULT 'opt-in',
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -260,7 +262,9 @@ export async function runMigrations(): Promise<void> {
         payment_payer TEXT,
         called_at TEXT,
         call_count INTEGER DEFAULT 0,
-        queue_date TEXT NOT NULL
+        queue_date TEXT NOT NULL,
+        is_sequential_multi_clinic BOOLEAN DEFAULT false,
+        paused_reason TEXT
       );
 
       CREATE TABLE IF NOT EXISTS satusehat_sync_logs (
@@ -346,7 +350,11 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE encounters ADD COLUMN IF NOT EXISTS locked_by TEXT;
       ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS registration_number TEXT;
       ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS triage_priority TEXT DEFAULT 'regular';
-      ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS payment_payer TEXT;
+       ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS payment_payer TEXT;
+      ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS is_sequential_multi_clinic BOOLEAN DEFAULT false;
+      ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS paused_reason TEXT;
+      ALTER TABLE patients ADD COLUMN IF NOT EXISTS patient_status TEXT DEFAULT 'outpatient';
+      ALTER TABLE patients ADD COLUMN IF NOT EXISTS inpatient_details TEXT;
       ALTER TABLE departments ADD COLUMN IF NOT EXISTS code TEXT DEFAULT '';
       ALTER TABLE departments ADD COLUMN IF NOT EXISTS queue_prefix TEXT DEFAULT 'A';
 

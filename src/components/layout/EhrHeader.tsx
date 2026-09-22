@@ -48,6 +48,11 @@ interface EhrHeaderProps {
     targetQueueItemOrNumber?: ClinicQueuePatientItem | string,
     targetDepartment?: string
   ) => void;
+  onUpdateQueueStatus?: (
+    itemId: string,
+    nextStatus: "arrived" | "in-progress" | "finished",
+    silent?: boolean
+  ) => void;
   onOpenRegistration?: () => void;
   isDbSyncing?: boolean;
   isBridgingActive?: boolean;
@@ -93,6 +98,7 @@ export function EhrHeader({
   doctorName,
   worklist = [],
   onSelectPatient,
+  onUpdateQueueStatus,
   onOpenRegistration,
   isDbSyncing = false,
   isBridgingActive = false,
@@ -113,6 +119,9 @@ export function EhrHeader({
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
 
   // Clinical Notifications State (Derived dynamically from live worklist)
+  const [readNotifIds, setReadNotifIds] = useState<Set<string>>(
+    () => new Set(["notif-satusehat-gateway"]),
+  );
   const [notifications, setNotifications] = useState<
     Array<{
       id: string;
@@ -121,6 +130,9 @@ export function EhrHeader({
       desc: string;
       time: string;
       read: boolean;
+      patient?: PatientProfile;
+      queueItem?: ClinicQueuePatientItem;
+      targetModule?: EhrModule;
     }>
   >([]);
 
@@ -139,6 +151,9 @@ export function EhrHeader({
       desc: string;
       time: string;
       read: boolean;
+      patient?: PatientProfile;
+      queueItem?: ClinicQueuePatientItem;
+      targetModule?: EhrModule;
     }> = [];
 
     // 1. Geriatric / High-priority patients
@@ -148,26 +163,34 @@ export function EhrHeader({
     );
     geriatric.forEach((g, idx) => {
       const age = getAge(g.patient.birthDate);
+      const notifId = `notif-geriatric-${g.id || idx}`;
       list.push({
-        id: `notif-geriatric-${g.id || idx}`,
+        id: notifId,
         type: "queue",
         title: "Pasien Prioritas Geriatri",
         desc: `${g.patient.name} (${age > 0 ? `${age} thn, ` : ""}No: ${g.queueNumber}) terdaftar di ${g.department}.`,
         time: "Prioritas",
-        read: false,
+        read: readNotifIds.has(notifId),
+        patient: g.patient,
+        queueItem: g,
+        targetModule: g.status === "finished" ? "resume" : "entry",
       });
     });
 
     // 2. In-progress / consultation patients
     const inProgress = worklist.filter((w) => w.status === "in-progress");
     inProgress.forEach((c, idx) => {
+      const notifId = `notif-consult-${c.id || idx}`;
       list.push({
-        id: `notif-consult-${c.id || idx}`,
+        id: notifId,
         type: "queue",
         title: "Konsultasi Sedang Berlangsung",
-        desc: `${c.patient.name} sedang dalam pemeriksaan DPJP di ${c.department}.`,
-        time: "Sedang Berlangsung",
-        read: false,
+        desc: `${c.patient.name} (${c.queueNumber}) sedang dalam pemeriksaan DPJP di ${c.department}.`,
+        time: "Diperiksa",
+        read: readNotifIds.has(notifId),
+        patient: c.patient,
+        queueItem: c,
+        targetModule: "entry",
       });
     });
 
@@ -175,20 +198,25 @@ export function EhrHeader({
     const arrived = worklist.filter(
       (w) => w.status === "arrived" && getAge(w.patient.birthDate) < 60,
     );
-    arrived.slice(0, 3).forEach((w, idx) => {
+    arrived.slice(0, 5).forEach((w, idx) => {
+      const notifId = `notif-waiting-${w.id || idx}`;
       list.push({
-        id: `notif-waiting-${w.id || idx}`,
+        id: notifId,
         type: "queue",
         title: `Antrean ${w.queueNumber} Tiba`,
         desc: `${w.patient.name} di ${w.department} (${w.chiefComplaint || "Pemeriksaan Poli"}).`,
         time: "Menunggu",
-        read: false,
+        read: readNotifIds.has(notifId),
+        patient: w.patient,
+        queueItem: w,
+        targetModule: "entry",
       });
     });
 
     // 4. SATUSEHAT Gateway status
+    const gatewayId = "notif-satusehat-gateway";
     list.push({
-      id: "notif-satusehat-gateway",
+      id: gatewayId,
       type: "sync",
       title: isBridgingActive
         ? "Gateway SATUSEHAT Kemenkes RI"
@@ -197,11 +225,11 @@ export function EhrHeader({
         ? `Layanan interoperabilitas FHIR R4 terhubung aktif pada server ${currentEnv.toUpperCase()} Kemenkes RI.`
         : `Sistem beroperasi dalam mode penyimpanan basis data internal RS. Kredensial SATUSEHAT belum dihubungkan.`,
       time: isBridgingActive ? "Live Online" : "Internal (Offline)",
-      read: true,
+      read: readNotifIds.has(gatewayId),
     });
 
     setNotifications(list);
-  }, [worklist, currentEnv, isBridgingActive]);
+  }, [worklist, currentEnv, isBridgingActive, readNotifIds]);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -272,6 +300,8 @@ export function EhrHeader({
       item.patient.name.toLowerCase().includes(q) ||
       item.patient.mrn.toLowerCase().includes(q) ||
       item.patient.nik.includes(q) ||
+      (item.registrationNumber &&
+        item.registrationNumber.toLowerCase().includes(q)) ||
       item.queueNumber.toLowerCase().includes(q) ||
       item.department.toLowerCase().includes(q) ||
       item.chiefComplaint.toLowerCase().includes(q)
@@ -311,8 +341,63 @@ export function EhrHeader({
   };
 
   const handleMarkAllRead = () => {
+    setReadNotifIds((prev) => {
+      const next = new Set(prev);
+      notifications.forEach((n) => next.add(n.id));
+      return next;
+    });
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
     toast.success("Semua notifikasi telah ditandai dibaca");
+  };
+
+  const handleNotificationClick = (notif: (typeof notifications)[0]) => {
+    // 1. Tandai notifikasi spesifik ini telah dibaca
+    setReadNotifIds((prev) => {
+      const next = new Set(prev);
+      next.add(notif.id);
+      return next;
+    });
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notif.id ? { ...n, read: true } : n)),
+    );
+
+    // 2. Jika notifikasi terikat dengan antrean klinis
+    if (notif.patient && notif.queueItem) {
+      // OPSI 1: Jika status antrean masih "arrived", langsung mulai periksa (in-progress) & buka SOAP
+      if (notif.queueItem.status === "arrived" && onUpdateQueueStatus) {
+        onUpdateQueueStatus(notif.queueItem.id, "in-progress");
+        setIsNotifOpen(false);
+        return;
+      }
+
+      // Jika antrean sudah in-progress atau finished, navigasikan langsung ke modul yang sesuai
+      if (onSelectPatient) {
+        onSelectPatient(
+          notif.patient,
+          notif.targetModule ||
+            (notif.queueItem.status === "finished" ? "resume" : "entry"),
+          notif.queueItem,
+          notif.queueItem.department,
+        );
+        toast.info(`Membuka berkas pasien: ${notif.patient.name}`, {
+          description: `Antrean ${notif.queueItem.queueNumber} (${notif.queueItem.department})`,
+        });
+        setIsNotifOpen(false);
+        return;
+      }
+    } else if (notif.patient && onSelectPatient) {
+      onSelectPatient(notif.patient, notif.targetModule || "entry");
+      setIsNotifOpen(false);
+      return;
+    }
+
+    // 3. Jika berupa notifikasi status gateway SATUSEHAT
+    if (notif.type === "sync") {
+      toast.info(notif.title, {
+        description: notif.desc,
+      });
+      setIsNotifOpen(false);
+    }
   };
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -389,7 +474,7 @@ export function EhrHeader({
                 if (!isSearchOpen) setIsSearchOpen(true);
               }}
               onFocus={() => setIsSearchOpen(true)}
-              placeholder="Cari Pasien (Nama, RM, NIK, Antrean)..."
+              placeholder="Cari Kunjungan (Nama, RM, No. Reg, NIK, Antrean)..."
               className="w-full h-9 pl-9 pr-8 text-xs bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 hover:border-slate-300 focus:border-teal-400 rounded-full text-slate-900 placeholder:text-slate-400 outline-none transition-all shadow-2xs focus:ring-2 focus:ring-teal-500/15"
             />
             {searchQuery ? (
@@ -413,14 +498,14 @@ export function EhrHeader({
 
           {/* Autocomplete Results Dropdown */}
           {isSearchOpen && (
-            <div className="absolute top-full mt-1.5 left-0 w-full sm:w-[420px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="absolute top-full mt-1.5 left-0 w-full sm:w-[460px] bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
               <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-semibold">
-                <span>
+                <span className="truncate pr-2">
                   {searchQuery.trim()
-                    ? `Hasil Pencarian (${filteredPatients.length})`
+                    ? `Hasil Pencarian Kunjungan (${filteredPatients.length})`
                     : department === "Semua Poli"
-                      ? `Daftar Pasien Semua Poli (${filteredPatients.length})`
-                      : `Daftar Pasien ${department} (${filteredPatients.length})`}
+                      ? `Antrean Kunjungan Rawat Jalan (${filteredPatients.length} Kunjungan)`
+                      : `Antrean Kunjungan ${department} (${filteredPatients.length} Kunjungan)`}
                 </span>
                 {onOpenRegistration && filteredPatients.length > 0 && (
                   <button
@@ -429,7 +514,7 @@ export function EhrHeader({
                       setIsSearchOpen(false);
                       onOpenRegistration();
                     }}
-                    className="text-teal-600 hover:text-teal-800 flex items-center gap-1 font-bold text-[10px] cursor-pointer"
+                    className="text-teal-600 hover:text-teal-800 flex items-center gap-1 font-bold text-[10px] cursor-pointer shrink-0"
                   >
                     <UserPlus className="h-3.5 w-3.5" />
                     <span>+ Pasien Baru</span>
@@ -437,7 +522,7 @@ export function EhrHeader({
                 )}
               </div>
 
-              {/* Patients List */}
+              {/* Patients/Visits List */}
               <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 p-1">
                 {filteredPatients.length > 0 ? (
                   filteredPatients.map((item) => {
@@ -449,25 +534,45 @@ export function EhrHeader({
                         key={item.id}
                         type="button"
                         onClick={() => handlePatientClick(item)}
-                        className="w-full text-left p-2 rounded-xl hover:bg-teal-50/80 transition-colors flex items-center justify-between gap-2.5 group cursor-pointer"
+                        className="w-full text-left p-2.5 rounded-xl hover:bg-teal-50/80 transition-colors flex items-center justify-between gap-3 group cursor-pointer"
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           {/* Queue Pill */}
-                          <div className="h-7 px-2 min-w-[48px] rounded-lg bg-teal-50 border border-teal-200 text-teal-900 font-mono font-extrabold text-[11px] flex items-center justify-center shrink-0 whitespace-nowrap group-hover:bg-teal-600 group-hover:text-white group-hover:border-teal-600 transition-colors">
+                          <div className="h-8 px-2 min-w-[50px] rounded-lg bg-teal-50 border border-teal-200 text-teal-900 font-mono font-extrabold text-xs flex items-center justify-center shrink-0 whitespace-nowrap group-hover:bg-teal-600 group-hover:text-white group-hover:border-teal-600 transition-colors shadow-2xs">
                             {item.queueNumber}
                           </div>
 
-                          <div className="min-w-0 space-y-0.5">
-                            <div className="flex items-center gap-1.5">
+                          <div className="min-w-0 space-y-0.5 flex-1">
+                            {/* Baris 1: Nama Pasien + Gender + Multi-Poli */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-xs text-slate-900 group-hover:text-teal-950 truncate max-w-[170px]">
                                 {item.patient.name}
                               </span>
                               <span className="text-[10px] text-slate-400 font-medium">
                                 ({item.patient.gender === "male" ? "L" : "P"})
                               </span>
+                              {item.isSequentialMultiClinic && (
+                                <span className="text-[8px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 py-0.2 rounded font-bold">
+                                  Multi-Poli
+                                </span>
+                              )}
                             </div>
-                            <div className="text-[10px] text-slate-500 font-mono truncate">
-                              No. RM{" "}
+
+                            {/* Baris 2: No. Registrasi Kunjungan & Jam Kedatangan */}
+                            <div className="text-[10px] text-slate-600 font-mono flex items-center gap-1.5 flex-wrap">
+                              <span className="bg-slate-100 text-slate-800 px-1.5 py-0.2 rounded font-semibold text-[9px] border border-slate-200">
+                                No. Reg: {item.registrationNumber || `RJ-${item.queueNumber}`}
+                              </span>
+                              {item.arrivalTime && (
+                                <span className="text-slate-400 text-[9px]">
+                                  • {item.arrivalTime}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Baris 3: No. RM & NIK */}
+                            <div className="text-[9px] text-slate-400 font-mono truncate">
+                              No. RM:{" "}
                               <strong className="text-slate-700">
                                 {item.patient.mrn.replace(/^RM-?/i, "")}
                               </strong>{" "}
@@ -476,24 +581,35 @@ export function EhrHeader({
                           </div>
                         </div>
 
-                        <div className="shrink-0 flex flex-col items-end gap-0.5 text-right">
-                          <Badge
-                            variant="outline"
-                            className={`text-[8px] font-bold px-1.5 py-0.2 rounded-full whitespace-nowrap shadow-2xs ${
-                              isInProgress
-                                ? "bg-teal-50 text-teal-700 border-teal-300 animate-pulse"
+                        <div className="shrink-0 flex flex-col items-end gap-1 text-right">
+                          <div className="flex items-center gap-1">
+                            {item.status === "arrived" && item.pausedReason && (
+                              <Badge
+                                variant="outline"
+                                className="text-[8px] font-bold px-1.5 py-0.2 rounded-full whitespace-nowrap bg-amber-50 text-amber-900 border-amber-300 shadow-2xs"
+                                title={item.pausedReason}
+                              >
+                                Ditunda
+                              </Badge>
+                            )}
+                            <Badge
+                              variant="outline"
+                              className={`text-[8px] font-bold px-1.5 py-0.2 rounded-full whitespace-nowrap shadow-2xs ${
+                                isInProgress
+                                  ? "bg-teal-50 text-teal-700 border-teal-300 animate-pulse"
+                                  : isFinished
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                                    : "bg-amber-50 text-amber-700 border-amber-300"
+                              }`}
+                            >
+                              {isInProgress
+                                ? "Sedang Diperiksa"
                                 : isFinished
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-300"
-                                  : "bg-amber-50 text-amber-700 border-amber-300"
-                            }`}
-                          >
-                            {isInProgress
-                              ? "Sedang Diperiksa"
-                              : isFinished
-                                ? "Selesai"
-                                : "Menunggu"}
-                          </Badge>
-                          <span className="text-[9px] text-slate-400 font-medium truncate max-w-[110px]">
+                                  ? "Selesai"
+                                  : "Menunggu"}
+                            </Badge>
+                          </div>
+                          <span className="text-[9px] text-slate-500 font-medium truncate max-w-[110px]">
                             {item.department}
                           </span>
                         </div>
@@ -640,46 +756,92 @@ export function EhrHeader({
                 )}
               </div>
 
-              <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 text-xs">
-                {notifications.map((notif) => (
-                  <div
-                    key={notif.id}
-                    className={`p-3 transition-colors hover:bg-slate-50 flex items-start gap-2.5 ${
-                      !notif.read ? "bg-teal-50/40" : ""
-                    }`}
-                  >
-                    <div
-                      className={`h-6 w-6 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${
-                        notif.type === "lab"
-                          ? "bg-teal-100 text-teal-700"
-                          : notif.type === "queue"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-emerald-100 text-emerald-700"
+              <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 text-xs">
+                {notifications.length === 0 ? (
+                  <div className="p-6 text-center text-slate-400">
+                    <Bell className="h-8 w-8 mx-auto mb-2 opacity-30 text-slate-300" />
+                    <p className="text-xs font-semibold">
+                      Tidak ada notifikasi klinis baru
+                    </p>
+                  </div>
+                ) : (
+                  notifications.map((notif) => (
+                    <button
+                      key={notif.id}
+                      type="button"
+                      onClick={() => handleNotificationClick(notif)}
+                      className={`w-full text-left p-3 transition-colors hover:bg-teal-50/70 flex items-start gap-2.5 cursor-pointer group select-none ${
+                        !notif.read ? "bg-teal-50/40" : "bg-white"
                       }`}
                     >
-                      {notif.type === "lab" ? (
-                        <FlaskConical className="h-3.5 w-3.5" />
-                      ) : notif.type === "queue" ? (
-                        <UserCheck className="h-3.5 w-3.5" />
-                      ) : (
-                        <ShieldCheck className="h-3.5 w-3.5" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 space-y-0.5">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="font-bold text-slate-900 truncate">
-                          {notif.title}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono shrink-0">
-                          {notif.time}
-                        </span>
+                      <div
+                        className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition-transform group-hover:scale-105 ${
+                          notif.type === "lab"
+                            ? "bg-teal-100 text-teal-700"
+                            : notif.type === "queue" &&
+                                notif.time === "Diperiksa"
+                              ? "bg-blue-100 text-blue-800"
+                              : notif.type === "queue" &&
+                                  notif.time === "Prioritas"
+                                ? "bg-rose-100 text-rose-800"
+                                : notif.type === "queue"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-emerald-100 text-emerald-700"
+                        }`}
+                      >
+                        {notif.type === "lab" ? (
+                          <FlaskConical className="h-4 w-4" />
+                        ) : notif.type === "queue" ? (
+                          <UserCheck className="h-4 w-4" />
+                        ) : (
+                          <ShieldCheck className="h-4 w-4" />
+                        )}
                       </div>
-                      <p className="text-[11px] text-slate-600 leading-relaxed">
-                        {notif.desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="font-bold text-slate-900 group-hover:text-teal-950 truncate">
+                              {notif.title}
+                            </span>
+                            {!notif.read && (
+                              <span className="h-1.5 w-1.5 rounded-full bg-teal-600 shrink-0" />
+                            )}
+                          </div>
+                          <span
+                            className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold shrink-0 ${
+                              notif.time === "Diperiksa"
+                                ? "bg-blue-100 text-blue-900"
+                                : notif.time === "Prioritas"
+                                  ? "bg-rose-100 text-rose-900"
+                                  : notif.time === "Menunggu"
+                                    ? "bg-amber-100 text-amber-900"
+                                    : "bg-emerald-100 text-emerald-900"
+                            }`}
+                          >
+                            {notif.time}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 leading-relaxed line-clamp-2">
+                          {notif.desc}
+                        </p>
+                        {notif.patient && (
+                          <div className="text-[10px] text-teal-700 font-semibold pt-0.5 flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                            <span>
+                              {notif.queueItem?.status === "arrived"
+                                ? "Mulai periksa pasien (SOAP)"
+                                : notif.queueItem?.status === "finished"
+                                  ? "Lihat resume medis pasien"
+                                  : "Buka formulir pemeriksaan (SOAP)"}
+                            </span>
+                            <span className="group-hover:translate-x-0.5 transition-transform">
+                              ➔
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           )}

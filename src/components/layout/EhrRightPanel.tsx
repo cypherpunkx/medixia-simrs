@@ -287,13 +287,13 @@ export function EhrRightPanel({
 
       {/* 4. SATUSEHAT Cloud Integration Summary (State-Aware & Clear Patient Context) */}
       <div className="ehr-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800">
-            <ShieldCheck className="h-4 w-4 text-teal-600" />
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 shrink-0 whitespace-nowrap">
+            <ShieldCheck className="h-4 w-4 text-teal-600 shrink-0" />
             <span>Integrasi SATUSEHAT</span>
           </div>
           <span
-            className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors duration-200 ${
+            className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors duration-200 shrink-0 whitespace-nowrap ${
               !hasSelectedPatient
                 ? "bg-slate-100 text-slate-600 border-slate-200"
                 : isSynced
@@ -305,7 +305,7 @@ export function EhrRightPanel({
                 : "bg-blue-50 text-blue-700 border-blue-200"
             }`}
           >
-            <span className="relative flex h-2 w-2">
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
               {hasSelectedPatient && isSynced && (
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               )}
@@ -313,7 +313,7 @@ export function EhrRightPanel({
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
               )}
               <span
-                className={`relative inline-flex rounded-full h-2 w-2 ${
+                className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
                   !hasSelectedPatient
                     ? "bg-slate-400"
                     : isSynced
@@ -326,16 +326,16 @@ export function EhrRightPanel({
                 }`}
               />
             </span>
-            <span>
+            <span className="whitespace-nowrap">
               {!hasSelectedPatient
                 ? "Standby"
                 : isSynced
                 ? "Tersinkron 100%"
                 : isPartialFailed
-                ? "Perlu Kirim Ulang"
+                ? "Kirim Ulang"
                 : isOptOut
-                ? "Internal (Opt-Out)"
-                : "Konsultasi Berlangsung"}
+                ? "Opt-Out"
+                : "Konsultasi Aktif"}
             </span>
           </span>
         </div>
