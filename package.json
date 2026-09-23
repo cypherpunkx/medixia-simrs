@@ -11,7 +11,8 @@
     "db:seed": "tsx --env-file=.env.local scripts/seed.ts",
     "db:seed:fresh": "tsx --env-file=.env.local scripts/seed.ts --fresh",
     "db:seed:master": "tsx --env-file=.env.local scripts/seed_master.ts",
-    "db:clean": "tsx --env-file=.env.local scripts/clean_db.ts"
+    "db:clean": "tsx --env-file=.env.local scripts/clean_db.ts",
+    "test:satusehat": "tsx --env-file=.env.local scripts/test_satusehat_error_logging.ts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

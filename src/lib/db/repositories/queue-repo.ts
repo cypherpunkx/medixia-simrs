@@ -88,55 +88,6 @@ export const QueueRepository = {
           rows = await fallbackQuery.orderBy(asc(queueItems.arrivalTimestamp));
         }
 
-        // Fallback 2 (Auto-Recovery & Sync): Ensure all registered clinical encounters exist in queueItems
-        const todayStr = getLocalDateString();
-        const allEncs = await db.select().from(encounters).limit(50);
-        if (allEncs.length > 0) {
-          const existingRegs = new Set(rows.map((r) => r.registrationNumber).filter(Boolean));
-          const missingEncs = allEncs.filter(
-            (enc) => enc.registrationNumber && !existingRegs.has(enc.registrationNumber)
-          );
-
-          if (missingEncs.length > 0) {
-            for (const enc of missingEncs) {
-              const qDate = enc.visitDate ? enc.visitDate.split("T")[0] : todayStr;
-              await db
-                .insert(queueItems)
-                .values({
-                  id: generatePrefixedId("q_"),
-                  queueNumber: enc.queueNumber || "A-001",
-                  registrationNumber: enc.registrationNumber,
-                  patientId: enc.patientId,
-                  departmentId: enc.departmentId || null,
-                  doctorId: enc.doctorId || null,
-                  encounterId: enc.id,
-                  department: enc.clinicDepartment || "Poli Umum",
-                  doctor: enc.doctorName || "dr. Dokter DPJP",
-                  room: "Ruang 101",
-                  arrivalTime:
-                    new Date().toLocaleTimeString("id-ID", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }) + " WIB",
-                  arrivalTimestamp: Date.now(),
-                  chiefComplaint:
-                    enc.chiefComplaint ||
-                    "Pemeriksaan dan konsultasi rawat jalan",
-                  status: (enc.encounterStatus as any) || "arrived",
-                  satusehatStatus: enc.satusehatEncounterId ? "synced" : "pending",
-                  satusehatConsent: "opt-in",
-                  triagePriority: "regular",
-                  queueDate: qDate,
-                })
-                .catch(() => {});
-            }
-            rows = await query.orderBy(
-              desc(queueItems.queueDate),
-              asc(queueItems.arrivalTimestamp)
-            );
-          }
-        }
-
         if (rows.length === 0) return [];
 
         // Batch fetch all patients in 1 query (Eliminating N+1)

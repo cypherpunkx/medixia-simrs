@@ -111,7 +111,7 @@ interface PatientRegistrationModuleProps {
     targetDepartment?: string,
   ) => void;
   onRegisterNewPatient: (patient: PatientProfile) => void;
-  onCreateEncounter: (encounter: OutpatientEncounter) => void;
+  onCreateEncounter: (encounter: OutpatientEncounter, updatedPatient?: PatientProfile) => void;
   activeDepartment?: string;
   onDepartmentChange?: (dept: string) => void;
   onOpenQueueTicket?: (queueItem?: ClinicQueuePatientItem) => void;
@@ -1469,14 +1469,13 @@ export function PatientRegistrationModule({
     };
 
     // Update patient lokal & list
-    onSelectPatient(updatedPatient);
     setPatientsList((prev) =>
       prev.map((p) => (p.id === currentPatient.id ? updatedPatient : p))
     );
 
     // Menambahkan pasien baru ke urutan antrean FIFO paling akhir
     setWorklist((prev) => [...prev, newQueueItem]);
-    onCreateEncounter(newEnc);
+    onCreateEncounter(newEnc, updatedPatient);
 
     // 1. Persist encounter ke database terlebih dahulu
     fetch("/api/encounters", {
@@ -1789,13 +1788,28 @@ export function PatientRegistrationModule({
                   className={`h-4 w-4 ${worklistStatusFilter === "all" ? "text-teal-400" : "text-slate-400"}`}
                 />
               </div>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-xl font-extrabold">
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-2xl font-black tracking-tight">
                   {activeScopeWorklist.length}
                 </span>
                 {countUrgent > 0 && (
-                  <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-red-500 text-white animate-pulse">
-                    {countUrgent} CITO
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2 py-0.5 rounded-full shadow-xs transition-colors ${
+                      worklistStatusFilter === "all"
+                        ? "bg-rose-500 text-white border border-rose-400/40"
+                        : "bg-rose-50 text-rose-700 border border-rose-200"
+                    }`}
+                    title={`${countUrgent} pasien prioritas CITO / Darurat`}
+                  >
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                      <span
+                        className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
+                          worklistStatusFilter === "all" ? "bg-white" : "bg-rose-600"
+                        }`}
+                      ></span>
+                    </span>
+                    <span>{countUrgent} CITO</span>
                   </span>
                 )}
               </div>
@@ -1822,7 +1836,7 @@ export function PatientRegistrationModule({
                   className={`h-4 w-4 ${worklistStatusFilter === "arrived" ? "text-white" : "text-amber-600"}`}
                 />
               </div>
-              <div className="text-xl font-extrabold mt-1">{countWaiting}</div>
+              <div className="text-2xl font-black tracking-tight mt-1.5">{countWaiting}</div>
             </div>
 
             <div
@@ -1846,7 +1860,7 @@ export function PatientRegistrationModule({
                   className={`h-4 w-4 ${worklistStatusFilter === "in-progress" ? "text-white animate-pulse" : "text-blue-600"}`}
                 />
               </div>
-              <div className="text-xl font-extrabold mt-1">
+              <div className="text-2xl font-black tracking-tight mt-1.5">
                 {countInProgress}
               </div>
             </div>
@@ -1872,7 +1886,7 @@ export function PatientRegistrationModule({
                   className={`h-4 w-4 ${worklistStatusFilter === "finished" ? "text-white" : "text-emerald-600"}`}
                 />
               </div>
-              <div className="text-xl font-extrabold mt-1">{countFinished}</div>
+              <div className="text-2xl font-black tracking-tight mt-1.5">{countFinished}</div>
             </div>
           </div>
 
@@ -1958,9 +1972,9 @@ export function PatientRegistrationModule({
             </div>
 
             {/* Row 2: Date Range Quick Selector Bar */}
-            <div className="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs font-bold text-slate-700 flex items-center gap-1 mr-1">
+            <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 min-w-0 flex-1">
+                <span className="text-xs font-bold text-slate-700 flex items-center gap-1 mr-1 shrink-0 whitespace-nowrap">
                   <Calendar className="h-3.5 w-3.5 text-teal-600" />
                   <span>Filter Tanggal:</span>
                 </span>
@@ -1980,7 +1994,7 @@ export function PatientRegistrationModule({
                       setCurrentPage(1);
                       fetchWorklistByDate(preset.id, "");
                     }}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer select-none border ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer select-none border shrink-0 whitespace-nowrap ${
                       worklistDatePreset === preset.id
                         ? "bg-teal-700 text-white border-teal-800 shadow-xs ring-1 ring-teal-500/30 font-extrabold"
                         : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 font-medium"
@@ -1989,8 +2003,10 @@ export function PatientRegistrationModule({
                     {preset.label}
                   </button>
                 ))}
+              </div>
 
-                {/* Inline Custom Date Picker */}
+              {/* Inline Custom Date Picker (Anchored on the right) */}
+              <div className="shrink-0 flex items-center pl-1 sm:pl-2 border-l border-slate-200/80">
                 <CustomDatePicker
                   value={
                     worklistDatePreset === "custom" ? worklistCustomDate : ""
@@ -2009,15 +2025,12 @@ export function PatientRegistrationModule({
                     }
                   }}
                   size="sm"
-                  align="left"
+                  align="right"
                   isActive={
                     worklistDatePreset === "custom" &&
                     Boolean(worklistCustomDate)
                   }
                   placeholder="Pilih Tanggal..."
-                  prefixLabel={
-                    worklistDatePreset === "custom" ? "Tanggal:" : undefined
-                  }
                   buttonClassName={`h-[30px] px-2.5 py-1 text-xs rounded-lg transition-all border ${
                     worklistDatePreset === "custom" &&
                     Boolean(worklistCustomDate)
@@ -3093,8 +3106,8 @@ export function PatientRegistrationModule({
       {activeTab === "returning" && (
         <div className="space-y-4">
           {/* 1. Quick Filter Pills Bar with Comprehensive Historical Date Options */}
-          <div className="flex flex-wrap items-center justify-between gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200/90 shadow-2xs">
-            <div className="flex flex-wrap items-center gap-1 text-xs">
+          <div className="flex items-center justify-between gap-1.5 p-1.5 bg-slate-100 rounded-xl border border-slate-200/90 shadow-2xs">
+            <div className="flex items-center gap-1 text-xs overflow-x-auto no-scrollbar py-0.5 min-w-0 flex-1">
               <button
                 type="button"
                 onClick={() => {
@@ -3102,7 +3115,7 @@ export function PatientRegistrationModule({
                   setReturningCustomDate("");
                   setReturningPage(1);
                 }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none shrink-0 whitespace-nowrap ${
                   returningVisitFilter === "all"
                     ? "bg-white text-teal-950 shadow-xs border border-slate-200/90 font-extrabold"
                     : "text-slate-600 hover:text-slate-900 hover:bg-white/50 font-medium"
@@ -3125,7 +3138,7 @@ export function PatientRegistrationModule({
                   setReturningCustomDate("");
                   setReturningPage(1);
                 }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none shrink-0 whitespace-nowrap ${
                   returningVisitFilter === "today"
                     ? "bg-white text-teal-950 shadow-xs border border-teal-400 ring-1 ring-teal-500/20 font-extrabold"
                     : "text-slate-600 hover:text-slate-900 hover:bg-white/50 font-medium"
@@ -3142,7 +3155,7 @@ export function PatientRegistrationModule({
                   setReturningCustomDate("");
                   setReturningPage(1);
                 }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none shrink-0 whitespace-nowrap ${
                   returningVisitFilter === "last-7"
                     ? "bg-white text-teal-950 shadow-xs border border-slate-200/90 font-extrabold"
                     : "text-slate-600 hover:text-slate-900 hover:bg-white/50 font-medium"
@@ -3159,7 +3172,7 @@ export function PatientRegistrationModule({
                   setReturningCustomDate("");
                   setReturningPage(1);
                 }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none shrink-0 whitespace-nowrap ${
                   returningVisitFilter === "last-30"
                     ? "bg-white text-teal-950 shadow-xs border border-slate-200/90 font-extrabold"
                     : "text-slate-600 hover:text-slate-900 hover:bg-white/50 font-medium"
@@ -3176,7 +3189,7 @@ export function PatientRegistrationModule({
                   setReturningCustomDate("");
                   setReturningPage(1);
                 }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none shrink-0 whitespace-nowrap ${
                   returningVisitFilter === "older-30"
                     ? "bg-white text-teal-950 shadow-xs border border-slate-200/90 font-extrabold"
                     : "text-slate-600 hover:text-slate-900 hover:bg-white/50 font-medium"
@@ -3193,7 +3206,7 @@ export function PatientRegistrationModule({
                   setReturningCustomDate("");
                   setReturningPage(1);
                 }}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer select-none shrink-0 whitespace-nowrap ${
                   returningVisitFilter === "no-history"
                     ? "bg-white text-teal-950 shadow-xs border border-slate-200/90 font-extrabold"
                     : "text-slate-600 hover:text-slate-900 hover:bg-white/50 font-medium"
@@ -3208,8 +3221,10 @@ export function PatientRegistrationModule({
                 />
                 <span>0 Kunjungan</span>
               </button>
+            </div>
 
-              {/* Inline Custom Date Picker */}
+            {/* Inline Custom Date Picker (Anchored on the right, never wraps to empty second line) */}
+            <div className="shrink-0 flex items-center pl-1 sm:pl-2 border-l border-slate-200/80">
               <CustomDatePicker
                 value={
                   returningVisitFilter === "custom" ? returningCustomDate : ""
@@ -3225,15 +3240,12 @@ export function PatientRegistrationModule({
                   setReturningPage(1);
                 }}
                 size="sm"
-                align="left"
+                align="right"
                 isActive={
                   returningVisitFilter === "custom" &&
                   Boolean(returningCustomDate)
                 }
                 placeholder="Pilih Tanggal..."
-                prefixLabel={
-                  returningVisitFilter === "custom" ? "Kunjungan:" : undefined
-                }
                 buttonClassName={`h-[30px] px-2.5 py-1 text-xs rounded-lg transition-all border ${
                   returningVisitFilter === "custom" &&
                   Boolean(returningCustomDate)
@@ -3626,10 +3638,10 @@ export function PatientRegistrationModule({
                 return (
                   <div
                     key={p.id}
-                    className={`rounded-2xl border transition-all duration-200 p-4 sm:p-5 flex flex-col justify-between gap-3.5 relative group cursor-pointer ${
+                    className={`rounded-2xl border transition-all duration-200 p-4 sm:p-5 flex flex-col justify-between gap-3 relative group cursor-pointer ${
                       isCurrentActive
-                        ? "bg-teal-50/70 border-teal-500 shadow-sm ring-2 ring-teal-500/20"
-                        : "bg-white border-slate-200 hover:border-teal-400 hover:shadow-md hover:bg-teal-50/15"
+                        ? "bg-teal-50/60 border-teal-500 shadow-sm ring-2 ring-teal-500/20"
+                        : "bg-white border-slate-200 hover:border-teal-400 hover:shadow-md hover:bg-teal-50/10"
                     }`}
                     onClick={() => {
                       onSelectPatient(p, undefined, todayQueue, todayQueue?.department);
@@ -3638,286 +3650,273 @@ export function PatientRegistrationModule({
                       );
                     }}
                   >
-                    {/* Top Row: Avatar + Identity + Demographic Badges */}
-                    <div className="flex items-start gap-3.5 min-w-0">
-                      <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white font-extrabold text-sm shadow-xs group-hover:bg-teal-700 transition-colors">
-                        {initials}
-                        <div
-                          className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-white"
-                          title="SATUSEHAT Terverifikasi"
-                        >
-                          <ShieldCheck className="h-2.5 w-2.5" />
-                        </div>
-                      </div>
-
-                      <div className="min-w-0 space-y-1 flex-1">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <h4 className="font-extrabold text-sm text-slate-900 group-hover:text-teal-950 truncate">
-                              {p.name}
-                            </h4>
-                            {p.patientStatus === "inpatient" && (
-                              <span className="bg-purple-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-2xs">
-                                🏥 RAWAT INAP{p.inpatientDetails?.room ? ` • ${p.inpatientDetails.room}` : ""}
-                              </span>
-                            )}
-                            {p.patientStatus === "deceased" && (
-                              <span className="bg-red-950 text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-red-700 shadow-2xs">
-                                ✝️ MENINGGAL
-                              </span>
-                            )}
-                          </div>
-                          {isCurrentActive && (
-                            <span className="bg-teal-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-2xs">
-                              PASIEN AKTIF
-                            </span>
-                          )}
-
-                        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-semibold text-[11px]">
-                            {age} Thn ({p.gender === "male" ? "L" : "P"})
-                          </span>
-
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-50 text-red-700 border border-red-200 font-bold font-mono text-[10px]">
-                            Gol. {p.bloodType}+
-                          </span>
-
-                          {p.paymentPayer && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200 font-semibold text-[10px]">
-                              {p.paymentPayer.split(" (")[0]}
-                            </span>
-                          )}
-
-                          {p.allergies && p.allergies.length > 0 && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[10px]">
-                              <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
-                              <span className="truncate max-w-[120px]">
-                                Alergi: {p.allergies[0].split(" (")[0]}
-                              </span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Row 2: Identifier Chips & Address */}
-                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
-                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-900 border border-slate-300 font-mono text-[11px] font-bold">
-                        <span className="text-slate-500 font-normal">RM:</span>
-                        <span>{p.mrn}</span>
-                      </div>
-
-                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 border border-slate-200 font-mono text-[11px]">
-                        <span className="text-slate-400">NIK:</span>
-                        <span>{p.nik}</span>
-                      </div>
-
-                      {p.satusehatConsent === "opt-out" ? (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 font-semibold text-[10px]"
-                          title="Pasien Menolak Berbagi Data ke SATUSEHAT (Hanya Tersimpan Internal RS)"
-                        >
-                          🔒 Consent: Opt-Out
-                        </span>
-                      ) : (
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-semibold text-[10px]"
-                          title="Pasien Menyetujui Berbagi Data ke SATUSEHAT"
-                        >
-                          🛡️ Consent: Opt-In
-                        </span>
-                      )}
-
-                      <div className="inline-flex items-center gap-1 text-[11px] text-slate-500 truncate w-full pt-0.5">
-                        <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
-                        <span className="truncate">{p.address}</span>
-                      </div>
-                    </div>
-
-                    {/* Row 3: TELEMETRI KUNJUNGAN TERAKHIR (LAST VISIT TELEMETRY) */}
-                    <div className="pt-2 border-t border-slate-100 space-y-2">
-                      {todayQueue ? (
-                        // Case A: Pasien Memiliki Antrean Hari Ini
-                        <div className="space-y-1.5">
-                          <div
-                            className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
-                              todayQueue.status === "finished"
-                                ? "bg-emerald-50 border-emerald-300 text-emerald-950"
-                                : todayQueue.status === "in-progress"
-                                  ? "bg-blue-50 border-blue-300 text-blue-950"
-                                  : "bg-amber-50 border-amber-300 text-amber-950"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="relative flex h-2 w-2">
-                                <span
-                                  className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
-                                    todayQueue.status === "finished"
-                                      ? "bg-emerald-400"
-                                      : todayQueue.status === "in-progress"
-                                        ? "bg-blue-400"
-                                        : "bg-amber-400"
-                                  }`}
-                                />
-                                <span
-                                  className={`relative inline-flex rounded-full h-2 w-2 ${
-                                    todayQueue.status === "finished"
-                                      ? "bg-emerald-600"
-                                      : todayQueue.status === "in-progress"
-                                        ? "bg-blue-600"
-                                        : "bg-amber-600"
-                                  }`}
-                                />
-                              </span>
-                              <div className="min-w-0">
-                                <div className="text-xs font-bold truncate flex items-center gap-1.5 flex-wrap">
-                                  <span>Antrean Hari Ini:</span>
-                                  <span className="font-mono font-extrabold">
-                                    {todayQueue.queueNumber}
-                                  </span>
-                                  <span className="truncate">
-                                    ({todayQueue.department})
-                                  </span>
-                                  {patientTodayQueues.length > 1 && (
-                                    <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-teal-700 text-white font-bold text-[9px] shadow-2xs">
-                                      {patientTodayQueues.length} Kunjungan
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[10px] opacity-80 truncate">
-                                  {todayQueue.doctor} • {todayQueue.arrivalTime}
-                                </div>
-                              </div>
-                            </div>
-                            <span
-                              className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
-                                todayQueue.status === "finished"
-                                  ? "bg-emerald-200 text-emerald-900"
-                                  : todayQueue.status === "in-progress"
-                                    ? "bg-blue-200 text-blue-900"
-                                    : "bg-amber-200 text-amber-900"
-                              }`}
+                    <div className="space-y-3 min-w-0">
+                      {/* 1. Header: Avatar + Patient Identity + Status Badge */}
+                      <div className="flex items-start justify-between gap-3 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white font-extrabold text-sm shadow-xs group-hover:bg-teal-700 transition-colors">
+                            {initials}
+                            <div
+                              className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-white"
+                              title="SATUSEHAT Terverifikasi"
                             >
-                              {todayQueue.status === "finished"
-                                ? "Selesai"
-                                : todayQueue.status === "in-progress"
-                                  ? "Diperiksa"
-                                  : "Menunggu"}
+                              <ShieldCheck className="h-2.5 w-2.5" />
+                            </div>
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h4 className="font-extrabold text-sm text-slate-900 group-hover:text-teal-950 truncate">
+                                {p.name}
+                              </h4>
+                              {p.patientStatus === "inpatient" && (
+                                <span className="bg-purple-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-2xs shrink-0">
+                                  🏥 RAWAT INAP{p.inpatientDetails?.room ? ` • ${p.inpatientDetails.room}` : ""}
+                                </span>
+                              )}
+                              {p.patientStatus === "deceased" && (
+                                <span className="bg-red-950 text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-red-700 shadow-2xs shrink-0">
+                                  ✝️ MENINGGAL
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Clean Demographic Subtitle */}
+                            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5 flex-wrap">
+                              <span>{age} Thn ({p.gender === "male" ? "L" : "P"})</span>
+                              <span className="text-slate-300">•</span>
+                              <span className="font-semibold text-slate-700 font-mono text-[11px]">Gol. {p.bloodType || "-"}+</span>
+                              {p.paymentPayer && (
+                                <>
+                                  <span className="text-slate-300">•</span>
+                                  <span className="text-teal-700 font-semibold">{p.paymentPayer.split(" (")[0]}</span>
+                                </>
+                              )}
+                              {p.allergies && p.allergies.length > 0 && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[10px]">
+                                  <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                                  <span className="truncate max-w-[110px]">Alergi: {p.allergies[0].split(" (")[0]}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Top-Right: Consistent status slot */}
+                        <div className="shrink-0 flex items-center">
+                          {isCurrentActive ? (
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-teal-700 text-white shadow-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
+                              Pasien Aktif
+                            </span>
+                          ) : (
+                            <span className="text-[10px] font-mono font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200/80">
+                              RM: {p.mrn}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 2. Identifier & Contact Bar */}
+                      <div className="rounded-xl bg-slate-50/80 p-2.5 border border-slate-200/70 text-xs space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] font-mono flex-wrap gap-2">
+                          <div className="flex items-center gap-3">
+                            <span>
+                              <strong className="text-slate-400 font-sans font-medium text-[10px] mr-1">No. RM:</strong>
+                              <span className="text-slate-900 font-bold">{p.mrn}</span>
+                            </span>
+                            <span className="text-slate-300">|</span>
+                            <span>
+                              <strong className="text-slate-400 font-sans font-medium text-[10px] mr-1">NIK:</strong>
+                              <span className="text-slate-700">{p.nik}</span>
                             </span>
                           </div>
 
-                          {/* Multi-Visit Selector Pills if Patient has > 1 Queue Today */}
-                          {patientTodayQueues.length > 1 && (
-                            <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto no-scrollbar">
-                              <span className="text-[10px] font-semibold text-slate-500 shrink-0">
-                                Pilih Kunjungan:
-                              </span>
-                              <div className="flex items-center gap-1 flex-wrap">
-                                {patientTodayQueues.map((q) => {
-                                  const isSelected = q.id === todayQueue.id;
-                                  return (
-                                    <button
-                                      key={q.id}
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        onSelectPatient(
-                                          p,
-                                          undefined,
-                                          q,
-                                          q.department,
-                                        );
-                                        toast.info(
-                                          `Beralih ke antrean ${q.queueNumber} (${q.department})`,
-                                        );
-                                      }}
-                                      className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all shrink-0 cursor-pointer flex items-center gap-1 ${
-                                        isSelected
-                                          ? "bg-teal-700 text-white border-teal-800 shadow-2xs"
-                                          : "bg-white text-slate-700 border-slate-200 hover:bg-teal-50 hover:border-teal-300"
-                                      }`}
-                                      title={`Poli: ${q.department} • Dokter: ${q.doctor} • Status: ${q.status}`}
-                                    >
-                                      <span className="font-mono">{q.queueNumber}</span>
-                                      <span className="opacity-80 font-normal">
-                                        ({q.department.replace("Poli ", "")})
-                                      </span>
-                                      {isSelected && (
-                                        <span className="text-[8px] bg-teal-900/60 px-1 py-0.2 rounded font-bold">
-                                          Aktif
-                                        </span>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
+                          {p.satusehatConsent === "opt-out" ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 font-semibold text-[10px]"
+                              title="Pasien Menolak Berbagi Data ke SATUSEHAT (Hanya Tersimpan Internal RS)"
+                            >
+                              🔒 Consent: Opt-Out
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-semibold text-[10px]"
+                              title="Pasien Menyetujui Berbagi Data ke SATUSEHAT"
+                            >
+                              🛡️ Consent: Opt-In
+                            </span>
                           )}
                         </div>
-                      ) : p.lastVisitDate ? (
-                        // Case B: Ada Riwayat Kunjungan Terdahulu
-                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/90 space-y-1.5">
-                          <div className="flex items-center justify-between gap-1 text-xs">
-                            <div className="flex items-center gap-1.5 text-slate-800 font-bold text-[11px] min-w-0">
-                              <Clock className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                              <span className="truncate">
-                                Kunjungan Terakhir:{" "}
-                                {formatVisitDateIndo(p.lastVisitDate)}
+
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 truncate pt-1 border-t border-slate-200/50">
+                          <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                          <span className="truncate">{p.address || "Alamat faskes belum tercatat"}</span>
+                        </div>
+                      </div>
+
+                      {/* 3. Clinical Telemetry / Last Visit Section */}
+                      <div>
+                        {todayQueue ? (
+                          // Case A: Pasien Memiliki Antrean Hari Ini
+                          <div className="rounded-xl border border-slate-200 bg-white p-2.5 space-y-2 shadow-2xs">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="relative flex h-2 w-2 shrink-0">
+                                  <span
+                                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                                      todayQueue.status === "finished"
+                                        ? "bg-emerald-400"
+                                        : todayQueue.status === "in-progress"
+                                          ? "bg-blue-400"
+                                          : "bg-amber-400"
+                                    }`}
+                                  />
+                                  <span
+                                    className={`relative inline-flex rounded-full h-2 w-2 ${
+                                      todayQueue.status === "finished"
+                                        ? "bg-emerald-600"
+                                        : todayQueue.status === "in-progress"
+                                          ? "bg-blue-600"
+                                          : "bg-amber-600"
+                                    }`}
+                                  />
+                                </span>
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
+                                    <span className="text-slate-500 font-medium">Antrean:</span>
+                                    <span className="font-mono font-extrabold text-teal-900">{todayQueue.queueNumber}</span>
+                                    <span className="truncate">({todayQueue.department})</span>
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 truncate">
+                                    {todayQueue.doctor} • {todayQueue.arrivalTime}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <span
+                                className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 border ${
+                                  todayQueue.status === "finished"
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    : todayQueue.status === "in-progress"
+                                      ? "bg-blue-50 text-blue-800 border-blue-200"
+                                      : "bg-amber-50 text-amber-800 border-amber-200"
+                                }`}
+                              >
+                                {todayQueue.status === "finished"
+                                  ? "Selesai"
+                                  : todayQueue.status === "in-progress"
+                                    ? "Diperiksa"
+                                    : "Menunggu"}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-teal-100 text-teal-800 border border-teal-200">
-                                {lastVisitRel.text}
-                              </span>
-                              {p.totalVisitsCount !== undefined &&
-                                p.totalVisitsCount > 0 && (
+
+                            {/* Clean Horizontal Multi-Visit Selector (Never wraps or expands card vertically) */}
+                            {patientTodayQueues.length > 1 && (
+                              <div className="flex items-center gap-2 pt-1.5 border-t border-slate-100">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
+                                  Kunjungan ({patientTodayQueues.length}):
+                                </span>
+                                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 flex-1">
+                                  {patientTodayQueues.map((q) => {
+                                    const isSelected = q.id === todayQueue.id;
+                                    return (
+                                      <button
+                                        key={q.id}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          onSelectPatient(
+                                            p,
+                                            undefined,
+                                            q,
+                                            q.department,
+                                          );
+                                          toast.info(
+                                            `Beralih ke antrean ${q.queueNumber} (${q.department})`,
+                                          );
+                                        }}
+                                        className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all shrink-0 cursor-pointer flex items-center gap-1 whitespace-nowrap ${
+                                          isSelected
+                                            ? "bg-teal-700 text-white border-teal-800 shadow-2xs"
+                                            : "bg-white text-slate-700 border-slate-200 hover:bg-teal-50 hover:border-teal-300"
+                                        }`}
+                                        title={`Poli: ${q.department} • Dokter: ${q.doctor} • Status: ${q.status}`}
+                                      >
+                                        <span className="font-mono">{q.queueNumber}</span>
+                                        <span className="opacity-80 font-normal">
+                                          ({q.department.replace("Poli ", "")})
+                                        </span>
+                                        {isSelected && (
+                                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 ml-0.5" />
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : p.lastVisitDate ? (
+                          // Case B: Ada Riwayat Kunjungan Terdahulu
+                          <div className="p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/90 space-y-1.5">
+                            <div className="flex items-center justify-between gap-1 text-xs">
+                              <div className="flex items-center gap-1.5 text-slate-800 font-bold text-[11px] min-w-0">
+                                <Clock className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                                <span className="truncate">
+                                  Kunjungan Terakhir: {formatVisitDateIndo(p.lastVisitDate)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-teal-100 text-teal-800 border border-teal-200">
+                                  {lastVisitRel.text}
+                                </span>
+                                {p.totalVisitsCount !== undefined && p.totalVisitsCount > 0 && (
                                   <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-slate-200/80 text-slate-700">
                                     {p.totalVisitsCount}x Kunjungan
                                   </span>
                                 )}
+                              </div>
                             </div>
-                          </div>
 
-                          <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600">
-                            <div className="flex items-center gap-1 truncate">
-                              <Stethoscope className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                              <span className="font-semibold text-slate-800 truncate">
-                                {p.lastVisitDepartment || "Poli Penyakit Dalam"}
-                              </span>
-                              <span className="text-slate-400">•</span>
-                              <span className="truncate text-slate-600">
-                                {p.lastVisitDoctor || "dr. Rian Pratama, Sp.PD"}
-                              </span>
+                            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600">
+                              <div className="flex items-center gap-1 truncate">
+                                <Stethoscope className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                                <span className="font-semibold text-slate-800 truncate">
+                                  {p.lastVisitDepartment || "Poli Penyakit Dalam"}
+                                </span>
+                                <span className="text-slate-400">•</span>
+                                <span className="truncate text-slate-600">
+                                  {p.lastVisitDoctor || "dr. Rian Pratama, Sp.PD"}
+                                </span>
+                              </div>
                             </div>
-                          </div>
 
-                          {p.lastVisitDiagnosis && (
-                            <div className="text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200/80 truncate">
-                              <span className="font-semibold text-slate-700">
-                                Diagnosis:
-                              </span>{" "}
-                              <span>{p.lastVisitDiagnosis}</span>
+                            {p.lastVisitDiagnosis && (
+                              <div className="text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200/80 truncate">
+                                <span className="font-semibold text-slate-700">Diagnosis:</span>{" "}
+                                <span>{p.lastVisitDiagnosis}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          // Case C: Pasien Baru Terdaftar (0 Kunjungan)
+                          <div className="p-2.5 rounded-xl bg-slate-50/70 border border-dashed border-slate-200 flex items-center justify-between text-xs text-slate-500">
+                            <div className="flex items-center gap-1.5 text-[11px]">
+                              <UserCheck className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                              <span>Belum Ada Riwayat Kunjungan (Pasien Baru MPI)</span>
                             </div>
-                          )}
-                        </div>
-                      ) : (
-                        // Case C: Pasien Baru Terdaftar (0 Kunjungan)
-                        <div className="p-2.5 rounded-xl bg-slate-50/70 border border-dashed border-slate-200 flex items-center justify-between text-xs text-slate-500">
-                          <div className="flex items-center gap-1.5 text-[11px]">
-                            <UserCheck className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span>
-                              Belum Ada Riwayat Kunjungan (Pasien Baru MPI)
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                              Kunjungan Perdana
                             </span>
                           </div>
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                            Kunjungan Perdana
-                          </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
 
-                    {/* Row 4: Action Footer */}
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-                      <span className="text-[11px] text-teal-700 font-semibold flex items-center gap-1 font-mono">
+                    {/* 4. Action Footer */}
+                    <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-100 mt-1">
+                      <span className="text-[11px] text-slate-400 hover:text-slate-600 font-medium flex items-center gap-1 font-mono transition-colors" title={`ID Sistem: ${p.id}`}>
                         <CheckCircle2 className="h-3.5 w-3.5 text-teal-600 shrink-0" />
                         <span className="truncate max-w-[120px]">{p.id}</span>
                       </span>

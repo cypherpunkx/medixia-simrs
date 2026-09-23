@@ -469,9 +469,7 @@ async function seedDatabase() {
   await sql`
     INSERT INTO facilities (id, name, type, satusehat_org_id, address, phone, license_number, is_active)
     VALUES
-      ('fac-rsud-01', 'RS Umum Daerah Sehat Sejahtera', 'rumah_sakit', 'b15a7ae7-f366-4a84-8385-0b8196c05002', 'Jl. Kesehatan Medika No. 45, Jakarta Pusat', '021-5550199', '440/012/Dinkes/RS-B/2024', true),
-      ('fac-klinik-01', 'Klinik Pratama Medixia Sehat', 'klinik_pratama', 'b15a7ae7-f366-4a84-8385-0b8196c05002', 'Jl. Melati Raya No. 12, Jakarta Selatan', '021-7890123', '503/008/Klinik-Pratama/DPMPTSP/2025', true),
-      ('fac-klinik-02', 'Klinik Pratama Husada Mandiri', 'klinik_pratama', 'b15a7ae7-f366-4a84-8385-0b8196c05002', 'Jl. Kenanga Baru No. 88, Surabaya Timur', '031-8921100', '503/021/Klinik-Husada/DPMPTSP/2026', true)
+      ('fac-rsud-01', 'RS Umum Daerah Sehat Sejahtera', 'rumah_sakit', 'b15a7ae7-f366-4a84-8385-0b8196c05002', 'Jl. Kesehatan Medika No. 45, Jakarta Pusat', '021-5550199', '440/012/Dinkes/RS-B/2024', true)
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       type = EXCLUDED.type,
@@ -484,24 +482,21 @@ async function seedDatabase() {
 
   // Seed Departments
   await sql`
-    INSERT INTO departments (id, facility_id, name, room, quota, default_doctor_name, is_active)
+    INSERT INTO departments (id, facility_id, name, room, quota, default_doctor_name, code, queue_prefix, is_active)
     VALUES
-      ('dept-rs-01', 'fac-rsud-01', 'Poli Penyakit Dalam', 'Ruang 204 (Lt. 2)', 30, 'dr. Rian Pratama, Sp.PD', true),
-      ('dept-rs-02', 'fac-rsud-01', 'Poli Umum', 'Ruang 102 (Lt. 1)', 35, 'dr. Amanda Putri, M.Biomed', true),
-      ('dept-rs-03', 'fac-rsud-01', 'Poli Anak (Pediatri)', 'Ruang 105 (Lt. 1)', 20, 'dr. Maya Anggraini, Sp.A', true),
-      ('dept-rs-04', 'fac-rsud-01', 'Poli Gigi & Mulut', 'Ruang 201 (Lt. 2)', 20, 'drg. Kevin Tanuwidjaja', true),
-      ('dept-rs-05', 'fac-rsud-01', 'Poli Jantung & Pembuluh Darah', 'Ruang 208 (Lt. 2)', 15, 'dr. Rian Hidayat, Sp.JP', true),
-      ('dept-rs-06', 'fac-rsud-01', 'Poli Mata', 'Ruang 210 (Lt. 2)', 20, 'dr. Nadia Putri, Sp.M', true),
-      ('dept-kl-01', 'fac-klinik-01', 'Poli Umum', 'Ruang Periksa 1', 40, 'dr. Sarah Wijaya, M.Kes', true),
-      ('dept-kl-02', 'fac-klinik-01', 'Poli Gigi & Mulut', 'Ruang Dental 2', 25, 'drg. Kevin Tanuwidjaja', true),
-      ('dept-kl-03', 'fac-klinik-01', 'Poli KIA / KB', 'Ruang Bidan 3', 25, 'Bdn. Nurhaliza, S.Tr.Keb', true),
-      ('dept-hs-01', 'fac-klinik-02', 'Poli Umum', 'Ruang Konsultasi A', 30, NULL, true),
-      ('dept-hs-02', 'fac-klinik-02', 'Poli Gigi & Mulut', 'Ruang Tindakan Gigi', 20, NULL, true)
+      ('dept-rs-01', 'fac-rsud-01', 'Poli Penyakit Dalam', 'Ruang 204 (Lt. 2)', 35, 'dr. Rian Pratama, Sp.PD', 'INT', 'A', true),
+      ('dept-rs-02', 'fac-rsud-01', 'Poli Umum', 'Ruang 101 (Lt. 1)', 50, 'dr. Amanda Putri, M.Biomed', 'UMU', 'B', true),
+      ('dept-rs-03', 'fac-rsud-01', 'Poli Anak', 'Ruang 208 (Lt. 2)', 30, 'dr. Sarah Amanda, Sp.A', 'ANA', 'C', true),
+      ('dept-rs-04', 'fac-rsud-01', 'Poli Gigi & Mulut', 'Ruang 105 (Lt. 1)', 25, 'drg. Hendra Wijaya', 'GIG', 'D', true),
+      ('dept-rs-05', 'fac-rsud-01', 'Poli Jantung & Pembuluh Darah', 'Ruang 301 (Lt. 3)', 20, 'dr. Maya Kartika, Sp.JP', 'JAN', 'E', true),
+      ('dept-rs-06', 'fac-rsud-01', 'Poli Mata', 'Ruang 107 (Lt. 1)', 25, 'dr. Budi Setiawan, Sp.M', 'MAT', 'F', true)
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       room = EXCLUDED.room,
       quota = EXCLUDED.quota,
       default_doctor_name = EXCLUDED.default_doctor_name,
+      code = EXCLUDED.code,
+      queue_prefix = EXCLUDED.queue_prefix,
       is_active = EXCLUDED.is_active;
   `;
 

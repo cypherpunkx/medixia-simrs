@@ -128,9 +128,11 @@ export function EhrRightPanel({
     }
   };
 
-  const isSynced = encounter?.syncStatus === "synced";
-  const isPartialFailed = encounter?.syncStatus === "partial_failed";
+  const isFinished = encounter?.encounterStatus === "finished";
+  const isSynced = isFinished && encounter?.syncStatus === "synced";
+  const isPartialFailed = isFinished && encounter?.syncStatus === "partial_failed";
   const isOptOut = encounter?.consentStatus === "opt-out";
+  const isPending = isFinished && encounter?.syncStatus === "pending";
 
   const totalBreakdown = encounter?.syncBreakdown || [];
   const totalResources = totalBreakdown.length > 0 ? totalBreakdown.length : 18;
@@ -287,8 +289,8 @@ export function EhrRightPanel({
 
       {/* 4. SATUSEHAT Cloud Integration Summary (State-Aware & Clear Patient Context) */}
       <div className="ehr-card p-4 space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 shrink-0 whitespace-nowrap">
+        <div className="flex items-center justify-between gap-1.5 min-w-0">
+          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 shrink-0">
             <ShieldCheck className="h-4 w-4 text-teal-600 shrink-0" />
             <span>Integrasi SATUSEHAT</span>
           </div>
@@ -300,10 +302,13 @@ export function EhrRightPanel({
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                 : isPartialFailed
                 ? "bg-rose-50 text-rose-700 border-rose-300"
+                : isPending
+                ? "bg-amber-50 text-amber-800 border-amber-300"
                 : isOptOut
                 ? "bg-slate-100 text-slate-700 border-slate-200"
                 : "bg-blue-50 text-blue-700 border-blue-200"
             }`}
+            title={isPending ? "Diproses di latar belakang (Antrean Outbox Cloud)" : undefined}
           >
             <span className="relative flex h-1.5 w-1.5 shrink-0">
               {hasSelectedPatient && isSynced && (
@@ -311,6 +316,9 @@ export function EhrRightPanel({
               )}
               {hasSelectedPatient && isPartialFailed && (
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+              )}
+              {hasSelectedPatient && isPending && (
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
               )}
               <span
                 className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
@@ -320,6 +328,8 @@ export function EhrRightPanel({
                     ? "bg-emerald-500"
                     : isPartialFailed
                     ? "bg-rose-500"
+                    : isPending
+                    ? "bg-amber-500"
                     : isOptOut
                     ? "bg-slate-400"
                     : "bg-blue-500"
@@ -333,6 +343,8 @@ export function EhrRightPanel({
                 ? "Tersinkron 100%"
                 : isPartialFailed
                 ? "Kirim Ulang"
+                : isPending
+                ? "Antrean Cloud"
                 : isOptOut
                 ? "Opt-Out"
                 : "Konsultasi Aktif"}
@@ -389,6 +401,8 @@ export function EhrRightPanel({
                   ? "text-rose-700"
                   : isSynced
                   ? "text-emerald-700"
+                  : isPending
+                  ? "text-amber-700"
                   : "text-blue-700"
               }`}
             >
@@ -398,6 +412,8 @@ export function EhrRightPanel({
                 ? `${syncedCategoriesCount}/${totalCategoriesCount} Domain (${syncedResources}/${totalResources} Resource)`
                 : isSynced
                 ? `${totalCategoriesCount}/${totalCategoriesCount} Domain Selesai`
+                : isPending
+                ? `Menunggu Transmisi Cloud (0/${totalCategoriesCount} Domain)`
                 : isOptOut
                 ? "Disimpan Internal"
                 : `${totalCategoriesCount} Domain Disiapkan`}
@@ -411,6 +427,8 @@ export function EhrRightPanel({
               ? "Seluruh resume medis dan intervensi telah tervalidasi di SATUSEHAT Kemenkes."
               : isPartialFailed
               ? `${failedResources} resource tertunda. Sistem akan mengulang pengiriman otomatis via Outbox Queue.`
+              : isPending
+              ? "Resume medis telah tersimpan di faskes. Transmisi ke cloud SATUSEHAT Kemenkes sedang diproses di latar belakang."
               : isOptOut
               ? "Pasien memilih tidak membagikan data ke platform nasional. Rekam medis tersimpan aman di sistem faskes."
               : "Data pemeriksaan otomatis dikonversi ke standar Kemenkes saat tombol Selesaikan ditekan."}
@@ -421,6 +439,8 @@ export function EhrRightPanel({
             <span className="font-bold text-slate-700 truncate max-w-[140px]">
               {hasSelectedPatient && encounter?.satusehatEncounterId
                 ? encounter.satusehatEncounterId
+                : isPending
+                ? "Menunggu Respon Cloud..."
                 : hasSelectedPatient
                 ? "Terbit Saat Finalisasi"
                 : "-"}

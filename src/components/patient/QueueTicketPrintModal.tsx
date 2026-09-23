@@ -40,70 +40,97 @@ export function QueueTicketPrintModal({
   const { facility, user } = useAuth();
   const printAreaRef = useRef<HTMLDivElement>(null);
 
-  if (!patient) return null;
+  // Cache last active props to prevent visual flicker during Radix UI 200ms exit animation
+  const cachedDataRef = useRef<{
+    patient: PatientProfile | null | undefined;
+    encounter: OutpatientEncounter | null | undefined;
+    queueItem: ClinicQueuePatientItem | null | undefined;
+    queueNumber: string | undefined;
+  }>({
+    patient,
+    encounter,
+    queueItem,
+    queueNumber,
+  });
+
+  if (isOpen && (patient || queueItem || encounter)) {
+    cachedDataRef.current = {
+      patient: patient ?? cachedDataRef.current.patient,
+      encounter: encounter ?? cachedDataRef.current.encounter,
+      queueItem: queueItem ?? cachedDataRef.current.queueItem,
+      queueNumber: queueNumber ?? cachedDataRef.current.queueNumber,
+    };
+  }
+
+  const activePatient = isOpen ? (patient || cachedDataRef.current.patient) : (cachedDataRef.current.patient || patient);
+  const activeEncounter = isOpen ? (encounter || cachedDataRef.current.encounter) : (cachedDataRef.current.encounter || encounter);
+  const activeQueueItem = isOpen ? (queueItem || cachedDataRef.current.queueItem) : (cachedDataRef.current.queueItem || queueItem);
+  const activeQueueNumber = isOpen ? (queueNumber || cachedDataRef.current.queueNumber) : (cachedDataRef.current.queueNumber || queueNumber);
+
+  if (!activePatient) return null;
 
   // Prioritize explicit queueItem, then matching by queueNumber, encounter, or active waiting queue
   const matchingQueueItem =
-    queueItem ||
-    (queueNumber
-      ? worklist?.find((w) => w.queueNumber === queueNumber)
+    activeQueueItem ||
+    (activeQueueNumber
+      ? worklist?.find((w) => w.queueNumber === activeQueueNumber)
       : null) ||
-    (encounter?.queueNumber
-      ? worklist?.find((w) => w.queueNumber === encounter.queueNumber)
+    (activeEncounter?.queueNumber
+      ? worklist?.find((w) => w.queueNumber === activeEncounter.queueNumber)
       : null) ||
-    (encounter?.clinicDepartment
+    (activeEncounter?.clinicDepartment
       ? worklist?.find(
           (w) =>
-            (w.patient.id === patient.id || w.patient.mrn === patient.mrn) &&
-            w.department === encounter.clinicDepartment
+            (w.patient.id === activePatient.id || w.patient.mrn === activePatient.mrn) &&
+            w.department === activeEncounter.clinicDepartment
         )
       : null) ||
     // Active waiting/in-progress queue
     worklist?.find(
       (w) =>
-        (w.patient.id === patient.id || w.patient.mrn === patient.mrn) &&
+        (w.patient.id === activePatient.id || w.patient.mrn === activePatient.mrn) &&
         w.status !== "finished"
     ) ||
     // Fallback: most recent item in worklist for this patient
     [...(worklist || [])]
       .reverse()
-      .find((w) => w.patient.id === patient.id || w.patient.mrn === patient.mrn);
+      .find((w) => w.patient.id === activePatient.id || w.patient.mrn === activePatient.mrn);
 
   const effectiveRegistrationNumber =
-    queueItem?.registrationNumber ||
+    activeQueueItem?.registrationNumber ||
     matchingQueueItem?.registrationNumber ||
-    encounter?.registrationNumber ||
+    activeEncounter?.registrationNumber ||
     `RJ-${getLocalCompactDate()}-0001`;
 
   const effectiveQueueNumber =
-    queueNumber ||
-    queueItem?.queueNumber ||
+    activeQueueNumber ||
+    activeQueueItem?.queueNumber ||
     matchingQueueItem?.queueNumber ||
-    encounter?.queueNumber ||
+    activeEncounter?.queueNumber ||
     "A-001";
 
   const effectiveDepartment =
-    queueItem?.department ||
+    activeQueueItem?.department ||
     matchingQueueItem?.department ||
-    encounter?.clinicDepartment ||
+    activeEncounter?.clinicDepartment ||
     "Poliklinik Rawat Jalan";
 
   const effectiveDoctor =
-    queueItem?.doctor ||
+    activeQueueItem?.doctor ||
     matchingQueueItem?.doctor ||
-    encounter?.doctorName ||
+    activeEncounter?.doctorName ||
     (user?.role === "doctor" ? user.name : null) ||
     "Dokter DPJP";
 
   const effectiveRoom =
-    queueItem?.room ||
+    activeQueueItem?.room ||
     matchingQueueItem?.room ||
     "Ruang Periksa";
 
   const handlePrint = () => {
     if (printAreaRef.current) {
       printHtmlElement(printAreaRef.current, {
-        title: `Karcis-Antrean-${effectiveQueueNumber}-${patient.name.replace(/\s+/g, "_")}`,
+        title: `Karcis-Antrean-${effectiveQueueNumber}-${activePatient.name.replace(/\s+/g, "_")}`,
         pageType: "thermal",
       });
     }
@@ -138,7 +165,7 @@ export function QueueTicketPrintModal({
     minute: "2-digit",
   });
 
-  const activeHospitalName = facility?.name || encounter?.hospitalName || "RS Umum Daerah Sehat Sejahtera";
+  const activeHospitalName = facility?.name || activeEncounter?.hospitalName || "RS Umum Daerah Sehat Sejahtera";
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -198,11 +225,11 @@ export function QueueTicketPrintModal({
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 text-[11px]">Nama Pasien:</span>
-              <span className="font-bold text-slate-900">{patient.name}</span>
+              <span className="font-bold text-slate-900">{activePatient.name}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 text-[11px]">No. RM:</span>
-              <span className="font-bold font-mono text-slate-900">{patient.mrn.replace(/^RM-?/i, "")}</span>
+              <span className="font-bold font-mono text-slate-900">{activePatient.mrn.replace(/^RM-?/i, "")}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500 text-[11px]">DPJP Dokter:</span>
@@ -221,8 +248,8 @@ export function QueueTicketPrintModal({
               <span className="font-semibold text-teal-700">
                 {matchingQueueItem?.paymentPayer ||
                   (matchingQueueItem as any)?.patient?.paymentPayer ||
-                  queueItem?.paymentPayer ||
-                  patient.paymentPayer ||
+                  activeQueueItem?.paymentPayer ||
+                  activePatient.paymentPayer ||
                   "Pasien Umum / Mandiri"}
               </span>
             </div>
@@ -246,7 +273,7 @@ export function QueueTicketPrintModal({
             </span>
             <div className="flex items-center gap-1 text-[9px] text-emerald-700 font-medium">
               <ShieldCheck className="h-3 w-3" />
-              <span>IHS ID: {patient.id}</span>
+              <span>IHS ID: {activePatient.id}</span>
             </div>
           </div>
 

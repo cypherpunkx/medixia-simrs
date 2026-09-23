@@ -1319,7 +1319,13 @@ export function OutpatientEntryForm({
     saveAsLocalPending: boolean = false
   ) => {
     setIsSubmitting(true);
-    setLastSubmittedEncounter(encounterToSave);
+    const inFlightEncounter: OutpatientEncounter = {
+      ...encounterToSave,
+      syncStatus: encounterToSave.consentStatus === "opt-out" ? "draft" : "pending",
+      satusehatEncounterId:
+        encounterToSave.consentStatus === "opt-out" ? undefined : encounterToSave.satusehatEncounterId,
+    };
+    setLastSubmittedEncounter(inFlightEncounter);
     setShowBridgingWarningModal(false);
 
     try {
@@ -1550,8 +1556,7 @@ export function OutpatientEntryForm({
       satusehatEncounterId:
         isOptOut || !isBridgingConnected
           ? undefined
-          : activeEncounter?.satusehatEncounterId ||
-            `ss-enc-${Math.random().toString(36).substring(2, 10)}`,
+          : activeEncounter?.satusehatEncounterId,
       visitDate: activeEncounter?.visitDate || new Date().toISOString(),
       clinicDepartment: department,
       doctorName: doctorName || (user?.role === "doctor" ? user.name : undefined) || activeEncounter?.doctorName || "",
@@ -1625,8 +1630,8 @@ export function OutpatientEntryForm({
       registrationNumber: activeEncounter?.registrationNumber,
       patientId: patient?.id || activeEncounter?.patientId || "",
       encounterStatus: "finished",
-      syncStatus: isOptOut ? "draft" : isBridgingConnected ? "synced" : "pending",
-      syncedAt: isOptOut || !isBridgingConnected ? undefined : new Date().toISOString(),
+      syncStatus: isOptOut ? "draft" : "pending",
+      syncedAt: isOptOut ? undefined : activeEncounter?.syncedAt,
       syncBreakdown: activeEncounter?.syncBreakdown,
       isLocked: activeEncounter?.isLocked || false,
       addendums: activeEncounter?.addendums || [],
@@ -3745,9 +3750,12 @@ export function OutpatientEntryForm({
         onContinueInBackground={() => {
           setIsSubmitting(false);
           if (lastSubmittedEncounter) {
-            onEncounterCreated(lastSubmittedEncounter);
+            onEncounterCreated({
+              ...lastSubmittedEncounter,
+              syncStatus: lastSubmittedEncounter.consentStatus === "opt-out" ? "draft" : "pending",
+            });
           }
-          toast.info("Rekam medis berhasil disimpan", {
+          toast.info("Rekam medis disimpan ke antrean lokal", {
             description: "Proses sinkronisasi SATUSEHAT tetap dilanjutkan di latar belakang.",
             duration: 5000,
           });

@@ -962,7 +962,11 @@ export default function HomePage() {
                     prevEnc.id.includes("-DRAFT"))
               )
             ) {
-              merged.push(prevEnc);
+              if (prevEnc.encounterStatus === "arrived" || prevEnc.encounterStatus === "in-progress") {
+                merged.unshift(prevEnc);
+              } else {
+                merged.push(prevEnc);
+              }
             }
           }
         });
@@ -1058,17 +1062,28 @@ export default function HomePage() {
       }
 
       if (!targetEncId) {
-        const activeEnc =
-          patientEncounters.find(
-            (e) => e.encounterStatus === "in-progress" || e.encounterStatus === "arrived"
-          ) ||
-          localMatch.find(
-            (e) => e.encounterStatus === "in-progress" || e.encounterStatus === "arrived"
-          );
-        if (activeEnc) {
-          targetEncId = activeEnc.id;
+        // Prioritaskan encounter yang saat ini sedang aktif dipilih di UI jika masih in-progress atau arrived
+        const currentActive = encounters.find(
+          (e) =>
+            e.id === selectedEncounterId &&
+            e.patientId === selectedPat.id &&
+            (e.encounterStatus === "in-progress" || e.encounterStatus === "arrived")
+        );
+        if (currentActive) {
+          targetEncId = currentActive.id;
         } else {
-          targetEncId = patientEncounters[0]?.id || localMatch[0]?.id;
+          const activeEnc =
+            patientEncounters.find(
+              (e) => e.encounterStatus === "in-progress" || e.encounterStatus === "arrived"
+            ) ||
+            localMatch.find(
+              (e) => e.encounterStatus === "in-progress" || e.encounterStatus === "arrived"
+            );
+          if (activeEnc) {
+            targetEncId = activeEnc.id;
+          } else {
+            targetEncId = patientEncounters[0]?.id || localMatch[0]?.id;
+          }
         }
       }
 
@@ -1088,7 +1103,10 @@ export default function HomePage() {
   };
 
   // Handler saat pasien baru didaftarkan ke antrean poliklinik di loket (Status: Menunggu / Arrived)
-  const handleEncounterRegistered = (newEncounter: OutpatientEncounter) => {
+  const handleEncounterRegistered = (newEncounter: OutpatientEncounter, updatedPatient?: PatientProfile) => {
+    if (updatedPatient) {
+      setPatient(updatedPatient);
+    }
     setEncounters((prev) => [
       newEncounter,
       ...prev.filter(
@@ -1102,6 +1120,9 @@ export default function HomePage() {
     if (typeof window !== "undefined") {
       try {
         sessionStorage.setItem("simrs_active_encounter_id", newEncounter.id);
+        if (newEncounter.patientId) {
+          sessionStorage.setItem("simrs_active_patient_id", newEncounter.patientId);
+        }
       } catch {}
     }
   };
@@ -1649,7 +1670,10 @@ export default function HomePage() {
         isOpen={isQueueTicketOpen}
         onOpenChange={(open) => {
           setIsQueueTicketOpen(open);
-          if (!open) setTicketQueueItem(null);
+          if (!open) {
+            // Berikan jeda agar animasi keluar (exit transition 200ms) Radix UI tuntas sebelum state dibersihkan
+            setTimeout(() => setTicketQueueItem(null), 300);
+          }
         }}
         patient={patient}
         encounter={selectedEncounter}

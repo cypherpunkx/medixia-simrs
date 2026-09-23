@@ -19,6 +19,9 @@ import {
   Stethoscope,
   Shield,
   Users,
+  AlertTriangle,
+  HeartPulse,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -126,9 +129,11 @@ export function EhrHeader({
     Array<{
       id: string;
       type: "lab" | "queue" | "sync";
+      priority?: "cito" | "geriatric" | "normal";
       title: string;
       desc: string;
       time: string;
+      timestamp?: number;
       read: boolean;
       patient?: PatientProfile;
       queueItem?: ClinicQueuePatientItem;
@@ -144,49 +149,89 @@ export function EhrHeader({
       return isNaN(bYear) ? 0 : cYear - bYear;
     };
 
+    const getItemTimestamp = (item: ClinicQueuePatientItem, fallbackIndex: number) => {
+      if (item.arrivalTimestamp && item.arrivalTimestamp > 0) {
+        return item.arrivalTimestamp;
+      }
+      if (item.arrivalTime) {
+        const match = item.arrivalTime.match(/(\d{1,2})[.:](\d{2})/);
+        if (match) {
+          const d = new Date();
+          d.setHours(parseInt(match[1], 10), parseInt(match[2], 10), 0, 0);
+          return d.getTime();
+        }
+      }
+      return Date.now() - (worklist.length - fallbackIndex) * 60000;
+    };
+
     const list: Array<{
       id: string;
       type: "lab" | "queue" | "sync";
+      priority?: "cito" | "geriatric" | "normal";
       title: string;
       desc: string;
       time: string;
+      timestamp?: number;
       read: boolean;
       patient?: PatientProfile;
       queueItem?: ClinicQueuePatientItem;
       targetModule?: EhrModule;
     }> = [];
 
-    // 1. Geriatric / High-priority patients
-    const geriatric = worklist.filter(
+    // 1. CITO / Emergency / Urgent patients (Prioritas Tertinggi Gawat Darurat)
+    const citoPatients = worklist.filter(
       (w) =>
-        w.triagePriority === "geriatric" || getAge(w.patient.birthDate) >= 60,
+        w.triagePriority === "urgent" ||
+        (w.chiefComplaint && /\bcito\b/i.test(w.chiefComplaint)),
     );
-    geriatric.forEach((g, idx) => {
-      const age = getAge(g.patient.birthDate);
-      const notifId = `notif-geriatric-${g.id || idx}`;
+    citoPatients.forEach((u, idx) => {
+      const notifId = `notif-cito-${u.id || idx}`;
+      const isFinished = u.status === "finished";
+      const isInProgress = u.status === "in-progress";
+
       list.push({
         id: notifId,
         type: "queue",
-        title: "Pasien Prioritas Geriatri",
-        desc: `${g.patient.name} (${age > 0 ? `${age} thn, ` : ""}No: ${g.queueNumber}) terdaftar di ${g.department}.`,
-        time: "Prioritas",
+        priority: isFinished ? "normal" : "cito",
+        title: isFinished
+          ? `Pasien CITO Selesai: ${u.queueNumber} (${u.department})`
+          : isInProgress
+            ? `Pasien CITO Sedang Ditangani: ${u.queueNumber} (${u.department})`
+            : `Pasien CITO: ${u.queueNumber} (${u.department})`,
+        desc: isFinished
+          ? `${u.patient.name} telah selesai penanganan klinis & rekam medis di ${u.department}.`
+          : isInProgress
+            ? `${u.patient.name} sedang dalam penanganan klinis DPJP di ${u.department}.`
+            : `${u.patient.name} membutuhkan penanganan segera di ${u.department}. Keluhan: ${u.chiefComplaint || "Kondisi Gawat Darurat CITO"}.`,
+        time: isFinished ? "Selesai" : isInProgress ? "Diperiksa" : "CITO",
+        timestamp: isFinished
+          ? getItemTimestamp(u, idx)
+          : (u.arrivalTimestamp || Date.now()) + 50000000, // Hanya CITO aktif yang diprioritaskan di paling atas
         read: readNotifIds.has(notifId),
-        patient: g.patient,
-        queueItem: g,
-        targetModule: g.status === "finished" ? "resume" : "entry",
+        patient: u.patient,
+        queueItem: u,
+        targetModule: isFinished ? "resume" : "entry",
       });
     });
 
-    // 2. In-progress / consultation patients
-    const inProgress = worklist.filter((w) => w.status === "in-progress");
+    // 2. In-progress / consultation patients (Aktif diperiksa dokter, non-CITO)
+    const inProgress = worklist.filter(
+      (w) =>
+        w.status === "in-progress" &&
+        w.triagePriority !== "urgent" &&
+        !(w.chiefComplaint && /\bcito\b/i.test(w.chiefComplaint)),
+    );
     inProgress.forEach((c, idx) => {
       const notifId = `notif-consult-${c.id || idx}`;
+      const isGeriatric = c.triagePriority === "geriatric" || getAge(c.patient.birthDate) >= 60;
       list.push({
         id: notifId,
         type: "queue",
+        priority: "normal",
         title: "Konsultasi Sedang Berlangsung",
-        desc: `${c.patient.name} (${c.queueNumber}) sedang dalam pemeriksaan DPJP di ${c.department}.`,
+        desc: `${c.patient.name} (${c.queueNumber}${isGeriatric ? " • Geriatri" : ""}) sedang dalam pemeriksaan DPJP di ${c.department}.`,
         time: "Diperiksa",
+        timestamp: getItemTimestamp(c, idx) + 1000,
         read: readNotifIds.has(notifId),
         patient: c.patient,
         queueItem: c,
@@ -194,18 +239,51 @@ export function EhrHeader({
       });
     });
 
-    // 3. Arrived / waiting queue patients
+    // 3. Geriatric / High-priority patients yang sedang menunggu (non-CITO)
+    const geriatric = worklist.filter(
+      (w) =>
+        (w.triagePriority === "geriatric" || getAge(w.patient.birthDate) >= 60) &&
+        w.status === "arrived" &&
+        w.triagePriority !== "urgent" &&
+        !(w.chiefComplaint && /\bcito\b/i.test(w.chiefComplaint)),
+    );
+    geriatric.forEach((g, idx) => {
+      const age = getAge(g.patient.birthDate);
+      const notifId = `notif-geriatric-${g.id || idx}`;
+      list.push({
+        id: notifId,
+        type: "queue",
+        priority: "geriatric",
+        title: "Pasien Prioritas Geriatri",
+        desc: `${g.patient.name} (${age > 0 ? `${age} thn, ` : ""}No: ${g.queueNumber}) terdaftar di ${g.department}.`,
+        time: "Geriatri",
+        timestamp: getItemTimestamp(g, idx),
+        read: readNotifIds.has(notifId),
+        patient: g.patient,
+        queueItem: g,
+        targetModule: "entry",
+      });
+    });
+
+    // 4. Arrived / waiting regular queue patients (non-CITO, non-Geriatri)
     const arrived = worklist.filter(
-      (w) => w.status === "arrived" && getAge(w.patient.birthDate) < 60,
+      (w) =>
+        w.status === "arrived" &&
+        getAge(w.patient.birthDate) < 60 &&
+        w.triagePriority !== "geriatric" &&
+        w.triagePriority !== "urgent" &&
+        !(w.chiefComplaint && /\bcito\b/i.test(w.chiefComplaint)),
     );
     arrived.slice(0, 5).forEach((w, idx) => {
       const notifId = `notif-waiting-${w.id || idx}`;
       list.push({
         id: notifId,
         type: "queue",
+        priority: "normal",
         title: `Antrean ${w.queueNumber} Tiba`,
         desc: `${w.patient.name} di ${w.department} (${w.chiefComplaint || "Pemeriksaan Poli"}).`,
         time: "Menunggu",
+        timestamp: getItemTimestamp(w, idx),
         read: readNotifIds.has(notifId),
         patient: w.patient,
         queueItem: w,
@@ -213,11 +291,36 @@ export function EhrHeader({
       });
     });
 
-    // 4. SATUSEHAT Gateway status
+    // 5. Finished regular patients (Pasien non-CITO yang telah selesai diperiksa)
+    const recentFinished = worklist.filter(
+      (w) =>
+        w.status === "finished" &&
+        w.triagePriority !== "urgent" &&
+        !(w.chiefComplaint && /\bcito\b/i.test(w.chiefComplaint)),
+    );
+    recentFinished.slice(0, 3).forEach((f, idx) => {
+      const notifId = `notif-finished-${f.id || idx}`;
+      list.push({
+        id: notifId,
+        type: "queue",
+        priority: "normal",
+        title: `Pemeriksaan Selesai: ${f.queueNumber} (${f.department})`,
+        desc: `${f.patient.name} telah menyelesaikan pemeriksaan & rekam medis di ${f.department}.`,
+        time: "Selesai",
+        timestamp: getItemTimestamp(f, idx),
+        read: readNotifIds.has(notifId),
+        patient: f.patient,
+        queueItem: f,
+        targetModule: "resume",
+      });
+    });
+
+    // 5. SATUSEHAT Gateway status (Sistem notifikasi di posisi bawah)
     const gatewayId = "notif-satusehat-gateway";
     list.push({
       id: gatewayId,
       type: "sync",
+      priority: "normal",
       title: isBridgingActive
         ? "Gateway SATUSEHAT Kemenkes RI"
         : "Penyimpanan Basis Data Internal",
@@ -225,7 +328,28 @@ export function EhrHeader({
         ? `Layanan interoperabilitas FHIR R4 terhubung aktif pada server ${currentEnv.toUpperCase()} Kemenkes RI.`
         : `Sistem beroperasi dalam mode penyimpanan basis data internal RS. Kredensial SATUSEHAT belum dihubungkan.`,
       time: isBridgingActive ? "Live Online" : "Internal (Offline)",
+      timestamp: 0,
       read: readNotifIds.has(gatewayId),
+    });
+
+    // Urutkan secara kronologis terbalik (Newest First) dengan CITO selalu di puncak
+    list.sort((a, b) => {
+      // 1. CITO selalu berada di prioritas paling atas
+      if (a.priority === "cito" && b.priority !== "cito") return -1;
+      if (a.priority !== "cito" && b.priority === "cito") return 1;
+
+      // 2. Berdasarkan waktu kejadian terbaru (timestamp descending)
+      const timeDiff = (b.timestamp ?? 0) - (a.timestamp ?? 0);
+      if (timeDiff !== 0) return timeDiff;
+
+      const priorityWeight = (item: typeof a) => {
+        if (item.priority === "cito") return 4;
+        if (item.time === "Diperiksa") return 3;
+        if (item.time === "Geriatri") return 2;
+        if (item.time === "Menunggu") return 1;
+        return 0;
+      };
+      return priorityWeight(b) - priorityWeight(a);
     });
 
     setNotifications(list);
@@ -538,12 +662,18 @@ export function EhrHeader({
                       >
                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
                           {/* Queue Pill */}
-                          <div className="h-8 px-2 min-w-[50px] rounded-lg bg-teal-50 border border-teal-200 text-teal-900 font-mono font-extrabold text-xs flex items-center justify-center shrink-0 whitespace-nowrap group-hover:bg-teal-600 group-hover:text-white group-hover:border-teal-600 transition-colors shadow-2xs">
+                          <div
+                            className={`h-8 px-2 min-w-[50px] rounded-lg font-mono font-extrabold text-xs flex items-center justify-center shrink-0 whitespace-nowrap transition-colors shadow-2xs ${
+                              item.triagePriority === "urgent"
+                                ? "bg-rose-50 border border-rose-300 text-rose-900 group-hover:bg-rose-600 group-hover:text-white group-hover:border-rose-600"
+                                : "bg-teal-50 border border-teal-200 text-teal-900 group-hover:bg-teal-600 group-hover:text-white group-hover:border-teal-600"
+                            }`}
+                          >
                             {item.queueNumber}
                           </div>
 
                           <div className="min-w-0 space-y-0.5 flex-1">
-                            {/* Baris 1: Nama Pasien + Gender + Multi-Poli */}
+                            {/* Baris 1: Nama Pasien + Gender + CITO / Geriatri / Multi-Poli */}
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-bold text-xs text-slate-900 group-hover:text-teal-950 truncate max-w-[170px]">
                                 {item.patient.name}
@@ -551,6 +681,16 @@ export function EhrHeader({
                               <span className="text-[10px] text-slate-400 font-medium">
                                 ({item.patient.gender === "male" ? "L" : "P"})
                               </span>
+                              {item.triagePriority === "urgent" && (
+                                <span className="inline-flex items-center gap-1 text-[8px] bg-rose-600 text-white px-1.5 py-0.2 rounded font-black tracking-wider uppercase animate-pulse shadow-2xs">
+                                  CITO
+                                </span>
+                              )}
+                              {item.triagePriority === "geriatric" && (
+                                <span className="text-[8px] bg-purple-50 text-purple-700 border border-purple-200 px-1 py-0.2 rounded font-bold">
+                                  Geriatri
+                                </span>
+                              )}
                               {item.isSequentialMultiClinic && (
                                 <span className="text-[8px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 py-0.2 rounded font-bold">
                                   Multi-Poli
@@ -730,7 +870,7 @@ export function EhrHeader({
           >
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-rose-500 text-white font-bold text-[9px] flex items-center justify-center border-2 border-white animate-pulse">
+              <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-rose-500 text-white font-extrabold text-[9px] flex items-center justify-center border-2 border-white animate-pulse">
                 {unreadCount}
               </span>
             )}
@@ -765,82 +905,115 @@ export function EhrHeader({
                     </p>
                   </div>
                 ) : (
-                  notifications.map((notif) => (
-                    <button
-                      key={notif.id}
-                      type="button"
-                      onClick={() => handleNotificationClick(notif)}
-                      className={`w-full text-left p-3 transition-colors hover:bg-teal-50/70 flex items-start gap-2.5 cursor-pointer group select-none ${
-                        !notif.read ? "bg-teal-50/40" : "bg-white"
-                      }`}
-                    >
-                      <div
-                        className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition-transform group-hover:scale-105 ${
-                          notif.type === "lab"
-                            ? "bg-teal-100 text-teal-700"
-                            : notif.type === "queue" &&
-                                notif.time === "Diperiksa"
-                              ? "bg-blue-100 text-blue-800"
-                              : notif.type === "queue" &&
-                                  notif.time === "Prioritas"
-                                ? "bg-rose-100 text-rose-800"
-                                : notif.type === "queue"
-                                  ? "bg-amber-100 text-amber-800"
-                                  : "bg-emerald-100 text-emerald-700"
+                  notifications.map((notif) => {
+                    const isFinished = notif.time === "Selesai" || notif.queueItem?.status === "finished";
+                    const isCito = !isFinished && (notif.priority === "cito" || notif.time === "CITO");
+                    const isGeriatric = notif.time === "Geriatri";
+                    const isInProgress = notif.time === "Diperiksa";
+                    const isWaiting = notif.time === "Menunggu";
+
+                    return (
+                      <button
+                        key={notif.id}
+                        type="button"
+                        onClick={() => handleNotificationClick(notif)}
+                        className={`w-full text-left p-3 transition-colors hover:bg-teal-50/60 flex items-start gap-2.5 cursor-pointer group select-none ${
+                          !notif.read ? "bg-teal-50/40" : "bg-white"
                         }`}
                       >
-                        {notif.type === "lab" ? (
-                          <FlaskConical className="h-4 w-4" />
-                        ) : notif.type === "queue" ? (
-                          <UserCheck className="h-4 w-4" />
-                        ) : (
-                          <ShieldCheck className="h-4 w-4" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-0.5">
-                        <div className="flex items-center justify-between gap-1">
-                          <div className="flex items-center gap-1.5 truncate">
-                            <span className="font-bold text-slate-900 group-hover:text-teal-950 truncate">
-                              {notif.title}
-                            </span>
-                            {!notif.read && (
-                              <span className="h-1.5 w-1.5 rounded-full bg-teal-600 shrink-0" />
-                            )}
-                          </div>
-                          <span
-                            className={`text-[10px] font-mono px-1.5 py-0.2 rounded font-semibold shrink-0 ${
-                              notif.time === "Diperiksa"
-                                ? "bg-blue-100 text-blue-900"
-                                : notif.time === "Prioritas"
-                                  ? "bg-rose-100 text-rose-900"
-                                  : notif.time === "Menunggu"
-                                    ? "bg-amber-100 text-amber-900"
-                                    : "bg-emerald-100 text-emerald-900"
-                            }`}
-                          >
-                            {notif.time}
-                          </span>
+                        <div
+                          className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 transition-transform group-hover:scale-105 ${
+                            isFinished
+                              ? "bg-emerald-100 text-emerald-800"
+                              : isCito
+                                ? "bg-rose-100 text-rose-800"
+                                : isGeriatric
+                                  ? "bg-purple-100 text-purple-800"
+                                  : notif.type === "lab"
+                                    ? "bg-teal-100 text-teal-700"
+                                    : isInProgress
+                                      ? "bg-blue-100 text-blue-800"
+                                      : isWaiting
+                                        ? "bg-amber-100 text-amber-800"
+                                        : "bg-emerald-100 text-emerald-700"
+                          }`}
+                        >
+                          {isFinished ? (
+                            <CheckCircle2 className="h-4 w-4" />
+                          ) : isCito ? (
+                            <AlertTriangle className="h-4 w-4" />
+                          ) : isGeriatric ? (
+                            <HeartPulse className="h-4 w-4" />
+                          ) : notif.type === "lab" ? (
+                            <FlaskConical className="h-4 w-4" />
+                          ) : isInProgress ? (
+                            <Stethoscope className="h-4 w-4" />
+                          ) : isWaiting ? (
+                            <UserCheck className="h-4 w-4" />
+                          ) : (
+                            <ShieldCheck className="h-4 w-4" />
+                          )}
                         </div>
-                        <p className="text-[11px] text-slate-600 leading-relaxed line-clamp-2">
-                          {notif.desc}
-                        </p>
-                        {notif.patient && (
-                          <div className="text-[10px] text-teal-700 font-semibold pt-0.5 flex items-center gap-1 opacity-80 group-hover:opacity-100">
-                            <span>
-                              {notif.queueItem?.status === "arrived"
-                                ? "Mulai periksa pasien (SOAP)"
-                                : notif.queueItem?.status === "finished"
-                                  ? "Lihat resume medis pasien"
-                                  : "Buka formulir pemeriksaan (SOAP)"}
-                            </span>
-                            <span className="group-hover:translate-x-0.5 transition-transform">
-                              ➔
+
+                        <div className="min-w-0 flex-1 space-y-0.5">
+                          <div className="flex items-center justify-between gap-1">
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span className="font-bold text-slate-900 group-hover:text-teal-950 truncate">
+                                {notif.title}
+                              </span>
+                              {!notif.read && (
+                                <span className="h-1.5 w-1.5 rounded-full bg-teal-600 shrink-0" />
+                              )}
+                            </div>
+
+                            {/* Clean Status & Priority Badges */}
+                            <span
+                              className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                                isFinished
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                                  : isCito
+                                    ? "bg-rose-100 text-rose-800 border border-rose-200"
+                                    : isGeriatric
+                                      ? "bg-purple-100 text-purple-800 border border-purple-200"
+                                      : isInProgress
+                                        ? "bg-blue-100 text-blue-800 border border-blue-200"
+                                        : isWaiting
+                                          ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                          : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                              }`}
+                            >
+                              {notif.time}
                             </span>
                           </div>
-                        )}
-                      </div>
-                    </button>
-                  ))
+
+                          <p className="text-[11px] text-slate-600 leading-relaxed line-clamp-2">
+                            {notif.desc}
+                          </p>
+
+                          {notif.patient && (
+                            <div className="text-[10px] text-teal-700 font-semibold pt-0.5 flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                              <span>
+                                {isFinished
+                                  ? "Lihat resume medis pasien"
+                                  : isCito
+                                    ? notif.queueItem?.status === "in-progress"
+                                      ? "Buka SOAP Pasien CITO"
+                                      : "Tangani Pasien CITO (SOAP)"
+                                    : notif.queueItem?.status === "in-progress"
+                                      ? "Buka SOAP Pasien"
+                                      : notif.queueItem?.status === "arrived"
+                                        ? "Mulai periksa pasien (SOAP)"
+                                        : "Buka formulir pemeriksaan (SOAP)"}
+                              </span>
+                              <span className="group-hover:translate-x-0.5 transition-transform">
+                                ➔
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
                 )}
               </div>
             </div>
