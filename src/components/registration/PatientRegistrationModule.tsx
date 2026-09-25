@@ -43,6 +43,7 @@ import {
   Printer,
   Loader2,
   PauseCircle,
+  Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -466,19 +467,50 @@ export function PatientRegistrationModule({
     if (authDepartments && authDepartments.length > 0) {
       return authDepartments.map((d) => ({
         value: d.name,
-        label: `[${d.code || d.queuePrefix || "POLI"}] ${d.name}${d.room ? ` (${d.room})` : ""}${d.satusehatLocationId ? " • Location SATUSEHAT" : ""}`,
+        label: `[${d.code || d.queuePrefix || "POLI"}] ${d.name}`,
+        description: d.room || undefined,
+        badge: d.satusehatLocationId ? (
+          <span
+            className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200/80 px-1.5 py-0.5 rounded shadow-2xs"
+            title={`Terintegrasi SATUSEHAT Location ID: ${d.satusehatLocationId}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+            <span>SATUSEHAT</span>
+          </span>
+        ) : undefined,
       }));
     }
     return [
-      { value: "Poli Penyakit Dalam", label: "Poli Penyakit Dalam (Lt. 2)" },
-      { value: "Poli Umum", label: "Poli Umum (Lt. 1)" },
-      { value: "Poli Anak (Pediatri)", label: "Poli Anak / Pediatri (Lt. 1)" },
-      { value: "Poli Gigi & Mulut", label: "Poli Gigi & Mulut (Lt. 2)" },
+      {
+        value: "Poli Penyakit Dalam",
+        label: "[INT] Poli Penyakit Dalam",
+        description: "Ruang 204 (Lt. 2)",
+      },
+      {
+        value: "Poli Umum",
+        label: "[UMU] Poli Umum",
+        description: "Ruang 101 (Lt. 1)",
+      },
+      {
+        value: "Poli Anak (Pediatri)",
+        label: "[ANA] Poli Anak / Pediatri",
+        description: "Ruang 208 (Lt. 2)",
+      },
+      {
+        value: "Poli Gigi & Mulut",
+        label: "[GIG] Poli Gigi & Mulut",
+        description: "Ruang 105 (Lt. 1)",
+      },
       {
         value: "Poli Jantung & Pembuluh Darah",
-        label: "Poli Jantung & Pembuluh Darah (Lt. 2)",
+        label: "[JAN] Poli Jantung & Pembuluh Darah",
+        description: "Ruang 301 (Lt. 3)",
       },
-      { value: "Poli Mata", label: "Poli Mata (Lt. 2)" },
+      {
+        value: "Poli Mata",
+        label: "[MAT] Poli Mata",
+        description: "Ruang 107 (Lt. 1)",
+      },
     ];
   }, [authDepartments]);
 
@@ -514,7 +546,22 @@ export function PatientRegistrationModule({
         clinicDoctors.length > 0 ? clinicDoctors : facilityDoctors;
       return listToMap.map((d) => ({
         value: d.name,
-        label: `${d.name}${d.sip ? ` (${formatDoctorSip(d.sip)})` : ""}${d.ihsPractitionerId ? ` [IHS: ${d.ihsPractitionerId}]` : ""}${d.department ? ` — ${d.department}` : ""}`,
+        label: d.name,
+        description: [
+          d.sip ? formatDoctorSip(d.sip) : null,
+          d.department && d.department !== selectedClinic ? d.department : null,
+        ]
+          .filter(Boolean)
+          .join(" • ") || undefined,
+        badge: d.ihsPractitionerId ? (
+          <span
+            className="inline-flex items-center gap-1 text-[9px] font-mono font-bold text-teal-800 bg-teal-50 border border-teal-200/80 px-1.5 py-0.5 rounded shadow-2xs"
+            title={`IHS SATUSEHAT: ${d.ihsPractitionerId}`}
+          >
+            <span className="h-1.5 w-1.5 rounded-full bg-teal-500" />
+            <span>IHS</span>
+          </span>
+        ) : undefined,
       }));
     }
 
@@ -523,7 +570,8 @@ export function PatientRegistrationModule({
       return [
         {
           value: currentDept.defaultDoctorName,
-          label: `${currentDept.defaultDoctorName} — ${currentDept.name}`,
+          label: currentDept.defaultDoctorName,
+          description: currentDept.name,
         },
       ];
     }
@@ -1162,9 +1210,11 @@ export function PatientRegistrationModule({
         const data = await res.json();
 
         if (data.success && data.data) {
+          const babyIhs = data.data.ihsId || data.data.id;
           setIsNikVerified(true);
           setNewPatientData({
-            id: data.data.ihsId || data.data.id,
+            id: babyIhs,
+            ihsNumber: babyIhs,
             nik: "",
             name: data.data.name || `By. Ny. Ibu ${motherNikInput.slice(-4)}`,
             gender: data.data.gender || "male",
@@ -1206,9 +1256,11 @@ export function PatientRegistrationModule({
       const data = await res.json();
 
       if (data.success && data.data) {
+        const resolvedIhs = data.data.ihsId || data.data.id;
         setIsNikVerified(true);
         setNewPatientData({
-          id: data.data.ihsId || data.data.id,
+          id: resolvedIhs,
+          ihsNumber: resolvedIhs,
           nik: data.data.nik,
           name: data.data.name,
           gender: data.data.gender,
@@ -1285,10 +1337,18 @@ export function PatientRegistrationModule({
       }
     }
 
+    const resolvedPatientId = newPatientData.id || generatePrefixedId("pat_");
+    const resolvedIhs =
+      newPatientData.ihsNumber ||
+      (resolvedPatientId && !resolvedPatientId.startsWith("pat_")
+        ? resolvedPatientId
+        : undefined);
+
     const createdPatient: PatientProfile = {
-      id: newPatientData.id || generatePrefixedId("pat_"),
+      id: resolvedPatientId,
       nik: nikInput.trim(),
       mrn: generateMRN(),
+      ihsNumber: resolvedIhs,
       name: newPatientData.name.trim(),
       gender: newPatientData.gender || "male",
       birthDate: newPatientData.birthDate || "",
@@ -3777,29 +3837,38 @@ export function PatientRegistrationModule({
 
                 const lastVisitRel = formatRelativeVisit(p.lastVisitDate);
 
+                const hasIhs = Boolean(
+                  p.ihsNumber ||
+                    (p.id &&
+                      p.id.startsWith("P") &&
+                      !p.id.startsWith("pat_"))
+                );
+                const displayIhs = p.ihsNumber || (hasIhs ? p.id : null);
+
                 return (
                   <div
                     key={p.id}
-                    className={`rounded-2xl border transition-all duration-200 p-4 sm:p-5 flex flex-col justify-between gap-3 relative group cursor-pointer ${
+                    className={`rounded-2xl border transition-all duration-200 p-4 sm:p-5 flex flex-col justify-between gap-3 relative group ${
                       isCurrentActive
-                        ? "bg-teal-50/60 border-teal-500 shadow-sm ring-2 ring-teal-500/20"
-                        : "bg-white border-slate-200 hover:border-teal-400 hover:shadow-md hover:bg-teal-50/10"
+                        ? "bg-teal-50/40 border-teal-500 shadow-sm ring-1 ring-teal-500/20 cursor-default"
+                        : "bg-white border-slate-200/90 hover:border-teal-400 hover:shadow-md hover:bg-slate-50/30 cursor-pointer"
                     }`}
                     onClick={() => {
+                      if (isCurrentActive) return;
                       onSelectPatient(p, undefined, todayQueue, todayQueue?.department);
                       toast.info(
                         `Pasien ${p.name} dipilih sebagai pasien aktif${todayQueue ? ` (${todayQueue.queueNumber} - ${todayQueue.department})` : ""}.`,
                       );
                     }}
                   >
-                    <div className="space-y-3 min-w-0">
+                    <div className="space-y-2.5 min-w-0">
                       {/* 1. Header: Avatar + Patient Identity + Status Badge */}
-                      <div className="flex items-start justify-between gap-3 min-w-0">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white font-extrabold text-sm shadow-xs group-hover:bg-teal-700 transition-colors">
-                            {initials}
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white font-extrabold text-sm shadow-2xs group-hover:bg-teal-700 transition-colors">
+                          {initials}
+                          {hasIhs && (
                             <div
-                              className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white border border-slate-200 shadow-2xs flex items-center justify-center p-0.5"
+                              className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-white border border-slate-200 shadow-2xs flex items-center justify-center p-0.5"
                               title="SATUSEHAT Terverifikasi"
                             >
                               <img
@@ -3808,125 +3877,100 @@ export function PatientRegistrationModule({
                                 className="h-full w-full object-contain"
                               />
                             </div>
-                          </div>
+                          )}
+                        </div>
 
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          {/* Row 1: Name + Status Badge */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 truncate">
                               <h4 className="font-extrabold text-sm text-slate-900 group-hover:text-teal-950 truncate">
                                 {p.name}
                               </h4>
                               {p.patientStatus === "inpatient" && (
-                                <span className="bg-purple-700 text-white text-[9px] font-bold px-2 py-0.5 rounded-full shadow-2xs shrink-0">
-                                  🏥 RAWAT INAP{p.inpatientDetails?.room ? ` • ${p.inpatientDetails.room}` : ""}
+                                <span className="bg-purple-100 text-purple-800 text-[9px] font-bold px-1.5 py-0.2 rounded border border-purple-200 shrink-0">
+                                  Rawat Inap
                                 </span>
                               )}
                               {p.patientStatus === "deceased" && (
-                                <span className="bg-red-950 text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-red-700 shadow-2xs shrink-0">
-                                  ✝️ MENINGGAL
+                                <span className="bg-red-100 text-red-800 text-[9px] font-bold px-1.5 py-0.2 rounded border border-red-200 shrink-0">
+                                  Meninggal
                                 </span>
                               )}
                             </div>
 
-                            {/* Clean Demographic Subtitle */}
-                            <div className="flex items-center gap-2 text-xs text-slate-500 font-medium mt-0.5 flex-wrap">
-                              <span>{age} Thn ({p.gender === "male" ? "L" : "P"})</span>
-                              <span className="text-slate-300">•</span>
-                              <span className="font-semibold text-slate-700 font-mono text-[11px]">Gol. {p.bloodType || "-"}+</span>
-                              {p.paymentPayer && (
-                                <>
-                                  <span className="text-slate-300">•</span>
-                                  <span className="text-teal-700 font-semibold">{p.paymentPayer.split(" (")[0]}</span>
-                                </>
-                              )}
-                              {p.allergies && p.allergies.length > 0 && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200 font-semibold text-[10px]">
-                                  <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
-                                  <span className="truncate max-w-[110px]">Alergi: {p.allergies[0].split(" (")[0]}</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Top-Right: Consistent status slot */}
-                        <div className="shrink-0 flex items-center">
-                          {isCurrentActive ? (
-                            <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-teal-700 text-white shadow-xs">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 animate-pulse" />
-                              Pasien Aktif
-                            </span>
-                          ) : (
-                            <span className="text-[10px] font-mono font-semibold text-slate-400 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200/80">
-                              RM: {p.mrn}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 2. Identifier & Contact Bar */}
-                      <div className="rounded-xl bg-slate-50/80 p-2.5 border border-slate-200/70 text-xs space-y-1.5">
-                        <div className="flex items-center justify-between text-[11px] font-mono flex-wrap gap-2">
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <span>
-                              <strong className="text-slate-400 font-sans font-medium text-[10px] mr-1">No. RM:</strong>
-                              <span className="text-slate-900 font-bold">{p.mrn}</span>
-                            </span>
-                            <span className="text-slate-300">|</span>
-                            <span>
-                              <strong className="text-slate-400 font-sans font-medium text-[10px] mr-1">NIK:</strong>
-                              <span className="text-slate-700">{p.nik}</span>
-                            </span>
-                            {(p.ihsNumber || p.id?.startsWith("P-")) && (
-                              <>
-                                <span className="text-slate-300">|</span>
-                                <span
-                                  className="inline-flex items-center gap-1 font-sans text-teal-800 font-bold bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded text-[10px] shadow-2xs"
-                                  title={`Nomor IHS SATUSEHAT Pasien: ${p.ihsNumber || p.id}`}
-                                >
-                                  <img
-                                    src="/satusehat-default-logo.svg"
-                                    alt="SATUSEHAT"
-                                    className="h-2.5 w-2.5 object-contain shrink-0"
-                                  />
-                                  <span>IHS: {p.ihsNumber || p.id}</span>
-                                </span>
-                              </>
+                            {isCurrentActive && (
+                              <span className="inline-flex items-center gap-1 text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-teal-800 text-white shadow-2xs shrink-0">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                Pasien Aktif
+                              </span>
                             )}
                           </div>
 
-                          {p.satusehatConsent === "opt-out" ? (
-                            <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-300 font-semibold text-[10px]"
-                              title="Pasien Menolak Berbagi Data ke SATUSEHAT (Hanya Tersimpan Internal RS)"
-                            >
-                              🔒 Consent: Opt-Out
-                            </span>
-                          ) : (
-                            <span
-                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-semibold text-[10px]"
-                              title="Pasien Menyetujui Berbagi Data ke SATUSEHAT"
-                            >
-                              <img
-                                src="/satusehat-default-logo.svg"
-                                alt="SATUSEHAT"
-                                className="h-3 w-3 object-contain shrink-0"
-                              />
-                              <span>Consent: Opt-In</span>
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 truncate pt-1 border-t border-slate-200/50">
-                          <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
-                          <span className="truncate">{p.address || "Alamat faskes belum tercatat"}</span>
+                          {/* Row 2: Full-width demographic info (Never wraps!) */}
+                          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mt-0.5 truncate">
+                            <span className="font-mono font-bold text-slate-700 text-[11px]">RM: {p.mrn.replace(/^RM-?/i, "")}</span>
+                            <span className="text-slate-300">•</span>
+                            <span>{age} Thn ({p.gender === "male" ? "L" : "P"})</span>
+                            <span className="text-slate-300">•</span>
+                            <span className="font-semibold text-slate-700 font-mono text-[11px]">Gol. {p.bloodType || "-"}+</span>
+                            {p.paymentPayer && (
+                              <>
+                                <span className="text-slate-300">•</span>
+                                <span className="text-teal-700 font-semibold truncate">{p.paymentPayer.split(" (")[0]}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      {/* 3. Clinical Telemetry / Last Visit Section */}
+                      {/* Allergy Alert (if present) */}
+                      {p.allergies && p.allergies.length > 0 && (
+                        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50/90 border border-amber-200/80 text-amber-900 text-xs">
+                          <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                          <span className="font-semibold text-[11px] truncate">Alergi: {p.allergies.join(", ")}</span>
+                        </div>
+                      )}
+
+                      {/* 2. Identity & Interoperability Spec Grid (Spacious & Clean!) */}
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2 py-2.5 border-y border-slate-100 text-xs">
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">NIK</span>
+                          <span className="font-mono font-semibold text-slate-800 text-[11px] tracking-tight">{p.nik}</span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">IHS SATUSEHAT</span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {hasIhs ? (
+                              <div className="flex items-center gap-1 font-mono font-bold text-teal-900 text-[11px]">
+                                <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-2.5 w-2.5 object-contain shrink-0" />
+                                <span>{displayIhs}</span>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Belum Terdaftar</span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="col-span-2 flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100/70">
+                          <div className="flex items-center gap-1.5 truncate flex-1 min-w-0" title={p.address || undefined}>
+                            <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                            <span className="truncate">{p.address || "Alamat belum tercatat"}</span>
+                          </div>
+
+                          <div className="shrink-0 flex items-center gap-1 text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.2 rounded-md border border-teal-200/70">
+                            <span className="h-1.5 w-1.5 rounded-full bg-teal-500 shrink-0" />
+                            <span>{p.satusehatConsent === "opt-out" ? "Opt-Out" : "Opt-In"}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 3. Clinical Telemetry / Visit Section */}
                       <div>
                         {todayQueue ? (
                           // Case A: Pasien Memiliki Antrean Hari Ini
-                          <div className="rounded-xl border border-slate-200 bg-white p-2.5 space-y-2 shadow-2xs">
+                          <div className="rounded-xl border border-teal-200/90 bg-teal-50/50 p-2.5 space-y-2 shadow-2xs">
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className="relative flex h-2 w-2 shrink-0">
@@ -3951,12 +3995,9 @@ export function PatientRegistrationModule({
                                 </span>
                                 <div className="min-w-0">
                                   <div className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
-                                    <span className="text-slate-500 font-medium">Antrean:</span>
                                     <span className="font-mono font-extrabold text-teal-900">{todayQueue.queueNumber}</span>
-                                    <span className="truncate">({todayQueue.department})</span>
-                                  </div>
-                                  <div className="text-[10px] text-slate-500 truncate">
-                                    {todayQueue.doctor} • {todayQueue.arrivalTime}
+                                    <span className="truncate text-slate-700">({todayQueue.department})</span>
+                                    <span className="text-[10px] text-slate-400 truncate">• {todayQueue.doctor}</span>
                                   </div>
                                 </div>
                               </div>
@@ -3978,9 +4019,9 @@ export function PatientRegistrationModule({
                               </span>
                             </div>
 
-                            {/* Clean Horizontal Multi-Visit Selector (Never wraps or expands card vertically) */}
+                            {/* Clean Horizontal Multi-Visit Selector */}
                             {patientTodayQueues.length > 1 && (
-                              <div className="flex items-center gap-2 pt-1.5 border-t border-slate-100">
+                              <div className="flex items-center gap-2 pt-1.5 border-t border-teal-100">
                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0">
                                   Kunjungan ({patientTodayQueues.length}):
                                 </span>
@@ -4026,67 +4067,39 @@ export function PatientRegistrationModule({
                           </div>
                         ) : p.lastVisitDate ? (
                           // Case B: Ada Riwayat Kunjungan Terdahulu
-                          <div className="p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/90 space-y-1.5">
-                            <div className="flex items-center justify-between gap-1 text-xs">
-                              <div className="flex items-center gap-1.5 text-slate-800 font-bold text-[11px] min-w-0">
-                                <Clock className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                                <span className="truncate">
-                                  Kunjungan Terakhir: {formatVisitDateIndo(p.lastVisitDate)}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-teal-100 text-teal-800 border border-teal-200">
-                                  {lastVisitRel.text}
-                                </span>
-                                {p.totalVisitsCount !== undefined && p.totalVisitsCount > 0 && (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-md bg-slate-200/80 text-slate-700">
-                                    {p.totalVisitsCount}x Kunjungan
-                                  </span>
-                                )}
-                              </div>
+                          <div className="flex items-center justify-between gap-1 text-[11px] text-slate-500 px-0.5 py-0.5">
+                            <div className="flex items-center gap-1.5 truncate">
+                              <Clock className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span className="truncate">
+                                Terakhir: <strong className="text-slate-700">{formatVisitDateIndo(p.lastVisitDate)}</strong> • {p.lastVisitDepartment || "Poli"}
+                              </span>
                             </div>
-
-                            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600">
-                              <div className="flex items-center gap-1 truncate">
-                                <Stethoscope className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                                <span className="font-semibold text-slate-800 truncate">
-                                  {p.lastVisitDepartment || "Poli Penyakit Dalam"}
-                                </span>
-                                <span className="text-slate-400">•</span>
-                                <span className="truncate text-slate-600">
-                                  {p.lastVisitDoctor || "dr. Rian Pratama, Sp.PD"}
-                                </span>
-                              </div>
-                            </div>
-
-                            {p.lastVisitDiagnosis && (
-                              <div className="text-[10px] text-slate-500 bg-white px-2 py-0.5 rounded-md border border-slate-200/80 truncate">
-                                <span className="font-semibold text-slate-700">Diagnosis:</span>{" "}
-                                <span>{p.lastVisitDiagnosis}</span>
-                              </div>
-                            )}
+                            <span className="text-[10px] font-semibold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded shrink-0">
+                              {lastVisitRel.text}
+                            </span>
                           </div>
                         ) : (
-                          // Case C: Pasien Baru Terdaftar (0 Kunjungan)
-                          <div className="p-2.5 rounded-xl bg-slate-50/70 border border-dashed border-slate-200 flex items-center justify-between text-xs text-slate-500">
-                            <div className="flex items-center gap-1.5 text-[11px]">
-                              <UserCheck className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                              <span>Belum Ada Riwayat Kunjungan (Pasien Baru MPI)</span>
-                            </div>
-                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                              Kunjungan Perdana
-                            </span>
+                          // Case C: Pasien Baru Terdaftar (0 Kunjungan) - Minimal & Clean
+                          <div className="flex items-center gap-1.5 text-[11px] text-slate-400 px-0.5 py-0.5">
+                            <UserCheck className="h-3.5 w-3.5 text-teal-600/70 shrink-0" />
+                            <span className="text-slate-500 font-medium">Pasien Baru (Kunjungan Perdana)</span>
                           </div>
                         )}
                       </div>
                     </div>
 
                     {/* 4. Action Footer */}
-                    <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-100 mt-1">
-                      <span className="text-[11px] text-slate-400 hover:text-slate-600 font-medium flex items-center gap-1 font-mono transition-colors" title={`ID Sistem: ${p.id}`}>
-                        <CheckCircle2 className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                        <span className="truncate max-w-[120px]">{p.id}</span>
-                      </span>
+                    <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-100 mt-0.5">
+                      <div className="flex items-center gap-1 text-[11px] font-mono text-slate-600 min-w-0">
+                        {p.phone ? (
+                          <div className="flex items-center gap-1 text-[11px] font-mono text-slate-600 truncate">
+                            <Phone className="h-3 w-3 text-teal-600 shrink-0" />
+                            <span>{p.phone}</span>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-400 italic">No. telp -</span>
+                        )}
+                      </div>
 
                       <div className="flex items-center gap-1.5">
                         <Button
@@ -4107,24 +4120,33 @@ export function PatientRegistrationModule({
                         {(() => {
                           const isDeceased = p.patientStatus === "deceased";
                           const isInpatient = p.patientStatus === "inpatient";
-                          const isBlocked = Boolean(patientInProgressQueue || isDeceased || isInpatient);
+                          const isBlocked = Boolean(patientInProgressQueue || isDeceased || isInpatient || isCurrentActive);
 
                           let buttonLabel = "Daftarkan ➔";
                           let buttonTitle = "Daftarkan kunjungan baru";
                           let buttonStyle = "bg-teal-600 hover:bg-teal-700 text-white cursor-pointer";
+                          let buttonIcon: React.ReactNode = <UserPlus className="h-3.5 w-3.5" />;
 
                           if (isDeceased) {
                             buttonLabel = "Meninggal";
                             buttonTitle = "Pasien telah dinyatakan meninggal dunia. Registrasi dinonaktifkan.";
                             buttonStyle = "bg-red-50 text-red-800 border border-red-200 cursor-not-allowed shadow-none";
+                            buttonIcon = null;
                           } else if (isInpatient) {
                             buttonLabel = "Rawat Inap";
                             buttonTitle = `Pasien sedang dalam perawatan rawat inap (${p.inpatientDetails?.room || "Bangsal"}). Pendaftaran poli rawat jalan dinonaktifkan.`;
                             buttonStyle = "bg-purple-50 text-purple-800 border border-purple-200 cursor-not-allowed shadow-none";
+                            buttonIcon = null;
                           } else if (patientInProgressQueue) {
                             buttonLabel = "Sedang Diperiksa";
                             buttonTitle = `Pasien sedang diperiksa di ${patientInProgressQueue.department}. Selesaikan rekam medis terlebih dahulu.`;
                             buttonStyle = "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none";
+                            buttonIcon = null;
+                          } else if (isCurrentActive) {
+                            buttonLabel = "Sudah Terpilih ✓";
+                            buttonTitle = `Pasien ${p.name} sudah menjadi pasien aktif saat ini.`;
+                            buttonStyle = "bg-teal-50 text-teal-800 border border-teal-300 font-bold shadow-none cursor-default opacity-90";
+                            buttonIcon = <Check className="h-3.5 w-3.5 text-teal-700" />;
                           }
 
                           return (
@@ -4134,6 +4156,7 @@ export function PatientRegistrationModule({
                               disabled={isBlocked}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (isCurrentActive) return;
                                 if (isDeceased) {
                                   toast.error("Registrasi Ditolak", {
                                     description: "Pasien telah tercatat meninggal dunia dalam data rekam medis.",
@@ -4167,7 +4190,7 @@ export function PatientRegistrationModule({
                               className={`h-8 px-3 text-xs font-bold gap-1 shadow-2xs shrink-0 transition-all ${buttonStyle}`}
                               title={buttonTitle}
                             >
-                              <UserPlus className="h-3.5 w-3.5" />
+                              {buttonIcon}
                               <span>{buttonLabel}</span>
                             </Button>
                           );
@@ -4189,8 +4212,11 @@ export function PatientRegistrationModule({
                       <th className="py-3 px-4 min-w-[190px]">
                         Nama Pasien & Usia
                       </th>
-                      <th className="py-3 px-4 min-w-[160px]">
-                        Integrasi SATUSEHAT
+                      <th className="py-3 px-4 min-w-[150px]">
+                        IHS SATUSEHAT
+                      </th>
+                      <th className="py-3 px-4 min-w-[130px]">
+                        Consent
                       </th>
                       <th className="py-3 px-4 min-w-[130px]">
                         Penjamin (Payer)
@@ -4254,6 +4280,7 @@ export function PatientRegistrationModule({
                         <tr
                           key={p.id}
                           onClick={() => {
+                            if (isCurrentActive) return;
                             onSelectPatient(
                               p,
                               undefined,
@@ -4264,10 +4291,10 @@ export function PatientRegistrationModule({
                               `Pasien ${p.name} dipilih sebagai pasien aktif${todayQueue ? ` (${todayQueue.queueNumber})` : ""}.`,
                             );
                           }}
-                          className={`transition-colors cursor-pointer ${
+                          className={`transition-colors ${
                             isCurrentActive
-                              ? "bg-teal-50/60 font-semibold"
-                              : "hover:bg-slate-50/80"
+                              ? "bg-teal-50/60 font-semibold cursor-default"
+                              : "hover:bg-slate-50/80 cursor-pointer"
                           }`}
                         >
                           {/* RM & NIK */}
@@ -4307,51 +4334,62 @@ export function PatientRegistrationModule({
                             </div>
                           </td>
 
-                          {/* Integrasi SATUSEHAT */}
-                          <td className="py-3.5 px-4 whitespace-nowrap min-w-[160px]">
-                            <div className="flex flex-col items-start gap-1">
-                              {(p.ihsNumber || p.id?.startsWith("P-")) ? (
+                          {/* 1. IHS SATUSEHAT */}
+                          <td className="py-3.5 px-4 whitespace-nowrap min-w-[150px]">
+                            {(() => {
+                              const hasIhs = Boolean(
+                                p.ihsNumber ||
+                                  (p.id &&
+                                    p.id.startsWith("P") &&
+                                    !p.id.startsWith("pat_"))
+                              );
+                              const displayIhs =
+                                p.ihsNumber || (hasIhs ? p.id : null);
+
+                              if (!hasIhs) {
+                                return (
+                                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-400 italic">
+                                    <AlertCircle className="h-3 w-3 text-amber-500 shrink-0" />
+                                    <span>Belum Terdaftar</span>
+                                  </span>
+                                );
+                              }
+
+                              return (
                                 <div
-                                  className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded font-mono shadow-2xs"
-                                  title={`Pasien Terdaftar SATUSEHAT Kemkes (IHS: ${p.ihsNumber || p.id})`}
+                                  className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-slate-900 bg-slate-50 border border-slate-200/90 px-2 py-0.5 rounded-md shadow-2xs"
+                                  title={`Nomor IHS SATUSEHAT Pasien: ${displayIhs}`}
                                 >
                                   <img
                                     src="/satusehat-default-logo.svg"
                                     alt="SATUSEHAT"
-                                    className="h-2.5 w-2.5 object-contain shrink-0"
+                                    className="h-3 w-3 object-contain shrink-0"
                                   />
-                                  <span>{p.ihsNumber || p.id}</span>
+                                  <span>{displayIhs}</span>
                                 </div>
-                              ) : (
-                                <div
-                                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shadow-2xs"
-                                  title="Pasien belum memiliki nomor IHS SATUSEHAT Kemkes. Sinkronisasi NIK saat pendaftaran."
-                                >
-                                  <AlertCircle className="h-2.5 w-2.5 text-amber-600 shrink-0" />
-                                  <span>Belum Terdaftar</span>
-                                </div>
-                              )}
+                              );
+                            })()}
+                          </td>
 
-                              <div>
-                                {p.satusehatConsent === "opt-out" ? (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-[9px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200 whitespace-nowrap"
-                                    title="Consent Menolak SATUSEHAT (Hanya Internal RS)"
-                                  >
-                                    <Lock className="h-2.5 w-2.5 text-amber-700" />
-                                    <span>Opt-Out (Internal RS)</span>
-                                  </span>
-                                ) : (
-                                  <span
-                                    className="inline-flex items-center gap-1 text-[9px] text-teal-800 font-semibold bg-teal-50/80 px-1.5 py-0.2 rounded border border-teal-200/90 whitespace-nowrap"
-                                    title="Consent Terhubung SATUSEHAT Kemkes RI (Permenkes 24/2022)"
-                                  >
-                                    <span className="h-1.5 w-1.5 rounded-full bg-teal-500 shrink-0" />
-                                    <span>Opt-In (Cloud Kemenkes)</span>
-                                  </span>
-                                )}
-                              </div>
-                            </div>
+                          {/* 2. Consent Pasien */}
+                          <td className="py-3.5 px-4 whitespace-nowrap min-w-[130px]">
+                            {p.satusehatConsent === "opt-out" ? (
+                              <span
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 text-[10px] font-semibold"
+                                title="Consent: Pasien Menolak Berbagi Data (Hanya Internal RS)"
+                              >
+                                <Lock className="h-3 w-3 text-amber-700 shrink-0" />
+                                <span>Opt-Out (Internal)</span>
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 text-[10px] font-semibold"
+                                title="Consent: Pasien Menyetujui Berbagi Data ke SATUSEHAT Cloud Kemenkes"
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full bg-teal-500 shrink-0" />
+                                <span>Opt-In (Cloud)</span>
+                              </span>
+                            )}
                           </td>
 
                           {/* Penjamin (Payer) */}
@@ -4455,24 +4493,33 @@ export function PatientRegistrationModule({
                               {(() => {
                                 const isDeceased = p.patientStatus === "deceased";
                                 const isInpatient = p.patientStatus === "inpatient";
-                                const isBlocked = Boolean(patientInProgressQueue || isDeceased || isInpatient);
+                                const isBlocked = Boolean(patientInProgressQueue || isDeceased || isInpatient || isCurrentActive);
 
                                 let buttonLabel = "Daftar ➔";
                                 let buttonTitle = "Daftarkan ke antrean poliklinik";
                                 let buttonStyle = "text-white bg-teal-600 hover:bg-teal-700 cursor-pointer active:scale-95";
+                                let buttonIcon: React.ReactNode = <UserPlus className="h-3.5 w-3.5" />;
 
                                 if (isDeceased) {
                                   buttonLabel = "Meninggal";
                                   buttonTitle = "Pasien telah dinyatakan meninggal dunia. Registrasi dinonaktifkan.";
                                   buttonStyle = "bg-red-50 text-red-800 border border-red-200 cursor-not-allowed shadow-none";
+                                  buttonIcon = null;
                                 } else if (isInpatient) {
                                   buttonLabel = "Rawat Inap";
                                   buttonTitle = `Pasien sedang dalam perawatan rawat inap (${p.inpatientDetails?.room || "Bangsal"}). Registrasi rawat jalan dinonaktifkan.`;
                                   buttonStyle = "bg-purple-50 text-purple-800 border border-purple-200 cursor-not-allowed shadow-none";
+                                  buttonIcon = null;
                                 } else if (patientInProgressQueue) {
                                   buttonLabel = "Diperiksa";
                                   buttonTitle = `Pasien sedang diperiksa di ${patientInProgressQueue.department}. Selesaikan RME terlebih dahulu.`;
                                   buttonStyle = "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none";
+                                  buttonIcon = null;
+                                } else if (isCurrentActive) {
+                                  buttonLabel = "Terpilih ✓";
+                                  buttonTitle = `Pasien ${p.name} sudah menjadi pasien aktif saat ini.`;
+                                  buttonStyle = "bg-teal-50 text-teal-800 border border-teal-300 font-bold shadow-none cursor-default opacity-90";
+                                  buttonIcon = <Check className="h-3.5 w-3.5 text-teal-700" />;
                                 }
 
                                 return (
@@ -4481,6 +4528,7 @@ export function PatientRegistrationModule({
                                     disabled={isBlocked}
                                     onClick={(e) => {
                                       e.stopPropagation();
+                                      if (isCurrentActive) return;
                                       if (isDeceased) {
                                         toast.error("Registrasi Ditolak", {
                                           description: "Pasien telah tercatat meninggal dunia dalam data rekam medis.",
@@ -4517,7 +4565,7 @@ export function PatientRegistrationModule({
                                     className={`h-8 px-2.5 rounded-lg text-xs font-bold shadow-2xs transition-all flex items-center gap-1 ${buttonStyle}`}
                                     title={buttonTitle}
                                   >
-                                    <UserPlus className="h-3.5 w-3.5" />
+                                    {buttonIcon}
                                     <span>{buttonLabel}</span>
                                   </button>
                                 );
@@ -5351,18 +5399,22 @@ export function PatientRegistrationModule({
                     {
                       value: "Pasien Umum / Mandiri",
                       label: "Pasien Umum / Mandiri",
+                      description: "Pembayaran mandiri (Tunai / Debit / QRIS)",
                     },
                     {
                       value: "BPJS Kesehatan (JKN-PBI / Non-PBI)",
-                      label: "BPJS Kesehatan (JKN-PBI / Non-PBI)",
+                      label: "BPJS Kesehatan",
+                      description: "JKN-PBI / Non-PBI / Mandiri / Askes",
                     },
                     {
                       value: "Asuransi Swasta / AdMedika",
-                      label: "Asuransi Swasta / AdMedika",
+                      label: "Asuransi Swasta",
+                      description: "AdMedika / Prudential / Sinarmas / dll",
                     },
                     {
                       value: "Jaminan Perusahaan",
                       label: "Jaminan Perusahaan",
+                      description: "Kerjasama instansi / ikatan dinas",
                     },
                   ]}
                 />

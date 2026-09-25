@@ -445,16 +445,17 @@ export function OutpatientEntryForm({
     if (authDepartments && authDepartments.length > 0) {
       return authDepartments.map((d) => ({
         value: d.name,
-        label: `${d.name}${d.room ? ` (${d.room})` : ""}`,
+        label: d.name,
+        description: d.room || undefined,
       }));
     }
     return [
-      { value: "Poli Penyakit Dalam", label: "Poli Penyakit Dalam (Lt. 2)" },
-      { value: "Poli Umum", label: "Poli Umum (Lt. 1)" },
-      { value: "Poli Anak (Pediatri)", label: "Poli Anak / Pediatri (Lt. 1)" },
-      { value: "Poli Gigi & Mulut", label: "Poli Gigi & Mulut (Lt. 2)" },
-      { value: "Poli Jantung & Pembuluh Darah", label: "Poli Jantung & Pembuluh Darah (Lt. 2)" },
-      { value: "Poli Mata", label: "Poli Mata (Lt. 2)" },
+      { value: "Poli Penyakit Dalam", label: "Poli Penyakit Dalam", description: "Ruang 204 (Lt. 2)" },
+      { value: "Poli Umum", label: "Poli Umum", description: "Ruang 101 (Lt. 1)" },
+      { value: "Poli Anak (Pediatri)", label: "Poli Anak / Pediatri", description: "Ruang 208 (Lt. 2)" },
+      { value: "Poli Gigi & Mulut", label: "Poli Gigi & Mulut", description: "Ruang 105 (Lt. 1)" },
+      { value: "Poli Jantung & Pembuluh Darah", label: "Poli Jantung & Pembuluh Darah", description: "Ruang 301 (Lt. 3)" },
+      { value: "Poli Mata", label: "Poli Mata", description: "Ruang 107 (Lt. 1)" },
     ];
   }, [authDepartments]);
 
@@ -470,7 +471,11 @@ export function OutpatientEntryForm({
       const listToMap = clinicDoctors.length > 0 ? clinicDoctors : facilityDoctors;
       return listToMap.map((d) => ({
         value: d.name,
-        label: `${d.name}${d.sip ? ` (${formatDoctorSip(d.sip)})` : ""}${d.department ? ` — ${d.department}` : ""}`,
+        label: d.name,
+        description: [
+          d.sip ? formatDoctorSip(d.sip) : null,
+          d.department && d.department !== department ? d.department : null,
+        ].filter(Boolean).join(" • ") || undefined,
       }));
     }
 
@@ -2215,18 +2220,20 @@ export function OutpatientEntryForm({
             {/* Poli Tujuan & DPJP */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                <Label className="h-6 text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span>Poliklinik / Ruang Pelayanan *</span>
                   {activeEncounter?.encounterStatus === "finished" ? (
-                    <span className="text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                      🔒 Riwayat Selesai
+                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
+                      <Lock className="h-2.5 w-2.5 text-emerald-600" />
+                      <span>Riwayat Selesai</span>
                     </span>
                   ) : activeEncounter?.clinicDepartment ? (
-                    <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded border border-teal-200">
-                      🔒 Terdaftar di Loket
+                    <span className="inline-flex items-center gap-1 text-[10px] text-teal-800 font-bold bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 shrink-0">
+                      <Lock className="h-2.5 w-2.5 text-teal-600" />
+                      <span>Terdaftar di Loket</span>
                     </span>
                   ) : (
-                    <span className="text-[10px] text-teal-700 font-medium">Unit Rawat Jalan</span>
+                    <span className="text-[10px] text-slate-400 font-medium">Unit Rawat Jalan</span>
                   )}
                 </Label>
                 <CustomSelect<string>
@@ -2245,10 +2252,10 @@ export function OutpatientEntryForm({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                <Label className="h-6 text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span>Dokter Penanggung Jawab (DPJP) *</span>
-                  <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
-                    <ShieldCheck className="h-3 w-3" />
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-800 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
+                    <ShieldCheck className="h-3 w-3 text-emerald-600" />
                     <span>SIP &amp; IHS Terverifikasi</span>
                   </span>
                 </Label>

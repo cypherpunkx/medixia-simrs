@@ -151,17 +151,39 @@ export function PatientProfileBanner({
             <strong className="text-slate-800 font-medium">{patient.nik}</strong>
           </div>
           <span className="text-slate-300 hidden sm:inline select-none">•</span>
-          <div
-            className="inline-flex items-center gap-1.5 whitespace-nowrap bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-md font-sans font-bold text-[10px] shadow-2xs cursor-help"
-            title={`Pasien Terdaftar di SATUSEHAT Kemkes RI (Nomor IHS: ${patient.ihsNumber || patient.id})`}
-          >
-            <img
-              src="/satusehat-default-logo.svg"
-              alt="SATUSEHAT"
-              className="h-2.5 w-2.5 object-contain shrink-0"
-            />
-            <span>IHS: {patient.ihsNumber || patient.id}</span>
-          </div>
+          {(() => {
+            const hasIhs = Boolean(
+              patient.ihsNumber ||
+                (patient.id &&
+                  patient.id.startsWith("P") &&
+                  !patient.id.startsWith("pat_"))
+            );
+            const displayIhs =
+              patient.ihsNumber || (hasIhs ? patient.id : null);
+            return (
+              <div
+                className={`inline-flex items-center gap-1.5 whitespace-nowrap px-2 py-0.5 rounded-md font-sans font-bold text-[10px] shadow-2xs ${
+                  hasIhs
+                    ? "bg-teal-50 text-teal-800 border border-teal-200"
+                    : "bg-slate-100 text-slate-500 border border-slate-200"
+                }`}
+                title={
+                  hasIhs
+                    ? `Pasien Terdaftar di SATUSEHAT Kemkes RI (Nomor IHS: ${displayIhs})`
+                    : "Pasien belum memiliki nomor IHS SATUSEHAT. Silakan lakukan Verifikasi NIK."
+                }
+              >
+                <img
+                  src="/satusehat-default-logo.svg"
+                  alt="SATUSEHAT"
+                  className="h-2.5 w-2.5 object-contain shrink-0"
+                />
+                <span>
+                  {hasIhs ? `IHS: ${displayIhs}` : "IHS: Belum Terdaftar"}
+                </span>
+              </div>
+            );
+          })()}
           <span className="text-slate-300 hidden sm:inline select-none">•</span>
           <div className="inline-flex items-center gap-1 whitespace-nowrap">
             <span className="text-slate-400 font-sans text-[11px]">Usia:</span>
@@ -217,58 +239,121 @@ export function PatientProfileBanner({
 
       {/* Patient Key Metrics Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs">
-        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
-          <span className="text-[10px] text-slate-400 font-bold uppercase block">
+        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200 flex flex-col justify-between">
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
             Golongan Darah
           </span>
-          <span className="font-extrabold text-red-600 text-sm">
-            Tipe {patient.bloodType} (Rhesus +)
-          </span>
-        </div>
-
-        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
-          <span className="text-[10px] text-slate-400 font-bold uppercase block">
-            Tanggal Lahir
-          </span>
-          <span className="font-bold text-slate-800">
-            {new Date(patient.birthDate).toLocaleDateString("id-ID", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        </div>
-
-        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
-          <span className="text-[10px] text-slate-400 font-bold uppercase block">
-            Kontak Darurat
-          </span>
-          <span className="font-semibold text-slate-800 truncate block">
-            {patient.emergencyContact.name} ({patient.emergencyContact.phone})
-          </span>
-        </div>
-
-        <div className="rounded-lg bg-teal-50/50 p-2.5 border border-teal-200/80">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-teal-800 font-bold uppercase tracking-wider flex items-center gap-1">
-              <img
-                src="/satusehat-default-logo.svg"
-                alt="SATUSEHAT"
-                className="h-2.5 w-2.5 object-contain"
-              />
-              <span>ID SATUSEHAT</span>
+          <div className="mt-0.5">
+            <span className="font-extrabold text-red-600 text-sm block leading-tight">
+              Tipe {patient.bloodType || "-"}
             </span>
-            <span className="text-[9px] font-extrabold text-teal-700 bg-teal-100/80 px-1 py-0.2 rounded">
-              Terverifikasi
+            <span className="text-[10px] text-slate-500 font-medium block">
+              Rhesus Positif (+)
             </span>
           </div>
-          <span
-            className="font-mono text-xs font-bold block mt-1 truncate text-teal-900"
-            title={patient.ihsNumber || patient.id}
-          >
-            {patient.ihsNumber || patient.id}
-          </span>
         </div>
+
+        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200 flex flex-col justify-between">
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+            Tanggal Lahir
+          </span>
+          <div className="mt-0.5">
+            <span className="font-bold text-slate-900 text-xs block truncate">
+              {new Date(patient.birthDate).toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
+            </span>
+            <span className="text-[10px] text-slate-500 font-medium block">
+              Usia {age} Tahun ({patient.gender === "male" ? "L" : "P"})
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+              Kontak Darurat
+            </span>
+            {patient.emergencyContact?.relation && (
+              <span className="text-[9px] font-semibold text-slate-600 bg-slate-200/70 px-1.5 py-0.2 rounded shrink-0">
+                {patient.emergencyContact.relation}
+              </span>
+            )}
+          </div>
+          <div className="min-w-0 mt-0.5">
+            <span
+              className="font-bold text-slate-900 text-xs truncate block"
+              title={patient.emergencyContact?.name}
+            >
+              {patient.emergencyContact?.name || "-"}
+            </span>
+            {patient.emergencyContact?.phone ? (
+              <div className="flex items-center gap-1.5 text-teal-700 font-mono font-bold text-[11px] mt-0.5">
+                <Phone className="h-2.5 w-2.5 text-teal-600 shrink-0" />
+                <span className="tracking-tight">{patient.emergencyContact.phone}</span>
+              </div>
+            ) : (
+              <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                Tidak ada no. telp
+              </span>
+            )}
+          </div>
+        </div>
+
+        {(() => {
+          const hasIhs = Boolean(
+            patient.ihsNumber ||
+              (patient.id &&
+                patient.id.startsWith("P") &&
+                !patient.id.startsWith("pat_"))
+          );
+          const displayIhs =
+            patient.ihsNumber || (hasIhs ? patient.id : null);
+          return (
+            <div
+              className={`rounded-lg p-2.5 border flex flex-col justify-between ${
+                hasIhs
+                  ? "bg-teal-50/50 border-teal-200/80"
+                  : "bg-slate-50 border-slate-200"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 text-slate-500">
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-2.5 w-2.5 object-contain"
+                  />
+                  <span>ID SATUSEHAT</span>
+                </span>
+                <span
+                  className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded shrink-0 ${
+                    hasIhs
+                      ? "text-teal-700 bg-teal-100/80"
+                      : "text-slate-500 bg-slate-200/70"
+                  }`}
+                >
+                  {hasIhs ? "Terverifikasi" : "Belum Terdaftar"}
+                </span>
+              </div>
+              <div className="mt-0.5">
+                <span
+                  className={`font-mono text-xs font-bold block truncate ${
+                    hasIhs ? "text-teal-950" : "text-slate-500 italic"
+                  }`}
+                  title={displayIhs || "Belum ada nomor IHS"}
+                >
+                  {displayIhs || "Belum Terdaftar"}
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium block">
+                  {hasIhs ? "FHIR Patient Resource" : "Sinkronisasi via NIK"}
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Allergy Alert */}

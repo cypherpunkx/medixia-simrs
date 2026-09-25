@@ -36,7 +36,7 @@ function mapRowToPatient(row: typeof patients.$inferSelect): PatientProfile {
     lastVisitDoctor: row.lastVisitDoctor || undefined,
     lastVisitDiagnosis: row.lastVisitDiagnosis || undefined,
     totalVisitsCount: row.totalVisitsCount ?? 0,
-    ihsNumber: row.ihsNumber || (row.id.startsWith("P-") ? row.id : undefined),
+    ihsNumber: row.ihsNumber || (row.id && row.id.startsWith("P") && !row.id.startsWith("pat_") ? row.id : undefined),
     satusehatConsent: (row.satusehatConsent as "opt-in" | "opt-out") || "opt-in",
   };
 }
@@ -174,7 +174,7 @@ export const PatientRepository = {
       emergencyContactRelation: patient.emergencyContact?.relation || "-",
       emergencyContactPhone: patient.emergencyContact?.phone || "-",
       paymentPayer: patient.paymentPayer || null,
-      ihsNumber: patient.ihsNumber || (id.startsWith("P-") ? id : null),
+      ihsNumber: patient.ihsNumber || (id.startsWith("P") && !id.startsWith("pat_") ? id : null),
       lastVisitDate: patient.lastVisitDate || null,
       lastVisitDepartment: patient.lastVisitDepartment || null,
       lastVisitDoctor: patient.lastVisitDoctor || null,

@@ -136,12 +136,13 @@ export function CustomSelect<T extends string | number = string>({
       {isOpen && (
         <div
           className={cn(
-            "absolute top-full mt-1.5 z-50 min-w-full w-max max-w-xs sm:max-w-sm bg-white rounded-xl shadow-xl border border-slate-200 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150",
+            "absolute top-full mt-1.5 z-50 min-w-full bg-white rounded-xl shadow-xl border border-slate-200/90 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150",
+            className?.includes("w-full") ? "w-full" : "w-max max-w-xs sm:max-w-sm",
             align === "right" ? "right-0" : "left-0",
             dropdownClassName
           )}
         >
-          <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 p-1">
+          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100/70 p-1">
             {options.map((opt) => {
               const isSelected = opt.value === value;
               return (
@@ -153,27 +154,27 @@ export function CustomSelect<T extends string | number = string>({
                     setIsOpen(false);
                   }}
                   className={cn(
-                    "w-full text-left px-2.5 py-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer",
+                    "w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between gap-2.5 transition-colors cursor-pointer",
                     isSelected
                       ? accentColor === "blue"
-                        ? "bg-blue-50 text-blue-950 font-bold"
-                        : "bg-teal-50 text-teal-950 font-bold"
+                        ? "bg-blue-50/90 text-blue-950 font-bold"
+                        : "bg-teal-50/90 text-teal-950 font-bold"
                       : "text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium"
                   )}
                 >
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     {opt.icon && <span className="shrink-0">{opt.icon}</span>}
-                    <div className="min-w-0">
-                      <div className="truncate">{opt.label}</div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-semibold text-slate-800">{opt.label}</div>
                       {opt.description && (
-                        <div className="text-[10px] text-slate-400 font-normal truncate">
+                        <div className="text-[11px] text-slate-400 font-normal truncate mt-0.5">
                           {opt.description}
                         </div>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
                     {opt.badge && <span>{opt.badge}</span>}
                     {isSelected && (
                       <Check
