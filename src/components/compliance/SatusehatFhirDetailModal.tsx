@@ -445,8 +445,12 @@ export function SatusehatFhirDetailModal({
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-5 sm:p-6 overflow-hidden bg-white text-slate-900 border-slate-200 shadow-2xl">
         <DialogHeader className="pb-3 border-b border-slate-100 pr-10">
           <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600 shrink-0">
-              <ShieldCheck className="h-5 w-5" />
+            <div className="h-8 w-8 rounded-lg bg-white border border-teal-200 shadow-2xs flex items-center justify-center p-1 shrink-0">
+              <img
+                src="/satusehat-default-logo.svg"
+                alt="SATUSEHAT"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
               <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">

@@ -27,10 +27,16 @@ import {
   CheckCircle2,
   Layers,
   Shield,
+  Eye,
+  EyeOff,
+  Stethoscope,
+  Server,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FacilityType } from "@/lib/satusehat/types";
 import { useAuth } from "@/lib/auth/auth-context";
+import { CustomSelect } from "@/components/ui/custom-select";
 
 interface DepartmentInput {
   name: string;
@@ -52,9 +58,16 @@ export function FacilityRegistrationModal({
 }: FacilityRegistrationModalProps) {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    message: string;
+    latencyMs?: number;
+    expiresIn?: number;
+  } | null>(null);
 
-  // RBAC: Hanya akun Administrator yang berhak membuka & mendaftarkan faskes baru
-  if (user && user.role !== "admin") {
+  // RBAC: Hanya akun Super Admin (Vendor RME) yang berhak mendaftarkan fasilitas kesehatan baru
+  if (user && user.role !== "super_admin") {
     return null;
   }
 
@@ -62,11 +75,14 @@ export function FacilityRegistrationModal({
   const [name, setName] = useState("");
   const [type, setType] = useState<FacilityType>("klinik_pratama");
   const [satusehatOrgId, setSatusehatOrgId] = useState("");
+  const [satusehatEnv, setSatusehatEnv] = useState<"staging" | "production">("staging");
   const [licenseNumber, setLicenseNumber] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [satusehatClientId, setSatusehatClientId] = useState("");
   const [satusehatClientSecret, setSatusehatClientSecret] = useState("");
+  const [showClientSecret, setShowClientSecret] = useState(false);
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   // Initial Admin User
   const [adminName, setAdminName] = useState("");
@@ -111,6 +127,57 @@ export function FacilityRegistrationModal({
     });
   };
 
+  const handleTestConnection = async () => {
+    if (!satusehatClientId.trim() || !satusehatClientSecret.trim()) {
+      toast.error("Isi Client ID dan Client Secret terlebih dahulu sebelum menguji koneksi.");
+      return;
+    }
+    try {
+      setIsTestingConnection(true);
+      setTestResult(null);
+
+      const res = await fetch("/api/facilities/test-connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clientId: satusehatClientId.trim(),
+          clientSecret: satusehatClientSecret.trim(),
+          env: satusehatEnv,
+          orgId: satusehatOrgId.trim() || "b15a7ae7-f366-4a84-8385-0b8196c05002",
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setTestResult({
+          success: true,
+          message: data.data.message || "Koneksi berhasil!",
+          latencyMs: data.data.telemetry?.latencyMs,
+          expiresIn: data.data.tokenExpiresIn,
+        });
+        toast.success("Uji Koneksi SATUSEHAT Berhasil!", {
+          description: `Token aktif ${data.data.tokenExpiresIn} detik (Latency: ${data.data.telemetry?.latencyMs || 0}ms)`,
+        });
+      } else {
+        setTestResult({
+          success: false,
+          message: data.error || "Gagal terhubung ke SATUSEHAT.",
+        });
+        toast.error("Uji Koneksi SATUSEHAT Gagal", {
+          description: data.error || "Periksa kembali Client ID dan Secret.",
+        });
+      }
+    } catch {
+      setTestResult({
+        success: false,
+        message: "Terjadi kesalahan jaringan saat menguji koneksi.",
+      });
+      toast.error("Gagal menghubungi server untuk pengujian koneksi.");
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -131,6 +198,7 @@ export function FacilityRegistrationModal({
         name: name.trim(),
         type,
         satusehatOrgId: satusehatOrgId.trim(),
+        satusehatEnv,
         licenseNumber: licenseNumber.trim(),
         address: address.trim(),
         phone: phone.trim(),
@@ -156,7 +224,7 @@ export function FacilityRegistrationModal({
 
       if (result.success && result.data) {
         toast.success(`Faskes Baru Berhasil Didaftarkan!`, {
-          description: `${result.data.name} (${result.data.type.toUpperCase()}) telah aktif di sistem.`,
+          description: `${result.data.name} telah aktif di sistem.`,
         });
 
         // Reset Form
@@ -240,16 +308,20 @@ export function FacilityRegistrationModal({
                 <Label className="text-xs font-bold text-slate-700">
                   Tipe Institusi Faskes <span className="text-rose-500">*</span>
                 </Label>
-                <select
+                <CustomSelect<FacilityType>
                   value={type}
-                  onChange={(e) => setType(e.target.value as FacilityType)}
-                  className="w-full h-10 px-3 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 text-slate-800 font-medium"
-                >
-                  <option value="klinik_pratama">Klinik Pratama (Rawat Jalan)</option>
-                  <option value="klinik_utama">Klinik Utama (Spesialistik)</option>
-                  <option value="rumah_sakit">Rumah Sakit (Tipe A/B/C/D)</option>
-                  <option value="puskesmas">Puskesmas (Pusat Kesehatan Masyarakat)</option>
-                </select>
+                  onChange={(val) => setType(val)}
+                  size="md"
+                  className="w-full"
+                  buttonClassName="h-10 text-xs bg-white border border-slate-200 rounded-xl"
+                  options={[
+                    { value: "klinik_pratama", label: "Klinik Pratama (Rawat Jalan)", icon: <Stethoscope className="h-3.5 w-3.5 text-teal-600" /> },
+                    { value: "klinik_utama", label: "Klinik Utama (Spesialistik)", icon: <Stethoscope className="h-3.5 w-3.5 text-indigo-600" /> },
+                    { value: "rumah_sakit", label: "Rumah Sakit (Tipe A/B/C/D)", icon: <Hospital className="h-3.5 w-3.5 text-blue-600" /> },
+                    { value: "puskesmas", label: "Puskesmas (Pusat Kesehatan Masyarakat)", icon: <Building2 className="h-3.5 w-3.5 text-emerald-600" /> },
+                    { value: "praktik_mandiri", label: "Praktik Mandiri (Dokter / Bidan)", icon: <Stethoscope className="h-3.5 w-3.5 text-purple-600" /> },
+                  ]}
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -298,10 +370,14 @@ export function FacilityRegistrationModal({
                   Organization ID SATUSEHAT Kemenkes <span className="text-rose-500">*</span>
                 </Label>
                 <div className="relative">
-                  <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-teal-600" />
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 object-contain shrink-0"
+                  />
                   <Input
                     required
-                    placeholder="Contoh: 10002345"
+                    placeholder="Contoh: 10002345 atau b15a7ae7-f366-..."
                     value={satusehatOrgId}
                     onChange={(e) => setSatusehatOrgId(e.target.value)}
                     className="h-10 pl-9 text-xs rounded-xl focus:border-teal-500 font-mono font-bold text-teal-900 bg-teal-50/30"
@@ -311,41 +387,171 @@ export function FacilityRegistrationModal({
             </div>
           </div>
 
-          {/* Section 2: Kredensial SATUSEHAT (Opsional) */}
+          {/* Section 2: Kredensial SATUSEHAT & Live Handshake Test */}
           <div className="space-y-3 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                <span>Kredensial OAuth2 SATUSEHAT Kemenkes (Opsional)</span>
+                <img
+                  src="/satusehat-default-logo.svg"
+                  alt="SATUSEHAT"
+                  className="h-4 w-4 object-contain shrink-0"
+                />
+                <span>Kredensial OAuth2 SATUSEHAT Kemenkes (Terenkripsi AES-256)</span>
               </span>
-              <Badge variant="outline" className="text-[9px] bg-white">
-                Bridging API
-              </Badge>
+              <div className="flex items-center gap-2">
+                <CustomSelect<"staging" | "production">
+                  value={satusehatEnv}
+                  onChange={(val) => setSatusehatEnv(val)}
+                  size="sm"
+                  className="w-40"
+                  buttonClassName="h-7 text-[11px] font-semibold bg-white border border-slate-300 text-slate-700 rounded-lg px-2"
+                  options={[
+                    { value: "staging", label: "Staging (Sandbox)", icon: <Server className="h-3 w-3 text-amber-500" /> },
+                    { value: "production", label: "Production (Live)", icon: <Zap className="h-3 w-3 text-emerald-600" /> },
+                  ]}
+                />
+                <Badge variant="outline" className="text-[9px] bg-white">
+                  Multi-Tenant
+                </Badge>
+              </div>
             </div>
             <p className="text-[11px] text-slate-500">
-              Dapat diisi sekarang atau diatur kemudian saat konfigurasi integrasi live SATUSEHAT Kemenkes.
+              Kredensial disimpan terenkripsi di PostgreSQL per faskes. Anda dapat langsung menguji koneksi ke server Kemenkes sebelum menyimpan.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-slate-600">Client ID</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] font-semibold text-slate-600">Client ID</Label>
+                  {satusehatClientId.length > 0 && (
+                    <span
+                      className={`text-[10px] font-mono font-medium ${
+                        satusehatClientId.length === 48
+                          ? "text-emerald-600"
+                          : "text-amber-600 font-semibold"
+                      }`}
+                    >
+                      {satusehatClientId.length}/48 char
+                      {satusehatClientId.length !== 48 && " (terpotong?)"}
+                    </span>
+                  )}
+                </div>
                 <Input
-                  placeholder="Client ID dari DTO Kemenkes"
+                  placeholder="Client ID dari Portal SATUSEHAT (48 karakter)"
                   value={satusehatClientId}
-                  onChange={(e) => setSatusehatClientId(e.target.value)}
-                  className="h-9 text-xs rounded-lg font-mono bg-white"
+                  onChange={(e) => {
+                    setSatusehatClientId(e.target.value.trim());
+                    setTestResult(null);
+                  }}
+                  className={`h-9 text-xs rounded-lg font-mono bg-white ${
+                    satusehatClientId.length > 0 && satusehatClientId.length !== 48
+                      ? "border-amber-400 focus:border-amber-500"
+                      : ""
+                  }`}
                 />
               </div>
+
               <div className="space-y-1">
-                <Label className="text-[11px] font-semibold text-slate-600">Client Secret</Label>
-                <Input
-                  type="password"
-                  placeholder="Client Secret dari DTO Kemenkes"
-                  value={satusehatClientSecret}
-                  onChange={(e) => setSatusehatClientSecret(e.target.value)}
-                  className="h-9 text-xs rounded-lg font-mono bg-white"
-                />
+                <div className="flex items-center justify-between">
+                  <Label className="text-[11px] font-semibold text-slate-600">Client Secret</Label>
+                  {satusehatClientSecret.length > 0 && (
+                    <span
+                      className={`text-[10px] font-mono font-medium ${
+                        satusehatClientSecret.length === 64
+                          ? "text-emerald-600"
+                          : "text-amber-600 font-semibold"
+                      }`}
+                    >
+                      {satusehatClientSecret.length}/64 char
+                      {satusehatClientSecret.length !== 64 && " (terpotong?)"}
+                    </span>
+                  )}
+                </div>
+                <div className="relative">
+                  <Input
+                    type={showClientSecret ? "text" : "password"}
+                    placeholder="Client Secret (64 karakter)"
+                    value={satusehatClientSecret}
+                    onChange={(e) => {
+                      setSatusehatClientSecret(e.target.value.trim());
+                      setTestResult(null);
+                    }}
+                    className={`h-9 pr-8 text-xs rounded-lg font-mono bg-white ${
+                      satusehatClientSecret.length > 0 && satusehatClientSecret.length !== 64
+                        ? "border-amber-400 focus:border-amber-500"
+                        : ""
+                    }`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowClientSecret(!showClientSecret)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
+                    title={showClientSecret ? "Sembunyikan secret" : "Tampilkan secret"}
+                  >
+                    {showClientSecret ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
               </div>
+            </div>
+
+            {/* Test Connection Button & Result */}
+            <div className="pt-2 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestConnection}
+                  disabled={isTestingConnection || !satusehatClientId || !satusehatClientSecret}
+                  className="h-8 text-xs font-semibold rounded-lg bg-white hover:bg-slate-100 border-slate-300 text-teal-700 hover:text-teal-800 gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isTestingConnection ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Menguji Handshake Kemenkes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-3.5 w-3.5 text-teal-600" />
+                      <span>Uji Koneksi SATUSEHAT Sekarang</span>
+                    </>
+                  )}
+                </Button>
+
+                {satusehatClientId && satusehatClientSecret && !testResult && (
+                  <span className="text-[11px] text-slate-400">
+                    Kredensial siap diuji
+                  </span>
+                )}
+              </div>
+
+              {testResult && (
+                <div
+                  className={`p-2.5 rounded-lg border text-xs flex items-center justify-between ${
+                    testResult.success
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                      : "bg-rose-50 border-rose-200 text-rose-800"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {testResult.success ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    ) : (
+                      <ShieldCheck className="h-4 w-4 text-rose-600 shrink-0" />
+                    )}
+                    <span>{testResult.message}</span>
+                  </div>
+                  {testResult.latencyMs !== undefined && (
+                    <span className="text-[10px] font-mono font-bold bg-white/80 px-2 py-0.5 rounded border">
+                      {testResult.latencyMs}ms
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -440,34 +646,82 @@ export function FacilityRegistrationModal({
               Akun ini digunakan oleh Penanggung Jawab / Admin Sistem untuk login pertama kali dan mendaftarkan dokter, perawat &amp; staf lainnya.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-              <div className="space-y-1">
-                <Label className="text-[11px] font-bold text-slate-700">Nama Admin / PIC</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1 items-start">
+              {/* Kolom 1: Nama PIC */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between h-5">
+                  <Label className="text-[11px] font-bold text-slate-700">Nama Admin / PIC</Label>
+                  <span className="text-[10px] text-purple-700/60 font-medium">Penanggung Jawab</span>
+                </div>
                 <Input
                   placeholder="mis: dr. Hendra / Budi S."
                   value={adminName}
                   onChange={(e) => setAdminName(e.target.value)}
-                  className="h-9 text-xs rounded-lg bg-white"
+                  className="h-9 text-xs rounded-lg bg-white shadow-2xs border-slate-200 focus-visible:ring-purple-500"
                 />
+                <p className="text-[10px] text-slate-500 leading-tight min-h-[14px]">
+                  Nama lengkap PIC / pimpinan faskes
+                </p>
               </div>
-              <div className="space-y-1">
-                <Label className="text-[11px] font-bold text-slate-700">Username Login</Label>
+
+              {/* Kolom 2: Username Login */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between h-5">
+                  <Label className="text-[11px] font-bold text-slate-700">Username Login</Label>
+                  <span className="text-[9px] font-bold text-purple-700 bg-purple-200/60 px-1.5 py-0.5 rounded">Wajib Unik</span>
+                </div>
                 <Input
-                  placeholder="mis: admin.klinik"
+                  placeholder="mis: admin.sejahtera"
                   value={adminUsername}
-                  onChange={(e) => setAdminUsername(e.target.value)}
-                  className="h-9 text-xs rounded-lg font-mono bg-white"
+                  onChange={(e) => setAdminUsername(e.target.value.toLowerCase().replace(/\s+/g, ""))}
+                  className={`h-9 text-xs rounded-lg font-mono bg-white shadow-2xs focus-visible:ring-purple-500 ${
+                    ["admin", "superadmin", "dokter", "perawat"].includes(adminUsername.trim().toLowerCase())
+                      ? "border-rose-400 focus-visible:ring-rose-500"
+                      : "border-slate-200"
+                  }`}
                 />
+                {["admin", "superadmin", "dokter", "perawat"].includes(adminUsername.trim().toLowerCase()) ? (
+                  <p className="text-[10px] text-rose-600 font-medium leading-tight min-h-[14px]">
+                    Sudah dipakai. Coba: admin.{name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10) || "faskes"}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-slate-500 leading-tight min-h-[14px]">
+                    Format: admin.namafaskes
+                  </p>
+                )}
               </div>
-              <div className="space-y-1">
-                <Label className="text-[11px] font-bold text-slate-700">Kata Sandi / Password</Label>
-                <Input
-                  type="password"
-                  placeholder="Password login..."
-                  value={adminPassword}
-                  onChange={(e) => setAdminPassword(e.target.value)}
-                  className="h-9 text-xs rounded-lg bg-white"
-                />
+
+              {/* Kolom 3: Password */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between h-5">
+                  <Label className="text-[11px] font-bold text-slate-700">Kata Sandi / Password</Label>
+                  <span className="text-[10px] text-purple-700/60 font-medium">Kredensial Awal</span>
+                </div>
+                <div className="relative">
+                  <Input
+                    type={showAdminPassword ? "text" : "password"}
+                    placeholder="Password login..."
+                    value={adminPassword}
+                    onChange={(e) => setAdminPassword(e.target.value)}
+                    className="h-9 text-xs rounded-lg bg-white shadow-2xs border-slate-200 pr-9 focus-visible:ring-purple-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminPassword(!showAdminPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-700 focus:outline-none transition-colors cursor-pointer"
+                    tabIndex={-1}
+                    title={showAdminPassword ? "Sembunyikan password" : "Tampilkan password"}
+                  >
+                    {showAdminPassword ? (
+                      <EyeOff className="h-4 w-4" />
+                    ) : (
+                      <Eye className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 leading-tight min-h-[14px]">
+                  Minimal 6 karakter kombinasi
+                </p>
               </div>
             </div>
           </div>

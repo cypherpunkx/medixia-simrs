@@ -76,10 +76,14 @@ export function PatientProfileBanner({
                 </span>
               ) : isBridgingActive ? (
                 <span
-                  className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-300 shrink-0 transition-all duration-150 hover:bg-emerald-100/80"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-300 shrink-0 transition-all duration-150 hover:bg-emerald-100/80"
                   title="SATUSEHAT Terverifikasi & Pasien menyetujui Opt-In Cloud Kemenkes RI (Sesi Live Terhubung)"
                 >
-                  <ShieldCheck className="h-3 w-3 text-emerald-600 shrink-0" />
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-3 w-3 object-contain shrink-0"
+                  />
                   <span>SATUSEHAT Terverifikasi • Live</span>
                 </span>
               ) : (
@@ -145,6 +149,18 @@ export function PatientProfileBanner({
           <div className="inline-flex items-center gap-1 whitespace-nowrap">
             <span className="text-slate-400 font-sans text-[11px]">NIK:</span>
             <strong className="text-slate-800 font-medium">{patient.nik}</strong>
+          </div>
+          <span className="text-slate-300 hidden sm:inline select-none">•</span>
+          <div
+            className="inline-flex items-center gap-1.5 whitespace-nowrap bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-md font-sans font-bold text-[10px] shadow-2xs cursor-help"
+            title={`Pasien Terdaftar di SATUSEHAT Kemkes RI (Nomor IHS: ${patient.ihsNumber || patient.id})`}
+          >
+            <img
+              src="/satusehat-default-logo.svg"
+              alt="SATUSEHAT"
+              className="h-2.5 w-2.5 object-contain shrink-0"
+            />
+            <span>IHS: {patient.ihsNumber || patient.id}</span>
           </div>
           <span className="text-slate-300 hidden sm:inline select-none">•</span>
           <div className="inline-flex items-center gap-1 whitespace-nowrap">
@@ -232,15 +248,25 @@ export function PatientProfileBanner({
           </span>
         </div>
 
-        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
-            ID SATUSEHAT
-          </span>
+        <div className="rounded-lg bg-teal-50/50 p-2.5 border border-teal-200/80">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-teal-800 font-bold uppercase tracking-wider flex items-center gap-1">
+              <img
+                src="/satusehat-default-logo.svg"
+                alt="SATUSEHAT"
+                className="h-2.5 w-2.5 object-contain"
+              />
+              <span>ID SATUSEHAT</span>
+            </span>
+            <span className="text-[9px] font-extrabold text-teal-700 bg-teal-100/80 px-1 py-0.2 rounded">
+              Terverifikasi
+            </span>
+          </div>
           <span
-            className={`font-mono text-xs font-bold block mt-1 truncate ${isBridgingActive ? "text-teal-700" : "text-slate-800"}`}
-            title={patient.id}
+            className="font-mono text-xs font-bold block mt-1 truncate text-teal-900"
+            title={patient.ihsNumber || patient.id}
           >
-            {patient.id}
+            {patient.ihsNumber || patient.id}
           </span>
         </div>
       </div>

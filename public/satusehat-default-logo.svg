@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800px" height="800px" viewBox="0 0 48 48" id="satusehat-logo" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .satusehat-teal { fill: #16B3AC; stroke: #16B3AC; stroke-width: 0.5; stroke-linecap: round; stroke-linejoin: round; }
+      .satusehat-lime { fill: #C9D62B; stroke: #C9D62B; stroke-width: 0.5; stroke-linecap: round; stroke-linejoin: round; }
+    </style>
+  </defs>
+  <!-- Top-Left Loop (Lime) -->
+  <path class="satusehat-lime" d="m24,24h-14.5905c-1.8177,0-3.4687-1.2324-3.829-3.0141-.4956-2.4507,1.3655-4.6036,3.7283-4.6036h7.0735v-6.9728c0-1.8177,1.2324-3.4687,3.0141-3.829,2.4507-.4956,4.6036,1.3655,4.6036,3.7283v14.6912Z"/>
+  <!-- Top-Left Dot/Circle (Lime) -->
+  <circle class="satusehat-lime" cx="10" cy="10" r="4.5"/>
+  <!-- Top-Right Loop (Teal) -->
+  <path class="satusehat-teal" d="m24,24v-14.5905c0-1.8177,1.2324-3.4687,3.0141-3.829,2.4507-.4956,4.6036,1.3655,4.6036,3.7283v7.0735h6.9728c1.8177,0,3.4687,1.2324,3.829,3.0141.4956,2.4507-1.3655,4.6036-3.7283,4.6036h-14.6912Z"/>
+  <!-- Bottom-Right Loop (Teal) -->
+  <path class="satusehat-teal" d="m24,24h14.5905c1.8177,0,3.4687,1.2324,3.829,3.0141.4956,2.4507-1.3655,4.6036-3.7283,4.6036h-7.0735v6.9728c0,1.8177-1.2324,3.4687-3.0141,3.829-2.4507.4956-4.6036-1.3655-4.6036-3.7283v-14.6912Z"/>
+  <!-- Bottom-Left Loop (Teal) -->
+  <path class="satusehat-teal" d="m24,24v14.5905c0,1.8177-1.2324,3.4687-3.0141,3.829-2.4507.4956-4.6036-1.3655-4.6036-3.7283v-7.0735h-6.9728c-1.8177,0-3.4687-1.2324-3.829-3.0141-.4956-2.4507,1.3655-4.6036,3.7283-4.6036h14.6912Z"/>
+</svg>

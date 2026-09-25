@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Activity,
   KeyRound,
@@ -32,10 +33,14 @@ export default function LoginPage() {
   const [isSuccessRedirecting, setIsSuccessRedirecting] = useState(false);
   const isSubmitLockedRef = useRef(false);
 
-  // Jika user sudah memiliki sesi login aktif, jangan tampilkan form login, langsung arahkan ke dashboard
+  // Jika user sudah memiliki sesi login aktif, arahkan sesuai peran (Super Admin ke /admin, lainnya ke /)
   React.useEffect(() => {
     if (!isLoading && user) {
-      router.replace("/");
+      if (user.role === "super_admin") {
+        router.replace("/admin");
+      } else {
+        router.replace("/");
+      }
     }
   }, [user, isLoading, router]);
 
@@ -75,13 +80,14 @@ export default function LoginPage() {
       isSubmitLockedRef.current = true;
       setIsSubmitting(true);
 
-      const success = await login(username.trim(), password.trim());
+      const loggedInUser = await login(username.trim(), password.trim());
 
-      if (success) {
+      if (loggedInUser) {
         setIsSuccessRedirecting(true);
-        // Gunakan router.replace agar halaman /login digantikan di riwayat browser (tombol back tidak kembali ke login)
+        // Arahkan super_admin ke Vendor Portal (/admin), dan role lain ke SIMRS Klinik (/)
+        const destination = loggedInUser.role === "super_admin" ? "/admin" : "/";
         setTimeout(() => {
-          router.replace("/");
+          router.replace(destination);
         }, 350);
       } else {
         setIsSubmitting(false);
@@ -248,9 +254,24 @@ export default function LoginPage() {
 
           {/* Standard Footer Compliance */}
           <div className="text-center pt-2 border-t border-slate-100 flex items-center justify-center gap-1.5 text-slate-400 text-[11px]">
-            <Shield className="h-3.5 w-3.5 text-teal-600" />
+            <img
+              src="/satusehat-default-logo.svg"
+              alt="SATUSEHAT"
+              className="h-3.5 w-3.5 object-contain shrink-0"
+            />
             <span>Permenkes No. 24 Tahun 2022 • Standar HL7 FHIR SATUSEHAT</span>
           </div>
+        </div>
+
+        {/* Vendor Portal Link */}
+        <div className="mt-4 text-center">
+          <Link
+            href="/admin/login"
+            className="text-[11px] text-slate-400 hover:text-slate-600 font-medium inline-flex items-center gap-1.5 transition-colors"
+          >
+            <Shield className="h-3 w-3 text-slate-400" />
+            <span>Portal Khusus Vendor / Penyedia RME</span>
+          </Link>
         </div>
       </div>
     </div>

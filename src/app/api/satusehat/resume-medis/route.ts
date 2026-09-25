@@ -23,7 +23,9 @@ import { ResourceSyncItem, SatusehatEnvironment, OutpatientEncounter, PatientPro
 import { SatusehatClient } from "@/lib/satusehat/client";
 import { PatientRepository } from "@/lib/db/repositories/patient-repo";
 import { EncounterRepository } from "@/lib/db/repositories/encounter-repo";
+import { FacilityRepository } from "@/lib/db/repositories/facility-repo";
 import { QueueRepository } from "@/lib/db/repositories/queue-repo";
+import { extractFacilityIdFromRequest } from "@/lib/auth/session-helper";
 import { generateUUIDv7 } from "@/lib/id-generator";
 
 function extractSatusehatErrorMessage(data: unknown, status: number): string {
@@ -283,6 +285,21 @@ export async function POST(req: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Security Guard: Tolak sinkronisasi rekam medis jika faskes sedang dinonaktifkan/diarsipkan
+    const checkFacilityId = extractFacilityIdFromRequest(req, encounter.facilityId);
+    if (checkFacilityId) {
+      const fac = await FacilityRepository.getById(checkFacilityId);
+      if (fac && fac.isActive === false) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Akses Ditolak: Fasilitas kesehatan (${fac.name}) sedang diarsipkan / dinonaktifkan. Transmisi dan penyimpanan rekam medis baru dibatasi demi integritas data.`,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Ensure Patient exists or is updated in PostgreSQL DB
@@ -706,12 +723,29 @@ export async function POST(req: NextRequest) {
     const updatedLabResults = encounter.labResults ? encounter.labResults.map((lr) => ({ ...lr })) : undefined;
     const updatedRadiologyResults = encounter.radiologyResults ? encounter.radiologyResults.map((r) => ({ ...r })) : undefined;
 
-    // Auto-resolve activeToken from server-side cache/env if not passed in request body
+    // Auto-resolve activeToken from server-side cache/db if not passed in request body
+    const resolvedFacilityId = extractFacilityIdFromRequest(req, encounter.facilityId);
     let activeToken = token;
     if (!activeToken) {
-      const authRes = await SatusehatClient.getOrFetchToken(env as SatusehatEnvironment);
+      const authRes = await SatusehatClient.getOrFetchToken(env as SatusehatEnvironment, {
+        facilityId: resolvedFacilityId || undefined,
+      });
       if (authRes.success && authRes.data?.accessToken) {
         activeToken = authRes.data.accessToken;
+      }
+    }
+
+    // Pastikan metadata faskes pada encounter konsisten dengan basis data faskes pengirim
+    if (resolvedFacilityId && (!encounter.facilityId || !encounter.hospitalOrgId)) {
+      try {
+        const fac = await FacilityRepository.getById(resolvedFacilityId);
+        if (fac) {
+          if (!encounter.facilityId) encounter.facilityId = fac.id;
+          if (!encounter.hospitalOrgId && fac.satusehatOrgId) encounter.hospitalOrgId = fac.satusehatOrgId;
+          if (!encounter.hospitalName && fac.name) encounter.hospitalName = fac.name;
+        }
+      } catch (err) {
+        console.warn("[ResumeMedis API] Gagal verifikasi metadata faskes:", err);
       }
     }
 
@@ -1461,7 +1495,7 @@ export async function POST(req: NextRequest) {
           // Ensure ServiceRequest exists for DiagnosticReport.basedOn
           if (!labServiceRequestId) {
             const firstLab = updatedLabResults[0];
-            const hospitalOrgId = boundEncounter.hospitalOrgId || process.env.SATUSEHAT_ORG_ID || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+            const hospitalOrgId = boundEncounter.hospitalOrgId || "b15a7ae7-f366-4a84-8385-0b8196c05002";
             const srPayload = {
               resourceType: "ServiceRequest",
               status: "active",
@@ -1596,7 +1630,7 @@ export async function POST(req: NextRequest) {
           // Ensure ServiceRequest exists for Radiology DiagnosticReport.basedOn
           if (!radServiceRequestId) {
             const firstRad = updatedRadiologyResults[0];
-            const hospitalOrgId = boundEncounter.hospitalOrgId || process.env.SATUSEHAT_ORG_ID || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+            const hospitalOrgId = boundEncounter.hospitalOrgId || "b15a7ae7-f366-4a84-8385-0b8196c05002";
             const radSrPayload = {
               resourceType: "ServiceRequest",
               status: "active",

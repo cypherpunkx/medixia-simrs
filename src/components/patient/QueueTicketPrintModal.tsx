@@ -193,8 +193,9 @@ export function QueueTicketPrintModal({
                 {activeHospitalName}
               </h3>
             </div>
-            <p className="text-[10px] text-slate-500">
-              Pelayanan Rawat Jalan Terpadu SATUSEHAT
+            <p className="text-[10px] text-slate-500 flex items-center justify-center gap-1">
+              <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-2.5 w-2.5 object-contain" />
+              <span>Pelayanan Rawat Jalan Terpadu SATUSEHAT</span>
             </p>
             <p className="text-[9px] text-slate-400">
               {currentDate} • {currentTime} WIB

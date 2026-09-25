@@ -364,8 +364,8 @@ export function DiagnosticSupportModule({
     if (!encounter || !patient) return;
 
     if (user && user.role !== "doctor" && user.role !== "admin") {
-      toast.error("Akses Ditolak: Wewenang Dokter DPJP", {
-        description: `Akun Anda terdaftar sebagai ${user.role.toUpperCase()}. Order pemeriksaan penunjang hanya dapat diterbitkan oleh Dokter DPJP.`,
+      toast.error("Wewenang Khusus Dokter DPJP", {
+        description: "Order pemeriksaan penunjang hanya dapat diterbitkan oleh Dokter Penanggung Jawab (DPJP).",
         duration: 5000,
       });
       return;
@@ -706,7 +706,11 @@ export function DiagnosticSupportModule({
                     title={`ID Kunjungan SATUSEHAT: ${encounter.satusehatEncounterId}`}
                     className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 whitespace-nowrap shrink-0 shadow-2xs cursor-help"
                   >
-                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <img
+                      src="/satusehat-default-logo.svg"
+                      alt="SATUSEHAT"
+                      className="w-3 h-3 object-contain shrink-0"
+                    />
                     SATUSEHAT Aktif
                   </span>
                 ) : (
@@ -1252,7 +1256,11 @@ export function DiagnosticSupportModule({
                             title={`ID ServiceRequest SATUSEHAT: ${ord.satusehatServiceRequestId}`}
                             className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold flex items-center gap-1 py-1 cursor-help"
                           >
-                            <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                            <img
+                              src="/satusehat-default-logo.svg"
+                              alt="SATUSEHAT"
+                              className="h-3 w-3 object-contain shrink-0"
+                            />
                             <span>SATUSEHAT</span>
                           </Badge>
                         ) : encounter.satusehatEncounterId ? (
@@ -1818,7 +1826,11 @@ export function DiagnosticSupportModule({
                               title={`ID DiagnosticReport SATUSEHAT: ${lr.satusehatDiagnosticReportId}`}
                               className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold inline-flex items-center gap-1 py-1 cursor-help"
                             >
-                              <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                              <img
+                                src="/satusehat-default-logo.svg"
+                                alt="SATUSEHAT"
+                                className="h-3 w-3 object-contain shrink-0"
+                              />
                               <span>SATUSEHAT</span>
                             </Badge>
                           ) : encounter.satusehatEncounterId ? (
@@ -2328,7 +2340,11 @@ export function DiagnosticSupportModule({
                             title={`ID DiagnosticReport SATUSEHAT: ${rad.satusehatDiagnosticReportId}`}
                             className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold flex items-center gap-1 py-1 cursor-help"
                           >
-                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                            <img
+                              src="/satusehat-default-logo.svg"
+                              alt="SATUSEHAT"
+                              className="h-3 w-3 object-contain shrink-0"
+                            />
                             <span>SATUSEHAT</span>
                           </Badge>
                         ) : encounter.satusehatEncounterId ? (

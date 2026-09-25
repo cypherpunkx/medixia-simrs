@@ -68,9 +68,13 @@ export function Header({
       <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-8 max-w-7xl">
         {/* Left: Brand / Logo */}
         <div className="flex items-center gap-3">
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-teal-500 to-cyan-600 text-white shadow-md shadow-teal-500/20">
-            <Activity className="h-5 w-5 animate-heartbeat" />
-            <div className="absolute -top-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-400 border-2 border-background" />
+          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-white border border-teal-100 shadow-md shadow-teal-500/10 p-1.5 shrink-0">
+            <img
+              src="/satusehat-default-logo.svg"
+              alt="SATUSEHAT"
+              className="h-full w-full object-contain"
+            />
+            <div className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 border-2 border-background animate-pulse" />
           </div>
           <div className="flex flex-col">
             <div className="flex items-center gap-2">

@@ -59,15 +59,20 @@ export async function GET(req: NextRequest) {
 
       const facility = await FacilityRepository.getById(session.facilityId || user.facilityId || "fac-rsud-01");
 
+      const enrichedUser = {
+        ...user,
+        facilityId: facility?.id || user.facilityId,
+        facilityName: facility?.name || user.facilityName,
+        facilityType: facility?.type || user.facilityType,
+      };
+
       return NextResponse.json({
         success: true,
+        authenticated: true,
+        user: enrichedUser,
+        facility,
         data: {
-          user: {
-            ...user,
-            facilityId: facility?.id || user.facilityId,
-            facilityName: facility?.name || user.facilityName,
-            facilityType: facility?.type || user.facilityType,
-          },
+          user: enrichedUser,
           facility,
         },
       });

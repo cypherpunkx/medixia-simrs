@@ -421,8 +421,12 @@ export function PublicQueueDisplayModal({
                   <span>ANTREAN HARI INI</span>
                 </Badge>
               </DialogTitle>
-              <p className="text-[11px] text-slate-400">
-                Sistem Panggilan &amp; Tampilan Antrean Rawat Jalan Terintegrasi SATUSEHAT
+              <p className="text-[11px] text-slate-400 flex items-center gap-1.5 flex-wrap">
+                <span>Sistem Panggilan &amp; Tampilan Antrean Rawat Jalan Terintegrasi</span>
+                <span className="inline-flex items-center gap-1 text-teal-300 font-bold">
+                  <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-3 w-3 object-contain shrink-0" />
+                  SATUSEHAT
+                </span>
               </p>
             </div>
           </div>
@@ -722,8 +726,12 @@ export function PublicQueueDisplayModal({
                           {dept.department}
                         </h3>
                       </div>
-                      <p className="text-[9px] text-teal-400 font-mono mt-0.5">
-                        {dept.room} • Prefix: <strong>{dept.code}</strong>
+                      <p className="text-[9px] text-teal-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span>{dept.room} • Prefix: <strong>{dept.code}</strong></span>
+                        <span className="inline-flex items-center gap-1 text-[8px] font-bold text-teal-200 bg-teal-900/60 border border-teal-500/30 px-1 py-0.2 rounded" title="Location Terintegrasi SATUSEHAT">
+                          <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-2 w-2 object-contain" />
+                          <span>SATUSEHAT Location</span>
+                        </span>
                       </p>
                     </div>
                     <Badge
@@ -816,8 +824,10 @@ export function PublicQueueDisplayModal({
 
         {/* Footer Running Marquee */}
         <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-          <div className="flex items-center gap-1.5">
-            <Radio className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center h-4 w-4 bg-white/10 rounded p-0.5 shrink-0">
+              <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-full w-full object-contain" />
+            </div>
             <span>
               Koneksi Antrean SATUSEHAT:{" "}
               <strong className="text-emerald-400">Aktif & Sinkron</strong>

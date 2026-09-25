@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { FacilityRepository } from "@/lib/db/repositories/facility-repo";
+import { verifySessionToken } from "@/lib/auth/jwt";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const list = await FacilityRepository.getAll();
+    const { searchParams } = new URL(req.url);
+    const queryAll = searchParams.get("all") === "true";
+
+    // Jika pemanggil adalah Super Admin Vendor, otomatis sertakan faskes nonaktif/arsip
+    const sessionCookie = req.cookies.get("medixia_simrs_session")?.value;
+    const session = sessionCookie ? verifySessionToken(sessionCookie) : null;
+    const isSuperAdmin = session?.role === "super_admin";
+
+    const includeAll = queryAll || isSuperAdmin;
+    const list = await FacilityRepository.getAll(includeAll);
     return NextResponse.json({ success: true, data: list });
   } catch (error) {
     return NextResponse.json(
@@ -20,7 +30,19 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, type, satusehatOrgId, address, phone, licenseNumber, departments, adminUser } = body;
+    const {
+      name,
+      type,
+      satusehatOrgId,
+      satusehatClientId,
+      satusehatClientSecret,
+      satusehatEnv,
+      address,
+      phone,
+      licenseNumber,
+      departments,
+      adminUser,
+    } = body;
 
     if (!name || !type || !satusehatOrgId) {
       return NextResponse.json(
@@ -33,6 +55,11 @@ export async function POST(req: NextRequest) {
       name,
       type,
       satusehatOrgId,
+      satusehatClientId: satusehatClientId || undefined,
+      satusehatClientSecret: satusehatClientSecret || undefined,
+      satusehatEnv: satusehatEnv || "staging",
+      satusehatStatus: satusehatClientId && satusehatClientSecret ? "connected" : "unverified",
+      satusehatLastTestedAt: satusehatClientId && satusehatClientSecret ? new Date().toISOString() : undefined,
       address: address || "",
       phone: phone || "",
       licenseNumber: licenseNumber || "",
@@ -41,15 +68,22 @@ export async function POST(req: NextRequest) {
       adminUser: adminUser || undefined,
     });
 
+    if (!created) {
+      return NextResponse.json(
+        { success: false, error: "Gagal membuat fasilitas kesehatan baru." },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json({ success: true, data: created });
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : "Gagal mendaftarkan faskes baru.";
     return NextResponse.json(
       {
         success: false,
-        error: "Gagal mendaftarkan faskes baru.",
-        detail: error instanceof Error ? error.message : String(error),
+        error: errorMsg,
       },
-      { status: 500 }
+      { status: 400 }
     );
   }
 }

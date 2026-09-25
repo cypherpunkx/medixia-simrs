@@ -36,6 +36,7 @@ import { EncounterRepository } from "@/lib/db/repositories/encounter-repo";
 import { SyncLogRepository } from "@/lib/db/repositories/sync-log-repo";
 import { QueueRepository } from "@/lib/db/repositories/queue-repo";
 import { OutboxRepository } from "@/lib/db/repositories/outbox-repo";
+import { extractFacilityIdFromRequest } from "@/lib/auth/session-helper";
 import { generateUUIDv7 } from "@/lib/id-generator";
 
 function extractSatusehatErrorMessage(data: unknown, status: number): string {
@@ -349,11 +350,7 @@ export async function POST(req: NextRequest) {
     }
 
     const resolvedEnv: SatusehatEnvironment =
-      env === "production"
-        ? "production"
-        : env === "staging"
-          ? "staging"
-          : (process.env.SATUSEHAT_ENV as SatusehatEnvironment) || "staging";
+      env === "production" ? "production" : "staging";
 
     const fhirBaseUrl = getSatusehatFhirUrl(resolvedEnv);
     const hospitalOrgId = getValidOrgId(encounter);
@@ -501,9 +498,12 @@ export async function POST(req: NextRequest) {
     // Process Selective Retry
     const now = new Date().toISOString();
 
+    const resolvedFacilityId = extractFacilityIdFromRequest(req, encounter.facilityId);
     let activeToken = token;
     if (!activeToken) {
-      const authRes = await SatusehatClient.getOrFetchToken(resolvedEnv);
+      const authRes = await SatusehatClient.getOrFetchToken(resolvedEnv, {
+        facilityId: resolvedFacilityId || undefined,
+      });
       if (authRes.success && authRes.data?.accessToken) {
         activeToken = authRes.data.accessToken;
       }

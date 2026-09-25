@@ -81,8 +81,8 @@ export function MedicalRecordLockModal({
 
   const handleToggleLock = () => {
     if (user && user.role !== "doctor" && user.role !== "admin") {
-      toast.error("Akses Ditolak: Wewenang Dokter DPJP / Admin", {
-        description: `Akun Anda (${user.name}) terdaftar sebagai ${user.role.toUpperCase()}. Penguncian permanen rekam medis hanya dapat dilakukan oleh Dokter DPJP atau Administrator Sistem.`,
+      toast.error("Wewenang Dokter DPJP & Administrator", {
+        description: "Penguncian permanen rekam medis hanya dapat dilakukan oleh Dokter DPJP atau Administrator Sistem.",
       });
       return;
     }

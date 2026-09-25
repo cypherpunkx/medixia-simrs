@@ -189,6 +189,16 @@ async function buildEncounter(row: typeof encounters.$inferSelect): Promise<Outp
     noteText: a.noteText,
   }));
 
+  let fName = "RS Umum Daerah Sehat Sejahtera";
+  let fOrgId = "b15a7ae7-f366-4a84-8385-0b8196c05002";
+  if (row.facilityId) {
+    const fRow = await db.select().from(facilities).where(eq(facilities.id, row.facilityId)).limit(1);
+    if (fRow[0]) {
+      fName = fRow[0].name;
+      fOrgId = fRow[0].satusehatOrgId;
+    }
+  }
+
   return {
     id: row.id,
     patientId: row.patientId || undefined,
@@ -201,8 +211,8 @@ async function buildEncounter(row: typeof encounters.$inferSelect): Promise<Outp
     doctorName: row.doctorName,
     doctorSip: row.doctorSip,
     doctorIhsId: row.doctorIhsId || undefined,
-    hospitalName: process.env.NEXT_PUBLIC_HOSPITAL_NAME || "RS Umum Daerah Sehat Sejahtera",
-    hospitalOrgId: process.env.SATUSEHAT_ORG_ID || "b15a7ae7-f366-4a84-8385-0b8196c05002",
+    hospitalName: fName,
+    hospitalOrgId: fOrgId,
     chiefComplaint: row.chiefComplaint,
     anamnesis: row.anamnesis,
     vitals: vitalsData,
@@ -435,6 +445,10 @@ async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSele
     addendumMap.set(a.encounterId, list);
   }
 
+  // Pre-fetch fasilitas untuk pemetaan multi-tenant murni dari database
+  const allFacs = await db.select({ id: facilities.id, name: facilities.name, orgId: facilities.satusehatOrgId }).from(facilities);
+  const facMap = new Map(allFacs.map((f) => [f.id, { name: f.name, orgId: f.orgId }]));
+
   // Construct OutpatientEncounter objects in memory
   return encounterRows.map((row) => {
     const encId = row.id;
@@ -446,6 +460,7 @@ async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSele
     const radList = radMap.get(encId);
     const syncList = syncMap.get(encId);
     const addList = addendumMap.get(encId);
+    const fMeta = row.facilityId ? facMap.get(row.facilityId) : null;
 
     return {
       id: row.id,
@@ -459,8 +474,8 @@ async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSele
       doctorName: row.doctorName,
       doctorSip: row.doctorSip,
       doctorIhsId: row.doctorIhsId || undefined,
-      hospitalName: process.env.NEXT_PUBLIC_HOSPITAL_NAME || "RS Umum Daerah Sehat Sejahtera",
-      hospitalOrgId: process.env.SATUSEHAT_ORG_ID || "b15a7ae7-f366-4a84-8385-0b8196c05002",
+      hospitalName: fMeta?.name || "RS Umum Daerah Sehat Sejahtera",
+      hospitalOrgId: fMeta?.orgId || "b15a7ae7-f366-4a84-8385-0b8196c05002",
       chiefComplaint: row.chiefComplaint,
       anamnesis: row.anamnesis,
       vitals: vitalsMap.get(encId),

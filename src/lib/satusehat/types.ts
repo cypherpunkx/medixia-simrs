@@ -3,7 +3,7 @@ export type SatusehatEnvironment = "staging" | "production";
 // ==========================================
 // Multi-Faskes & Role-Based Access Control
 // ==========================================
-export type FacilityType = "rumah_sakit" | "klinik_pratama" | "klinik_utama" | "puskesmas";
+export type FacilityType = "rumah_sakit" | "klinik_pratama" | "klinik_utama" | "puskesmas" | "praktik_mandiri";
 
 export interface FacilityProfile {
   id: string;
@@ -12,6 +12,11 @@ export interface FacilityProfile {
   satusehatOrgId: string;
   satusehatClientId?: string;
   satusehatClientSecret?: string;
+  satusehatClientSecretEnc?: string;
+  satusehatClientSecretMasked?: string;
+  satusehatEnv?: SatusehatEnvironment;
+  satusehatStatus?: "connected" | "unverified" | "error";
+  satusehatLastTestedAt?: string;
   address: string;
   phone: string;
   licenseNumber: string;
@@ -29,9 +34,10 @@ export interface DepartmentItem {
   quota: number;
   defaultDoctorName?: string;
   isActive: boolean;
+  satusehatLocationId?: string; // ID Location resmi Kemenkes SATUSEHAT (FHIR Location Resource)
 }
 
-export type UserRole = "doctor" | "nurse" | "registration" | "admin" | "pharmacy";
+export type UserRole = "super_admin" | "admin" | "doctor" | "nurse" | "registration" | "pharmacy";
 
 export interface UserProfile {
   id: string;
@@ -41,6 +47,7 @@ export interface UserProfile {
   name: string;
   role: UserRole;
   sip?: string;
+  nik?: string;
   ihsPractitionerId?: string;
   department?: string;
   facilityName?: string;
@@ -142,6 +149,123 @@ export interface OrgVerifyApiResponse {
   };
   telemetry?: TelemetryData;
 }
+
+// ==========================================
+// FHIR LOCATION & PRACTITIONER PREREQUISITES
+// Standar Kemenkes RI Onboarding & FHIR HL7 R4
+// ==========================================
+
+export interface FhirLocation {
+  resourceType: "Location";
+  id?: string;
+  identifier?: Array<{
+    system?: string;
+    value?: string;
+    use?: string;
+  }>;
+  status: "active" | "suspended" | "inactive";
+  name: string;
+  description?: string;
+  mode?: "instance" | "kind";
+  telecom?: Array<{
+    system?: string;
+    value?: string;
+    use?: string;
+  }>;
+  address?: {
+    use?: string;
+    line?: string[];
+    city?: string;
+    postalCode?: string;
+    country?: string;
+  };
+  physicalType: {
+    coding: Array<{
+      system: string;
+      code: string;
+      display?: string;
+    }>;
+  };
+  managingOrganization: {
+    reference: string; // e.g. "Organization/{orgId}"
+    display?: string;
+  };
+  partOf?: {
+    reference: string;
+    display?: string;
+  };
+}
+
+export interface LocationApiResponse {
+  success: boolean;
+  data?: FhirLocation;
+  error?: {
+    message: string;
+    status?: number;
+    detail?: unknown;
+  };
+  telemetry?: TelemetryData;
+}
+
+export interface FhirPractitioner {
+  resourceType: "Practitioner";
+  id: string; // Nomor IHS Practitioner (e.g. 10000001 atau N10000001)
+  identifier?: Array<{
+    system?: string;
+    value?: string;
+    use?: string;
+  }>;
+  active?: boolean;
+  name?: Array<{
+    use?: string;
+    text?: string;
+    family?: string;
+    given?: string[];
+    prefix?: string[];
+    suffix?: string[];
+  }>;
+  gender?: "male" | "female" | "other" | "unknown";
+  birthDate?: string;
+  qualification?: Array<{
+    identifier?: Array<{
+      system?: string;
+      value?: string;
+    }>;
+    code?: {
+      coding?: Array<{
+        system?: string;
+        code?: string;
+        display?: string;
+      }>;
+      text?: string;
+    };
+    issuer?: {
+      display?: string;
+    };
+  }>;
+}
+
+export interface PractitionerApiResponse {
+  success: boolean;
+  source?: "satusehat_live" | "sisdmk_verified" | "local_database";
+  data?: {
+    id: string; // IHS Practitioner ID
+    nik: string;
+    name: string;
+    gender?: string;
+    birthDate?: string;
+    profession?: string;
+    sip?: string;
+    str?: string;
+  };
+  error?: {
+    message: string;
+    status?: number;
+    detail?: unknown;
+  };
+  telemetry?: TelemetryData;
+}
+
 
 // ==========================================
 // RESUME MEDIS RAWAT JALAN DATA MODELS

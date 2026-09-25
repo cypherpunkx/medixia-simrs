@@ -1282,7 +1282,14 @@ export function OutpatientEntryForm({
       ]);
       setFollowUpNotes("Edukasi diet rendah indeks glikemik, cek HbA1c berkala per 3 bulan, dan rawat kaki harian.");
     }
-    toast.success(`Template klinis ${type.toUpperCase()} berhasil diterapkan ke formulir SOAP`);
+    const templateLabels: Record<string, string> = {
+      ispa: "ISPA",
+      hipertensi: "Hipertensi",
+      dispepsia: "Dispepsia",
+      diabetes: "Diabetes Melitus",
+    };
+    const templateName = templateLabels[type] || type;
+    toast.success(`Template ${templateName} berhasil diterapkan ke formulir SOAP`);
   };
 
   const filteredIcd9Options = icd9Search.trim()
@@ -1720,9 +1727,14 @@ export function OutpatientEntryForm({
               {/* Bridging Connection Status Pill */}
               {isBridgingConnected ? (
                 <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-300 flex items-center gap-1.5 shadow-2xs">
-                  <span className="relative flex h-2 w-2">
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-3.5 w-3.5 object-contain shrink-0"
+                  />
+                  <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
                   </span>
                   <span>SATUSEHAT Terhubung</span>
                 </span>
@@ -1749,8 +1761,12 @@ export function OutpatientEntryForm({
                   <span>Consent: Ditolak (Internal RS)</span>
                 </span>
               ) : (
-                <span className="text-[10px] font-bold text-teal-900 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-300 flex items-center gap-1 shadow-2xs">
-                  <ShieldCheck className="h-3 w-3 text-teal-700" />
+                <span className="text-[10px] font-bold text-teal-900 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-300 flex items-center gap-1.5 shadow-2xs">
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-3 w-3 object-contain shrink-0"
+                  />
                   <span>Consent: Disetujui (Cloud)</span>
                 </span>
               )}
@@ -1786,6 +1802,37 @@ export function OutpatientEntryForm({
                   {patient.nik}
                 </strong>
               </div>
+
+              {(patient.ihsNumber || patient.id?.startsWith("P-")) ? (
+                <div
+                  title={`Pasien Terdaftar di SATUSEHAT Kemkes RI (IHS: ${patient.ihsNumber || patient.id})`}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-teal-50 border border-teal-200 text-[11px] text-teal-800 shadow-2xs cursor-help"
+                >
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-2.5 w-2.5 object-contain shrink-0"
+                  />
+                  <span className="text-teal-700 font-medium text-[10px] uppercase tracking-wider">
+                    IHS:
+                  </span>
+                  <strong className="font-mono font-bold text-teal-950 tracking-wide">
+                    {patient.ihsNumber || patient.id}
+                  </strong>
+                </div>
+              ) : (
+                <div
+                  title="Pasien belum memiliki nomor IHS SATUSEHAT"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-slate-100 border border-slate-200 text-[11px] text-slate-500 shadow-2xs"
+                >
+                  <span className="text-slate-400 font-medium text-[10px] uppercase tracking-wider">
+                    IHS:
+                  </span>
+                  <span className="font-mono text-[10px] text-slate-500">
+                    Belum Terdaftar
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -3279,7 +3326,7 @@ export function OutpatientEntryForm({
                     placeholder="Pilih Tanggal Kontrol Ulang..."
                     minDate={new Date().toISOString().split("T")[0]}
                     size="md"
-                    buttonClassName={`h-9 text-xs bg-white border-slate-300 rounded-lg shadow-2xs font-mono ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
+                    buttonClassName={`w-full h-9 text-xs bg-white border-slate-300 rounded-lg shadow-2xs font-medium ${isReadOnly ? "bg-slate-50 text-slate-800 cursor-not-allowed" : ""}`}
                   />
                 </div>
               )}
@@ -3324,7 +3371,11 @@ export function OutpatientEntryForm({
           <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
-                <Shield className="h-3.5 w-3.5 text-teal-600" />
+                <img
+                  src="/satusehat-default-logo.svg"
+                  alt="SATUSEHAT"
+                  className="h-3.5 w-3.5 object-contain shrink-0"
+                />
                 <span>Persetujuan Pertukaran Data SATUSEHAT</span>
               </span>
               <span className="text-[10px] text-teal-700 bg-teal-100/70 font-semibold px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -3354,11 +3405,19 @@ export function OutpatientEntryForm({
                 <div
                   className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
                     consentStatus === "opt-in"
-                      ? "bg-teal-600 text-white"
+                      ? "bg-white border border-teal-200 shadow-2xs"
                       : "bg-slate-100 text-slate-500"
                   }`}
                 >
-                  <ShieldCheck className="h-4 w-4" />
+                  {consentStatus === "opt-in" ? (
+                    <img
+                      src="/satusehat-default-logo.svg"
+                      alt="SATUSEHAT"
+                      className="h-4 w-4 object-contain shrink-0"
+                    />
+                  ) : (
+                    <ShieldCheck className="h-4 w-4" />
+                  )}
                 </div>
                 <div className="space-y-0.5 min-w-0 flex-1">
                   <div className="flex items-center justify-between">
@@ -3702,8 +3761,12 @@ export function OutpatientEntryForm({
                   }}
                   className="w-full text-left p-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 transition-all cursor-pointer group flex items-start gap-3"
                 >
-                  <div className="h-8 w-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-slate-200 transition-colors">
-                    <ExternalLink className="h-4 w-4" />
+                  <div className="h-8 w-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-teal-100 transition-colors">
+                    <img
+                      src="/satusehat-default-logo.svg"
+                      alt="SATUSEHAT"
+                      className="h-4 w-4 object-contain shrink-0"
+                    />
                   </div>
                   <div className="space-y-0.5 flex-1 min-w-0">
                     <div className="flex items-center justify-between">

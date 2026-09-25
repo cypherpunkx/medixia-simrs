@@ -453,7 +453,11 @@ export function OutpatientTimeline({
               <div className="flex flex-wrap items-center gap-3">
                 {current.satusehatEncounterId ? (
                   <div className="flex items-center gap-1.5 text-emerald-800 font-semibold">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <img
+                      src="/satusehat-default-logo.svg"
+                      alt="SATUSEHAT"
+                      className="h-3.5 w-3.5 object-contain shrink-0"
+                    />
                     <span>
                       SATUSEHAT ID:{" "}
                       <strong className="text-teal-700 font-bold font-mono">

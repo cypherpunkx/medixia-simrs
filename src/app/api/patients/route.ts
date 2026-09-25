@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PatientRepository } from "@/lib/db/repositories/patient-repo";
+import { FacilityRepository } from "@/lib/db/repositories/facility-repo";
 import { PatientProfile } from "@/lib/satusehat/types";
 import { validatePhone } from "@/lib/satusehat/validation";
-
+import { extractFacilityIdFromRequest } from "@/lib/auth/session-helper";
 import { applyRateLimit } from "@/lib/middleware/rate-limiter";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,21 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    // Security Guard: Tolak pendaftaran pasien baru jika faskes sedang dinonaktifkan
+    const resolvedFacilityId = extractFacilityIdFromRequest(req);
+    if (resolvedFacilityId) {
+      const fac = await FacilityRepository.getById(resolvedFacilityId);
+      if (fac && fac.isActive === false) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Pendaftaran Pasien Ditolak: Fasilitas kesehatan (${fac.name}) sedang diarsipkan / dinonaktifkan. Pelayanan medis baru ditangguhkan.`,
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const body = (await req.json()) as PatientProfile;
 
     if (!body.name || !body.name.trim()) {

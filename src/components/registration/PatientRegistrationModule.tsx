@@ -18,6 +18,7 @@ import {
   ListOrdered,
   ArrowUpDown,
   AlertTriangle,
+  AlertCircle,
   Info,
   ShieldAlert,
   LayoutGrid,
@@ -252,6 +253,9 @@ export function PatientRegistrationModule({
   const [returningAgeFilter, setReturningAgeFilter] = useState<
     "all" | "pediatric" | "adult" | "geriatric"
   >("all");
+  const [returningSatusehatFilter, setReturningSatusehatFilter] = useState<
+    "all" | "registered" | "unregistered"
+  >("all");
   const [returningSortBy, setReturningSortBy] = useState<
     "recent-visit" | "name-asc" | "name-desc" | "mrn-asc" | "visits-count"
   >("recent-visit");
@@ -353,7 +357,10 @@ export function PatientRegistrationModule({
   };
 
   // New Patient Form State
+  const [patientTypeMode, setPatientTypeMode] = useState<"ktp" | "baby">("ktp");
   const [nikInput, setNikInput] = useState("");
+  const [motherNikInput, setMotherNikInput] = useState("");
+  const [babyBirthDateInput, setBabyBirthDateInput] = useState("");
   const [isVerifyingNik, setIsVerifyingNik] = useState(false);
   const [isNikVerified, setIsNikVerified] = useState(false);
   const [newPatientData, setNewPatientData] = useState<Partial<PatientProfile>>(
@@ -459,7 +466,7 @@ export function PatientRegistrationModule({
     if (authDepartments && authDepartments.length > 0) {
       return authDepartments.map((d) => ({
         value: d.name,
-        label: `[${d.code || d.queuePrefix || "POLI"}] ${d.name}${d.room ? ` (${d.room})` : ""}`,
+        label: `[${d.code || d.queuePrefix || "POLI"}] ${d.name}${d.room ? ` (${d.room})` : ""}${d.satusehatLocationId ? " • Location SATUSEHAT" : ""}`,
       }));
     }
     return [
@@ -507,7 +514,7 @@ export function PatientRegistrationModule({
         clinicDoctors.length > 0 ? clinicDoctors : facilityDoctors;
       return listToMap.map((d) => ({
         value: d.name,
-        label: `${d.name}${d.sip ? ` (${formatDoctorSip(d.sip)})` : ""}${d.department ? ` — ${d.department}` : ""}`,
+        label: `${d.name}${d.sip ? ` (${formatDoctorSip(d.sip)})` : ""}${d.ihsPractitionerId ? ` [IHS: ${d.ihsPractitionerId}]` : ""}${d.department ? ` — ${d.department}` : ""}`,
       }));
     }
 
@@ -754,7 +761,21 @@ export function PatientRegistrationModule({
         else if (returningAgeFilter === "geriatric") matchesAge = age >= 60;
       }
 
-      return matchesSearch && matchesVisit && matchesDept && matchesAge;
+      // 6. SATUSEHAT Integration Filter
+      let matchesSatusehat = true;
+      if (returningSatusehatFilter === "registered") {
+        matchesSatusehat = Boolean(p.ihsNumber || p.id?.startsWith("P-"));
+      } else if (returningSatusehatFilter === "unregistered") {
+        matchesSatusehat = !p.ihsNumber && !p.id?.startsWith("P-");
+      }
+
+      return (
+        matchesSearch &&
+        matchesVisit &&
+        matchesDept &&
+        matchesAge &&
+        matchesSatusehat
+      );
     })
     .sort((a, b) => {
       if (returningSortBy === "recent-visit") {
@@ -1121,8 +1142,59 @@ export function PatientRegistrationModule({
     );
   };
 
-  // Live / MPI SATUSEHAT NIK Verification
+  // Live / MPI SATUSEHAT NIK & Bayi Baru Lahir Verification
   const handleVerifyNikMpi = async () => {
+    if (patientTypeMode === "baby") {
+      if (motherNikInput.length !== 16) {
+        toast.error("NIK Ibu Kandung harus terdiri dari 16 digit angka.");
+        return;
+      }
+      if (!babyBirthDateInput) {
+        toast.error("Tanggal lahir bayi wajib diisi untuk pencarian di SATUSEHAT.");
+        return;
+      }
+
+      setIsVerifyingNik(true);
+      try {
+        const res = await fetch(
+          `/api/satusehat/patient?nikIbu=${motherNikInput}&birthDate=${babyBirthDateInput}`,
+        );
+        const data = await res.json();
+
+        if (data.success && data.data) {
+          setIsNikVerified(true);
+          setNewPatientData({
+            id: data.data.ihsId || data.data.id,
+            nik: "",
+            name: data.data.name || `By. Ny. Ibu ${motherNikInput.slice(-4)}`,
+            gender: data.data.gender || "male",
+            birthDate: babyBirthDateInput,
+            address: data.data.address || "",
+            phone: data.data.phone || "",
+            bloodType: "O",
+            allergies: [],
+          });
+          if (data.data.emergencyContact) {
+            setEmergencyName(data.data.emergencyContact.name || "Ibu Kandung");
+            setEmergencyRelation(
+              data.data.emergencyContact.relation || "Ibu",
+            );
+            setEmergencyPhone(data.data.emergencyContact.phone || "");
+          }
+          toast.success("Data Bayi Baru Lahir berhasil diverifikasi di SATUSEHAT!", {
+            description: `IHS Number Bayi: ${data.data.ihsId || data.data.id}`,
+          });
+        } else {
+          toast.error(data.error || "Gagal memverifikasi data bayi di SATUSEHAT.");
+        }
+      } catch {
+        toast.error("Gagal terhubung ke layanan verifikasi SATUSEHAT.");
+      } finally {
+        setIsVerifyingNik(false);
+      }
+      return;
+    }
+
     if (nikInput.length < 16) {
       toast.error("NIK harus terdiri dari 16 digit angka sesuai KTP.");
       return;
@@ -1153,7 +1225,9 @@ export function PatientRegistrationModule({
           );
           setEmergencyPhone(data.data.emergencyContact.phone || "");
         }
-        toast.success("NIK berhasil diverifikasi di SATUSEHAT");
+        toast.success("NIK berhasil diverifikasi di SATUSEHAT", {
+          description: `IHS Patient ID: ${data.data.ihsId || data.data.id}`,
+        });
       } else {
         toast.error(data.error || "Gagal memverifikasi NIK.");
       }
@@ -2242,31 +2316,6 @@ export function PatientRegistrationModule({
                     <Search className="h-3.5 w-3.5 text-teal-600 shrink-0" />
                     <span>Cari Pasien Lama</span>
                   </Button>
-                  <Button
-                    variant="outline"
-                    onClick={async () => {
-                      try {
-                        const res = await fetch("/api/queue");
-                        if (res.ok) {
-                          const json = await res.json();
-                          if (json.success && Array.isArray(json.data)) {
-                            setWorklist(json.data);
-                            toast.success(
-                              "Antrean pasien berhasil disinkronkan dari database!",
-                            );
-                          }
-                        }
-                      } catch {
-                        toast.error(
-                          "Gagal menyinkronkan antrean dari database.",
-                        );
-                      }
-                    }}
-                    className="h-9 px-3.5 text-xs font-semibold gap-2 rounded-lg bg-white border-dashed border-teal-300 text-teal-800 hover:bg-teal-50 hover:border-teal-400 shadow-2xs cursor-pointer active:scale-[0.98] transition-all"
-                  >
-                    <RotateCcw className="h-3.5 w-3.5 text-teal-600 shrink-0" />
-                    <span>Sinkronkan Antrean Database</span>
-                  </Button>
                 </div>
               </div>
             ) : (
@@ -2704,6 +2753,19 @@ export function PatientRegistrationModule({
                                 Thn /{" "}
                                 {item.patient.gender === "male" ? "L" : "P"})
                               </span>
+                              {(item.patient.ihsNumber || item.patient.id?.startsWith("P-")) && (
+                                <span
+                                  className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded shadow-2xs shrink-0 cursor-help"
+                                  title={`Pasien Terdaftar SATUSEHAT Kemkes RI (IHS: ${item.patient.ihsNumber || item.patient.id})`}
+                                >
+                                  <img
+                                    src="/satusehat-default-logo.svg"
+                                    alt="SATUSEHAT"
+                                    className="h-2.5 w-2.5 object-contain shrink-0"
+                                  />
+                                  <span>SATUSEHAT</span>
+                                </span>
+                              )}
                               {isCurrentActive && (
                                 <span className="bg-teal-700 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs shrink-0 flex items-center gap-1">
                                   <span>📌</span>
@@ -2767,8 +2829,12 @@ export function PatientRegistrationModule({
 
                             {/* SATUSEHAT Interoperability Status Badge (State-Aware) */}
                             {item.satusehatStatus === "synced" && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200 shadow-2xs">
-                                <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200 shadow-2xs">
+                                <img
+                                  src="/satusehat-default-logo.svg"
+                                  alt="SATUSEHAT"
+                                  className="h-3 w-3 object-contain shrink-0"
+                                />
                                 <span>SATUSEHAT Terkirim</span>
                               </span>
                             )}
@@ -2816,9 +2882,16 @@ export function PatientRegistrationModule({
                               </div>
                             )}
 
-                            {/* Clinic & Room Chip */}
-                            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-900 border border-teal-200 text-[11px] font-semibold shrink-0">
-                              <Building2 className="h-3 w-3 text-teal-600 shrink-0" />
+                            {/* Clinic & Room Chip with Location Status */}
+                            <div
+                              title="Poliklinik & Ruangan Terpetakan di SATUSEHAT"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-teal-50 text-teal-900 border border-teal-200 text-[11px] font-semibold shrink-0"
+                            >
+                              <img
+                                src="/satusehat-default-logo.svg"
+                                alt="SATUSEHAT"
+                                className="h-2.5 w-2.5 object-contain shrink-0"
+                              />
                               <span>{item.department}</span>
                               <span className="text-teal-700 font-normal font-mono">
                                 ({item.room})
@@ -2831,6 +2904,24 @@ export function PatientRegistrationModule({
                               <span className="font-semibold text-slate-800">
                                 {item.doctor}
                               </span>
+                              {(() => {
+                                const docObj = facilityDoctors.find(
+                                  (d) =>
+                                    item.doctor.includes(d.name) ||
+                                    d.name === item.doctor.split(" (")[0],
+                                );
+                                if (docObj?.ihsPractitionerId) {
+                                  return (
+                                    <span
+                                      className="inline-flex items-center gap-0.5 text-[8px] font-bold text-teal-800 bg-teal-100/70 px-1 rounded font-mono"
+                                      title={`Dokter Terdaftar SATUSEHAT (IHS: ${docObj.ihsPractitionerId})`}
+                                    >
+                                      IHS: {docObj.ihsPractitionerId}
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
 
                             {/* Arrival Time Chip */}
@@ -3352,8 +3443,8 @@ export function PatientRegistrationModule({
               </div>
             </div>
 
-            {/* ROW 2: Balanced 3-Column Dropdown Filter Grid (Poli, Usia, Urutan) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2.5 border-t border-slate-100">
+            {/* ROW 2: Balanced 4-Column Dropdown Filter Grid (Poli, Usia, SATUSEHAT, Urutan) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2.5 border-t border-slate-100">
               {/* 1. Poli Dropdown */}
               <div className="w-full">
                 <CustomSelect
@@ -3415,7 +3506,40 @@ export function PatientRegistrationModule({
                 />
               </div>
 
-              {/* 3. Urutan Dropdown */}
+              {/* 3. SATUSEHAT Dropdown */}
+              <div className="w-full">
+                <CustomSelect
+                  value={returningSatusehatFilter}
+                  onChange={(val) => {
+                    setReturningSatusehatFilter(val as any);
+                    setReturningPage(1);
+                  }}
+                  prefixIcon={
+                    <img
+                      src="/satusehat-default-logo.svg"
+                      alt="SATUSEHAT"
+                      className="h-3.5 w-3.5 object-contain shrink-0"
+                    />
+                  }
+                  prefixLabel="IHS:"
+                  size="md"
+                  className="w-full"
+                  buttonClassName="w-full h-9.5 text-xs bg-slate-50/70 hover:bg-white border-slate-200 justify-between rounded-lg"
+                  options={[
+                    { value: "all", label: "Semua Status IHS" },
+                    {
+                      value: "registered",
+                      label: "Terdaftar IHS Kemenkes",
+                    },
+                    {
+                      value: "unregistered",
+                      label: "Belum Terdaftar IHS",
+                    },
+                  ]}
+                />
+              </div>
+
+              {/* 4. Urutan Dropdown */}
               <div className="w-full">
                 <CustomSelect
                   value={returningSortBy}
@@ -3448,6 +3572,7 @@ export function PatientRegistrationModule({
             {(returningSearch ||
               returningDeptFilter !== "all" ||
               returningAgeFilter !== "all" ||
+              returningSatusehatFilter !== "all" ||
               returningSortBy !== "recent-visit" ||
               returningVisitFilter !== "all" ||
               returningCustomDate) && (
@@ -3494,6 +3619,21 @@ export function PatientRegistrationModule({
                           : "Geriatri"}
                     </span>
                   )}
+                  {returningSatusehatFilter !== "all" && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-medium">
+                      <img
+                        src="/satusehat-default-logo.svg"
+                        alt="SATUSEHAT"
+                        className="h-3 w-3 object-contain shrink-0"
+                      />
+                      <span>
+                        SATUSEHAT:{" "}
+                        {returningSatusehatFilter === "registered"
+                          ? "IHS Terdaftar"
+                          : "Belum Terdaftar"}
+                      </span>
+                    </span>
+                  )}
                   {returningSortBy !== "recent-visit" && (
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 font-medium">
                       Urutan:{" "}
@@ -3516,6 +3656,7 @@ export function PatientRegistrationModule({
                     setReturningCustomDate("");
                     setReturningDeptFilter("all");
                     setReturningAgeFilter("all");
+                    setReturningSatusehatFilter("all");
                     setReturningSortBy("recent-visit");
                     setReturningPage(1);
                   }}
@@ -3569,6 +3710,7 @@ export function PatientRegistrationModule({
                     setReturningVisitFilter("all");
                     setReturningDeptFilter("all");
                     setReturningAgeFilter("all");
+                    setReturningSatusehatFilter("all");
                     setReturningSortBy("recent-visit");
                     setReturningPage(1);
                   }}
@@ -3657,10 +3799,14 @@ export function PatientRegistrationModule({
                           <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-600 text-white font-extrabold text-sm shadow-xs group-hover:bg-teal-700 transition-colors">
                             {initials}
                             <div
-                              className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-emerald-500 border-2 border-white flex items-center justify-center text-white"
+                              className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-white border border-slate-200 shadow-2xs flex items-center justify-center p-0.5"
                               title="SATUSEHAT Terverifikasi"
                             >
-                              <ShieldCheck className="h-2.5 w-2.5" />
+                              <img
+                                src="/satusehat-default-logo.svg"
+                                alt="SATUSEHAT"
+                                className="h-full w-full object-contain"
+                              />
                             </div>
                           </div>
 
@@ -3720,7 +3866,7 @@ export function PatientRegistrationModule({
                       {/* 2. Identifier & Contact Bar */}
                       <div className="rounded-xl bg-slate-50/80 p-2.5 border border-slate-200/70 text-xs space-y-1.5">
                         <div className="flex items-center justify-between text-[11px] font-mono flex-wrap gap-2">
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2.5 flex-wrap">
                             <span>
                               <strong className="text-slate-400 font-sans font-medium text-[10px] mr-1">No. RM:</strong>
                               <span className="text-slate-900 font-bold">{p.mrn}</span>
@@ -3730,6 +3876,22 @@ export function PatientRegistrationModule({
                               <strong className="text-slate-400 font-sans font-medium text-[10px] mr-1">NIK:</strong>
                               <span className="text-slate-700">{p.nik}</span>
                             </span>
+                            {(p.ihsNumber || p.id?.startsWith("P-")) && (
+                              <>
+                                <span className="text-slate-300">|</span>
+                                <span
+                                  className="inline-flex items-center gap-1 font-sans text-teal-800 font-bold bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded text-[10px] shadow-2xs"
+                                  title={`Nomor IHS SATUSEHAT Pasien: ${p.ihsNumber || p.id}`}
+                                >
+                                  <img
+                                    src="/satusehat-default-logo.svg"
+                                    alt="SATUSEHAT"
+                                    className="h-2.5 w-2.5 object-contain shrink-0"
+                                  />
+                                  <span>IHS: {p.ihsNumber || p.id}</span>
+                                </span>
+                              </>
+                            )}
                           </div>
 
                           {p.satusehatConsent === "opt-out" ? (
@@ -3741,10 +3903,15 @@ export function PatientRegistrationModule({
                             </span>
                           ) : (
                             <span
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-semibold text-[10px]"
+                              className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200 font-semibold text-[10px]"
                               title="Pasien Menyetujui Berbagi Data ke SATUSEHAT"
                             >
-                              🛡️ Consent: Opt-In
+                              <img
+                                src="/satusehat-default-logo.svg"
+                                alt="SATUSEHAT"
+                                className="h-3 w-3 object-contain shrink-0"
+                              />
+                              <span>Consent: Opt-In</span>
                             </span>
                           )}
                         </div>
@@ -4018,20 +4185,23 @@ export function PatientRegistrationModule({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-extrabold uppercase text-[10px] tracking-wider">
                     <tr>
-                      <th className="py-3 px-4 min-w-[135px]">No. RM & NIK</th>
-                      <th className="py-3 px-4 min-w-[210px]">
+                      <th className="py-3 px-4 min-w-[130px]">No. RM & NIK</th>
+                      <th className="py-3 px-4 min-w-[190px]">
                         Nama Pasien & Usia
                       </th>
-                      <th className="py-3 px-4 min-w-[150px]">
-                        Penjamin & Consent
+                      <th className="py-3 px-4 min-w-[160px]">
+                        Integrasi SATUSEHAT
                       </th>
-                      <th className="py-3 px-4 min-w-[185px]">
+                      <th className="py-3 px-4 min-w-[130px]">
+                        Penjamin (Payer)
+                      </th>
+                      <th className="py-3 px-4 min-w-[180px]">
                         Kunjungan Terakhir
                       </th>
-                      <th className="py-3 px-4 min-w-[130px] text-center">
+                      <th className="py-3 px-4 min-w-[125px] text-center">
                         Status Hari Ini
                       </th>
-                      <th className="py-3 px-4 min-w-[135px] text-right">
+                      <th className="py-3 px-4 min-w-[130px] text-right">
                         Aksi
                       </th>
                     </tr>
@@ -4105,13 +4275,13 @@ export function PatientRegistrationModule({
                             <div className="font-bold text-slate-900 text-xs">
                               {p.mrn}
                             </div>
-                            <div className="text-[10px] text-slate-400">
-                              {p.nik}
+                            <div className="text-[10px] text-slate-500 mt-0.5">
+                              NIK: {p.nik}
                             </div>
                           </td>
 
                           {/* Name & Age */}
-                          <td className="py-3.5 px-4 min-w-[210px]">
+                          <td className="py-3.5 px-4 min-w-[190px]">
                             <div className="font-extrabold text-slate-900 text-xs flex items-center gap-1.5 flex-wrap">
                               <span>{p.name}</span>
                               {p.patientStatus === "inpatient" && (
@@ -4133,18 +4303,35 @@ export function PatientRegistrationModule({
                             <div className="text-[11px] text-slate-500 mt-0.5">
                               {age} Thn (
                               {p.gender === "male" ? "Laki-laki" : "Perempuan"})
-                              • Gol. {p.bloodType}+
+                              • Gol. {p.bloodType || "-"}+
                             </div>
                           </td>
 
-                          {/* Payer & Consent */}
-                          <td className="py-3.5 px-4 whitespace-nowrap min-w-[150px]">
+                          {/* Integrasi SATUSEHAT */}
+                          <td className="py-3.5 px-4 whitespace-nowrap min-w-[160px]">
                             <div className="flex flex-col items-start gap-1">
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 border border-slate-200 text-[10px] font-semibold whitespace-nowrap">
-                                {p.paymentPayer
-                                  ? p.paymentPayer.split(" (")[0]
-                                  : "Mandiri / Umum"}
-                              </span>
+                              {(p.ihsNumber || p.id?.startsWith("P-")) ? (
+                                <div
+                                  className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded font-mono shadow-2xs"
+                                  title={`Pasien Terdaftar SATUSEHAT Kemkes (IHS: ${p.ihsNumber || p.id})`}
+                                >
+                                  <img
+                                    src="/satusehat-default-logo.svg"
+                                    alt="SATUSEHAT"
+                                    className="h-2.5 w-2.5 object-contain shrink-0"
+                                  />
+                                  <span>{p.ihsNumber || p.id}</span>
+                                </div>
+                              ) : (
+                                <div
+                                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded shadow-2xs"
+                                  title="Pasien belum memiliki nomor IHS SATUSEHAT Kemkes. Sinkronisasi NIK saat pendaftaran."
+                                >
+                                  <AlertCircle className="h-2.5 w-2.5 text-amber-600 shrink-0" />
+                                  <span>Belum Terdaftar</span>
+                                </div>
+                              )}
+
                               <div>
                                 {p.satusehatConsent === "opt-out" ? (
                                   <span
@@ -4152,18 +4339,40 @@ export function PatientRegistrationModule({
                                     title="Consent Menolak SATUSEHAT (Hanya Internal RS)"
                                   >
                                     <Lock className="h-2.5 w-2.5 text-amber-700" />
-                                    <span>Opt-Out</span>
+                                    <span>Opt-Out (Internal RS)</span>
                                   </span>
                                 ) : (
                                   <span
-                                    className="inline-flex items-center gap-1 text-[9px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200 whitespace-nowrap"
-                                    title="Consent Terhubung SATUSEHAT"
+                                    className="inline-flex items-center gap-1 text-[9px] text-teal-800 font-semibold bg-teal-50/80 px-1.5 py-0.2 rounded border border-teal-200/90 whitespace-nowrap"
+                                    title="Consent Terhubung SATUSEHAT Kemkes RI (Permenkes 24/2022)"
                                   >
-                                    <ShieldCheck className="h-2.5 w-2.5 text-teal-700" />
-                                    <span>Opt-In</span>
+                                    <span className="h-1.5 w-1.5 rounded-full bg-teal-500 shrink-0" />
+                                    <span>Opt-In (Cloud Kemenkes)</span>
                                   </span>
                                 )}
                               </div>
+                            </div>
+                          </td>
+
+                          {/* Penjamin (Payer) */}
+                          <td className="py-3.5 px-4 whitespace-nowrap min-w-[130px]">
+                            <div className="flex flex-col items-start gap-1">
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold whitespace-nowrap border ${
+                                  p.paymentPayer?.includes("BPJS")
+                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    : "bg-slate-100 text-slate-800 border-slate-200"
+                                }`}
+                              >
+                                {p.paymentPayer
+                                  ? p.paymentPayer.split(" (")[0]
+                                  : "Mandiri / Umum"}
+                              </span>
+                              {p.paymentPayer?.includes("BPJS") && (
+                                <span className="text-[9px] text-emerald-700 font-medium">
+                                  JKN Terverifikasi
+                                </span>
+                              )}
                             </div>
                           </td>
 
@@ -4401,70 +4610,182 @@ export function PatientRegistrationModule({
         <form onSubmit={handleSaveNewPatient} className="space-y-4">
           {/* NIK Input & MPI SATUSEHAT Section */}
           <div className="p-4 rounded-xl bg-teal-50/60 border border-teal-200 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <Label className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
                 <ShieldCheck className="h-4 w-4 text-teal-700" />
-                <span>Verifikasi Identitas Kependudukan (NIK e-KTP) *</span>
+                <span>Verifikasi Identitas SATUSEHAT (Dukcapil MPI) *</span>
               </Label>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                    nikInput.length === 16
-                      ? "bg-teal-100 text-teal-800 border border-teal-300"
-                      : "bg-slate-200 text-slate-700"
+
+              {/* Mode Toggle: KTP Dewasa vs Bayi Baru Lahir */}
+              <div className="inline-flex items-center p-0.5 bg-teal-100/70 rounded-lg text-[10px] font-semibold">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPatientTypeMode("ktp");
+                    setIsNikVerified(false);
+                  }}
+                  className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                    patientTypeMode === "ktp"
+                      ? "bg-white text-teal-900 shadow-2xs font-bold"
+                      : "text-teal-700 hover:text-teal-900"
                   }`}
                 >
-                  {nikInput.length}/16 Digit
-                </span>
-                {nikInput.length === 16 && (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      nikValResult.isValid
-                        ? "bg-emerald-100 text-emerald-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {nikValResult.isValid
-                      ? "✓ Format Valid"
-                      : "Format Tidak Valid"}
-                  </span>
-                )}
+                  KTP Pasien (NIK)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPatientTypeMode("baby");
+                    setIsNikVerified(false);
+                  }}
+                  className={`px-2 py-0.5 rounded-md cursor-pointer transition-colors ${
+                    patientTypeMode === "baby"
+                      ? "bg-white text-teal-900 shadow-2xs font-bold"
+                      : "text-teal-700 hover:text-teal-900"
+                  }`}
+                >
+                  Bayi Baru Lahir (NIK Ibu)
+                </button>
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-2.5">
-              <Input
-                type="text"
-                maxLength={16}
-                placeholder="Masukkan 16 digit NIK Pasien (Contoh: 3174051208820003)..."
-                value={nikInput}
-                onChange={(e) => {
-                  setNikInput(e.target.value.replace(/\D/g, ""));
-                  setIsNikVerified(false);
-                }}
-                className={`font-mono text-xs h-10 bg-white ${
-                  nikInput && !nikValResult.isValid
-                    ? "border-red-400 focus:border-red-500 ring-1 ring-red-200"
-                    : "border-slate-300"
-                }`}
-              />
-              <Button
-                type="button"
-                onClick={handleVerifyNikMpi}
-                disabled={isVerifyingNik || nikInput.length < 16}
-                variant="medical"
-                className="text-xs font-bold gap-1.5 h-10 shrink-0 cursor-pointer"
-              >
-                {isVerifyingNik ? (
-                  "Memeriksa NIK..."
-                ) : (
-                  <>
-                    <ShieldCheck className="h-4 w-4" />
-                    <span>Cek Data KTP (Kemenkes)</span>
-                  </>
-                )}
-              </Button>
-            </div>
+            {patientTypeMode === "ktp" ? (
+              /* Mode 1: Pasien KTP (NIK) */
+              <>
+                <div className="flex items-center justify-between text-[11px] text-teal-800">
+                  <span>Masukkan 16 digit NIK sesuai e-KTP pasien</span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                        nikInput.length === 16
+                          ? "bg-teal-100 text-teal-800 border border-teal-300"
+                          : "bg-slate-200 text-slate-700"
+                      }`}
+                    >
+                      {nikInput.length}/16 Digit
+                    </span>
+                    {nikInput.length === 16 && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          nikValResult.isValid
+                            ? "bg-emerald-100 text-emerald-800"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        {nikValResult.isValid
+                          ? "✓ Format Valid"
+                          : "Format Tidak Valid"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <Input
+                    type="text"
+                    maxLength={16}
+                    placeholder="Masukkan 16 digit NIK Pasien (Contoh: 3174051208820003)..."
+                    value={nikInput}
+                    onChange={(e) => {
+                      setNikInput(e.target.value.replace(/\D/g, ""));
+                      setIsNikVerified(false);
+                    }}
+                    className={`font-mono text-xs h-10 bg-white ${
+                      nikInput && !nikValResult.isValid
+                        ? "border-red-400 focus:border-red-500 ring-1 ring-red-200"
+                        : "border-slate-300"
+                    }`}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleVerifyNikMpi}
+                    disabled={isVerifyingNik || nikInput.length < 16}
+                    variant="medical"
+                    className="text-xs font-bold gap-1.5 h-10 shrink-0 cursor-pointer"
+                  >
+                    {isVerifyingNik ? (
+                      "Memeriksa NIK..."
+                    ) : (
+                      <>
+                        <img
+                          src="/satusehat-default-logo.svg"
+                          alt="SATUSEHAT"
+                          className="h-3.5 w-3.5 object-contain shrink-0"
+                        />
+                        <span>Cek Data KTP (Kemenkes)</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </>
+            ) : (
+              /* Mode 2: Bayi Baru Lahir (NIK Ibu & Tanggal Lahir) */
+              <div className="space-y-2.5">
+                <p className="text-[11px] text-teal-800">
+                  Untuk bayi yang belum memiliki NIK mandiri, sistem mencari data anak melalui Nomor Induk Kependudukan (NIK) Ibu Kandung dan Tanggal Lahir Bayi sesuai standar MPI SATUSEHAT.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                  <div className="flex flex-col space-y-1.5">
+                    <Label className="text-[10px] font-bold text-teal-900 leading-none">
+                      NIK Ibu Kandung (16 Digit)
+                    </Label>
+                    <Input
+                      type="text"
+                      maxLength={16}
+                      placeholder="Contoh NIK Ibu: 3174051208820003..."
+                      value={motherNikInput}
+                      onChange={(e) => {
+                        setMotherNikInput(e.target.value.replace(/\D/g, ""));
+                        setIsNikVerified(false);
+                      }}
+                      className="font-mono text-xs h-9 bg-white border-slate-300"
+                    />
+                  </div>
+
+                  <div className="flex flex-col space-y-1.5">
+                    <Label className="text-[10px] font-bold text-teal-900 leading-none">
+                      Tanggal Lahir Bayi
+                    </Label>
+                    <CustomDatePicker
+                      value={babyBirthDateInput}
+                      onChange={(dateVal) => {
+                        setBabyBirthDateInput(dateVal);
+                        setIsNikVerified(false);
+                      }}
+                      maxDate={new Date().toISOString().split("T")[0]}
+                      placeholder="Pilih Tanggal Lahir Bayi..."
+                      size="md"
+                      className="w-full"
+                      buttonClassName="w-full h-9 text-xs bg-white border-slate-300 rounded-lg shadow-2xs font-medium"
+                      showPresets={false}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <Button
+                    type="button"
+                    onClick={handleVerifyNikMpi}
+                    disabled={isVerifyingNik || motherNikInput.length !== 16 || !babyBirthDateInput}
+                    variant="medical"
+                    className="text-xs font-bold gap-1.5 h-9 shrink-0 cursor-pointer"
+                  >
+                    {isVerifyingNik ? (
+                      "Memverifikasi Data Bayi..."
+                    ) : (
+                      <>
+                        <img
+                          src="/satusehat-default-logo.svg"
+                          alt="SATUSEHAT"
+                          className="h-3.5 w-3.5 object-contain shrink-0"
+                        />
+                        <span>Cari Bayi di SATUSEHAT MPI</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* Duplicate Detection Alert */}
             {existingPatientByNik && (
@@ -4515,8 +4836,8 @@ export function PatientRegistrationModule({
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">
+            <div className="flex flex-col space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700 leading-none">
                 Jenis Kelamin *
               </Label>
               <CustomSelect<"male" | "female">
@@ -4529,7 +4850,7 @@ export function PatientRegistrationModule({
                 }
                 size="md"
                 className="w-full"
-                buttonClassName="h-9 bg-white border-slate-300"
+                buttonClassName="w-full h-9 bg-white border-slate-300 rounded-lg shadow-2xs font-medium"
                 options={[
                   { value: "male", label: "Laki-laki (Male)" },
                   { value: "female", label: "Perempuan (Female)" },
@@ -4537,8 +4858,8 @@ export function PatientRegistrationModule({
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">
+            <div className="flex flex-col space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700 leading-none">
                 Tanggal Lahir *
               </Label>
               <CustomDatePicker
@@ -4549,14 +4870,15 @@ export function PatientRegistrationModule({
                 maxDate={new Date().toISOString().split("T")[0]}
                 placeholder="Pilih Tanggal Lahir Pasien..."
                 size="md"
-                buttonClassName="h-9 text-xs bg-white border-slate-200 shadow-2xs font-mono"
+                className="w-full"
+                buttonClassName="w-full h-9 text-xs bg-white border-slate-300 rounded-lg shadow-2xs font-medium"
                 showPresets={false}
               />
             </div>
 
-            <div className="space-y-1.5">
+            <div className="flex flex-col space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-bold text-slate-700">
+                <Label className="text-xs font-bold text-slate-700 leading-none">
                   Nomor Telepon / WhatsApp
                 </Label>
                 {newPatientData.phone && (
@@ -4592,8 +4914,8 @@ export function PatientRegistrationModule({
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700">
+            <div className="flex flex-col space-y-1.5">
+              <Label className="text-xs font-bold text-slate-700 leading-none">
                 Golongan Darah
               </Label>
               <CustomSelect<"A" | "B" | "AB" | "O">
@@ -4606,7 +4928,7 @@ export function PatientRegistrationModule({
                 }
                 size="md"
                 className="w-full"
-                buttonClassName="h-9 bg-white border-slate-300"
+                buttonClassName="w-full h-9 bg-white border-slate-300 rounded-lg shadow-2xs font-medium"
                 options={[
                   { value: "A", label: "Golongan A" },
                   { value: "B", label: "Golongan B" },
@@ -4700,7 +5022,11 @@ export function PatientRegistrationModule({
             <div className="p-3.5 rounded-xl bg-teal-50/50 border border-teal-200 md:col-span-2 space-y-2.5">
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-teal-700" />
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-3.5 w-3.5 object-contain shrink-0"
+                  />
                   <span>
                     Persetujuan Pertukaran Data Medis (SATUSEHAT Consent)
                   </span>
@@ -4724,7 +5050,12 @@ export function PatientRegistrationModule({
                       : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
                   }`}
                 >
-                  <span>🛡️ Setuju / Opt-In (Kirim ke SATUSEHAT)</span>
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-3.5 w-3.5 object-contain shrink-0"
+                  />
+                  <span>Setuju / Opt-In (Kirim ke SATUSEHAT)</span>
                 </button>
                 <button
                   type="button"
@@ -4921,9 +5252,30 @@ export function PatientRegistrationModule({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">
-                  Poli / Klinik Tujuan *
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-bold text-slate-700">
+                    Poli / Klinik Tujuan *
+                  </Label>
+                  {(() => {
+                    const deptObj = authDepartments?.find((d) => d.name === selectedClinic);
+                    if (deptObj?.satusehatLocationId || deptObj?.code) {
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded shadow-2xs"
+                          title={`Lokasi Terpetakan di SATUSEHAT Kemkes (Location ID: ${deptObj.satusehatLocationId || deptObj.code})`}
+                        >
+                          <img
+                            src="/satusehat-default-logo.svg"
+                            alt="SATUSEHAT"
+                            className="h-2.5 w-2.5 object-contain shrink-0"
+                          />
+                          <span>Location SATUSEHAT</span>
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
                 <CustomSelect<string>
                   value={selectedClinic}
                   onChange={handleClinicChange}
@@ -4943,11 +5295,36 @@ export function PatientRegistrationModule({
                     <span className="text-[10px] text-teal-600 animate-pulse font-medium">
                       Memuat dokter faskes...
                     </span>
-                  ) : facilityDoctors.length > 0 ? (
-                    <span className="text-[10px] text-emerald-600 font-medium">
-                      ✓ {doctorOptions.length} Dokter Terdaftar
-                    </span>
-                  ) : null}
+                  ) : (() => {
+                    const docObj = facilityDoctors.find(
+                      (d) =>
+                        selectedDoctor.includes(d.name) ||
+                        d.name === selectedDoctor.split(" (")[0],
+                    );
+                    if (docObj?.ihsPractitionerId) {
+                      return (
+                        <span
+                          className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded shadow-2xs cursor-help"
+                          title={`Dokter Terdaftar di SATUSEHAT Kemkes (IHS: ${docObj.ihsPractitionerId})`}
+                        >
+                          <img
+                            src="/satusehat-default-logo.svg"
+                            alt="SATUSEHAT"
+                            className="h-2.5 w-2.5 object-contain shrink-0"
+                          />
+                          <span>IHS: {docObj.ihsPractitionerId}</span>
+                        </span>
+                      );
+                    }
+                    if (facilityDoctors.length > 0) {
+                      return (
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          {doctorOptions.length} Dokter Terdaftar
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
                 <CustomSelect<string>
                   value={selectedDoctor}

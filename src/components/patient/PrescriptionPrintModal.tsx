@@ -234,8 +234,13 @@ export function PrescriptionPrintModal({
                 <QrCode className="h-9 w-9 text-teal-400" />
               </div>
               <div className="text-[10px] text-slate-500">
-                <span className="block font-semibold text-slate-800">
-                  E-Prescription Tervalidasi
+                <span className="font-semibold text-slate-800 flex items-center gap-1.5">
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-3 w-3 object-contain shrink-0"
+                  />
+                  <span>E-Prescription Tervalidasi</span>
                 </span>
                 <span className="font-mono">
                   IHS-MED-{encounter.satusehatEncounterId ? encounter.satusehatEncounterId.slice(0, 8) : encounter.id}

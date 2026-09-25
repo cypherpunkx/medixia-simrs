@@ -38,8 +38,13 @@ export function EhrFooter({ env, hospitalName }: EhrFooterProps) {
 
         <div className="hidden md:flex items-center gap-2 text-slate-400">
           <span>•</span>
-          <span className="text-slate-500">
-            Standar: <strong>HL7 FHIR R4</strong> (Permenkes No. 24/2022)
+          <span className="text-slate-500 flex items-center gap-1.5">
+            <img
+              src="/satusehat-default-logo.svg"
+              alt="SATUSEHAT"
+              className="h-3 w-3 object-contain shrink-0"
+            />
+            <span>Standar: <strong>HL7 FHIR R4</strong> (Permenkes No. 24/2022)</span>
           </span>
         </div>
       </div>

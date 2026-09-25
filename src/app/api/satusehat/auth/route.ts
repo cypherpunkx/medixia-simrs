@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { SatusehatClient } from "@/lib/satusehat/client";
 import { SatusehatEnvironment } from "@/lib/satusehat/types";
+import { extractFacilityIdFromRequest } from "@/lib/auth/session-helper";
+import { FacilityRepository } from "@/lib/db/repositories/facility-repo";
 
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
-    const serverDefaultEnv = (process.env.SATUSEHAT_ENV as SatusehatEnvironment) || "staging";
-    const env = (searchParams.get("env") as SatusehatEnvironment) || serverDefaultEnv;
+    const env = (searchParams.get("env") as SatusehatEnvironment) || "staging";
     const forceRefresh = searchParams.get("forceRefresh") === "true";
+    const facilityId = extractFacilityIdFromRequest(req);
 
-    const result = await SatusehatClient.getOrFetchToken(env, { forceRefresh });
+    const result = await SatusehatClient.getOrFetchToken(env, {
+      forceRefresh,
+      facilityId: facilityId || undefined,
+    });
     const status = result.success ? 200 : result.telemetry?.httpStatus || 400;
     return NextResponse.json(result, { status });
   } catch (error: unknown) {
@@ -38,19 +43,42 @@ export async function POST(req: NextRequest) {
     let env: SatusehatEnvironment = body.env || "staging";
     let orgId = body.orgId;
     const forceRefresh = Boolean(body.forceRefresh);
+    const facilityId = extractFacilityIdFromRequest(req, body.facilityId);
 
-    // Fallback to server-side credentials seamlessly if empty or requested
-    clientId = clientId?.trim() || process.env.SATUSEHAT_CLIENT_ID || "SAMPLE_CLIENT_ID_KEMENKES";
-    clientSecret = clientSecret?.trim() || process.env.SATUSEHAT_CLIENT_SECRET || "SAMPLE_CLIENT_SECRET_987654321";
-    env = (process.env.SATUSEHAT_ENV as SatusehatEnvironment) || env;
-    orgId = orgId?.trim() || process.env.SATUSEHAT_ORG_ID || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+    // Jika facilityId tersedia dan tidak ada raw clientId/secret di payload, muat dari database
+    if (facilityId && (!clientId || !clientSecret)) {
+      const creds = await FacilityRepository.getDecryptedCredentials(facilityId);
+      if (creds && creds.clientId && creds.clientSecret) {
+        clientId = creds.clientId;
+        clientSecret = creds.clientSecret;
+        orgId = orgId || creds.orgId;
+        env = creds.env || env;
+      }
+    }
+
+    if (!clientId || !clientSecret) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            message: "Client ID dan Client Secret wajib diisi atau pilih faskes yang telah terdaftar.",
+            code: "MISSING_CREDENTIALS",
+            suggestions: [
+              "Sertakan 'facilityId' atau 'clientId' & 'clientSecret' dalam body permintaan.",
+              "Kredensial faskes kini murni dikelola di database PostgreSQL, bukan dari environment .env.",
+            ],
+          },
+        },
+        { status: 400 }
+      );
+    }
 
     const result = await SatusehatClient.authenticate(
       {
-        clientId,
-        clientSecret,
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim(),
         env,
-        orgId,
+        orgId: orgId?.trim() || "b15a7ae7-f366-4a84-8385-0b8196c05002",
       },
       { forceRefresh }
     );

@@ -28,6 +28,11 @@ export async function runMigrations(): Promise<void> {
         name TEXT NOT NULL,
         type TEXT NOT NULL DEFAULT 'rumah_sakit',
         satusehat_org_id TEXT NOT NULL DEFAULT 'b15a7ae7-f366-4a84-8385-0b8196c05002',
+        satusehat_client_id TEXT,
+        satusehat_client_secret_enc TEXT,
+        satusehat_env TEXT NOT NULL DEFAULT 'staging',
+        satusehat_status TEXT NOT NULL DEFAULT 'unverified',
+        satusehat_last_tested_at TEXT,
         address TEXT DEFAULT '',
         phone TEXT DEFAULT '',
         license_number TEXT DEFAULT '',
@@ -45,6 +50,7 @@ export async function runMigrations(): Promise<void> {
         room TEXT NOT NULL,
         quota INTEGER NOT NULL DEFAULT 30,
         default_doctor_name TEXT,
+        satusehat_location_id TEXT,
         is_active BOOLEAN NOT NULL DEFAULT true,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
@@ -67,6 +73,7 @@ export async function runMigrations(): Promise<void> {
         id TEXT PRIMARY KEY,
         nik TEXT NOT NULL UNIQUE,
         mrn TEXT NOT NULL UNIQUE,
+        ihs_number TEXT,
         name TEXT NOT NULL,
         gender TEXT NOT NULL,
         birth_date TEXT NOT NULL,
@@ -355,8 +362,16 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS paused_reason TEXT;
       ALTER TABLE patients ADD COLUMN IF NOT EXISTS patient_status TEXT DEFAULT 'outpatient';
       ALTER TABLE patients ADD COLUMN IF NOT EXISTS inpatient_details TEXT;
+      ALTER TABLE patients ADD COLUMN IF NOT EXISTS ihs_number TEXT;
       ALTER TABLE departments ADD COLUMN IF NOT EXISTS code TEXT DEFAULT '';
       ALTER TABLE departments ADD COLUMN IF NOT EXISTS queue_prefix TEXT DEFAULT 'A';
+      ALTER TABLE departments ADD COLUMN IF NOT EXISTS satusehat_location_id TEXT;
+      -- Multi-tenant SATUSEHAT Credentials per Facility
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_client_id TEXT;
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_client_secret_enc TEXT;
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_env TEXT NOT NULL DEFAULT 'staging';
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_status TEXT NOT NULL DEFAULT 'unverified';
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_last_tested_at TEXT;
 
       -- Granular SATUSEHAT ID
       ALTER TABLE vitals ADD COLUMN IF NOT EXISTS satusehat_bp_id TEXT;
@@ -378,6 +393,12 @@ export async function runMigrations(): Promise<void> {
       ALTER TABLE radiology_results ADD COLUMN IF NOT EXISTS satusehat_observation_id TEXT;
       ALTER TABLE radiology_results ADD COLUMN IF NOT EXISTS satusehat_diagnostic_report_id TEXT;
 
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_client_id TEXT;
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_client_secret_enc TEXT;
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_env TEXT NOT NULL DEFAULT 'staging';
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_status TEXT NOT NULL DEFAULT 'unverified';
+      ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_last_tested_at TEXT;
+
       -- Index Kinerja Query
       CREATE INDEX IF NOT EXISTS idx_facilities_type ON facilities(type);
       CREATE INDEX IF NOT EXISTS idx_facilities_active ON facilities(is_active);
@@ -388,6 +409,7 @@ export async function runMigrations(): Promise<void> {
 
       CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(name);
       CREATE INDEX IF NOT EXISTS idx_patients_phone ON patients(phone);
+      CREATE INDEX IF NOT EXISTS idx_patients_ihs_number ON patients(ihs_number);
       CREATE INDEX IF NOT EXISTS idx_patients_updated_at ON patients(updated_at);
 
       CREATE INDEX IF NOT EXISTS idx_encounters_patient_id ON encounters(patient_id);

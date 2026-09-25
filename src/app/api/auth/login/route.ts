@@ -142,6 +142,17 @@ export async function POST(req: NextRequest) {
     const targetFacilityId = authenticatedUser.facilityId || "fac-rsud-01";
     const facility = await FacilityRepository.getById(targetFacilityId);
 
+    // Security Guard: Tolak login staf jika faskes sedang dinonaktifkan/diarsipkan
+    if (facility && facility.isActive === false && authenticatedUser.role !== "super_admin") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Akses Ditolak: Fasilitas kesehatan (${facility.name}) sedang dinonaktifkan / diarsipkan oleh pengelola sistem. Silakan hubungi Tim IT / Vendor Medixia.`,
+        },
+        { status: 403 }
+      );
+    }
+
     const responseData = {
       user: {
         ...authenticatedUser,

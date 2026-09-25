@@ -8,6 +8,11 @@ export const facilities = pgTable(
     name: text("name").notNull(),
     type: text("type").notNull().default("rumah_sakit"), // "rumah_sakit" | "klinik_pratama" | "klinik_utama" | "puskesmas"
     satusehatOrgId: text("satusehat_org_id").notNull().default("b15a7ae7-f366-4a84-8385-0b8196c05002"),
+    satusehatClientId: text("satusehat_client_id"),
+    satusehatClientSecretEnc: text("satusehat_client_secret_enc"),
+    satusehatEnv: text("satusehat_env").notNull().default("staging"),
+    satusehatStatus: text("satusehat_status").notNull().default("unverified"), // "connected" | "unverified" | "error"
+    satusehatLastTestedAt: text("satusehat_last_tested_at"),
     address: text("address").default(""),
     phone: text("phone").default(""),
     licenseNumber: text("license_number").default(""),
@@ -18,6 +23,7 @@ export const facilities = pgTable(
   (table) => [
     index("idx_facilities_type").on(table.type),
     index("idx_facilities_active").on(table.isActive),
+    index("idx_facilities_satusehat_org").on(table.satusehatOrgId),
   ]
 );
 
@@ -33,6 +39,7 @@ export const departments = pgTable(
     room: text("room").notNull(), // e.g. "Ruang 204 (Lt. 2)"
     quota: integer("quota").notNull().default(30),
     defaultDoctorName: text("default_doctor_name"),
+    satusehatLocationId: text("satusehat_location_id"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
   },
@@ -55,12 +62,14 @@ export const users = pgTable(
     name: text("name").notNull(),
     role: text("role").notNull(), // "doctor" | "nurse" | "registration" | "admin" | "pharmacy"
     sip: text("sip"),
+    nik: text("nik").unique(),
     ihsPractitionerId: text("ihs_practitioner_id"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
   },
   (table) => [
     index("idx_users_username").on(table.username),
+    index("idx_users_nik").on(table.nik),
     index("idx_users_role").on(table.role),
     index("idx_users_facility_id").on(table.facilityId),
   ]
@@ -70,9 +79,10 @@ export const users = pgTable(
 export const patients = pgTable(
   "patients",
   {
-    id: text("id").primaryKey(), // SATUSEHAT Patient ID or Local ID (e.g. "P-10002891902")
+    id: text("id").primaryKey(), // Internal UUID or SATUSEHAT Patient ID
     nik: text("nik").notNull().unique(), // NIK KTP (16 digit)
     mrn: text("mrn").notNull().unique(), // No. Rekam Medis RS
+    ihsNumber: text("ihs_number"), // Nomor IHS Resmi Kemenkes SATUSEHAT (misal "P01234567890" atau "P-10002891902")
     name: text("name").notNull(),
     gender: text("gender").notNull(), // "male" | "female"
     birthDate: text("birth_date").notNull(), // YYYY-MM-DD
@@ -98,6 +108,7 @@ export const patients = pgTable(
   (table) => [
     index("idx_patients_name").on(table.name),
     index("idx_patients_phone").on(table.phone),
+    index("idx_patients_ihs_number").on(table.ihsNumber),
     index("idx_patients_updated_at").on(table.updatedAt),
   ]
 );

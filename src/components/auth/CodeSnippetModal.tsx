@@ -252,9 +252,13 @@ function getSatusehatToken($clientId, $clientSecret) {
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-5 sm:p-6">
         <DialogHeader className="pb-2 border-b border-border/50 pr-12">
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center">
-              <Code2 className="h-4 w-4" />
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-white border border-teal-200 dark:border-teal-800 shadow-2xs flex items-center justify-center p-1.5 shrink-0">
+              <img
+                src="/satusehat-default-logo.svg"
+                alt="SATUSEHAT"
+                className="h-full w-full object-contain"
+              />
             </div>
             <div>
               <DialogTitle className="text-base font-bold text-foreground">

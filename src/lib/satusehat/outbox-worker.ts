@@ -37,28 +37,7 @@ export async function processOutboxQueue(
     return result;
   }
 
-  // 1. Verifikasi konektivitas token ke gateway Kemenkes
-  const authRes = await SatusehatClient.getOrFetchToken(targetEnv);
-  if (!authRes.success || !authRes.data?.accessToken) {
-    const errorMsg =
-      authRes.error?.message || "Koneksi gateway autentikasi SATUSEHAT terputus.";
-    // Seluruh item dalam batch dijadwalkan ulang dengan backoff karena server Kemenkes sedang down
-    for (const item of dueItems) {
-      await OutboxRepository.markFailed(item.id, item.retryCount, errorMsg);
-      result.failedCount++;
-      result.details.push({
-        id: item.id,
-        encounterId: item.encounterId,
-        status: "failed",
-        message: `Gateway auth down: ${errorMsg}`,
-      });
-    }
-    return result;
-  }
-
-  const token = authRes.data.accessToken;
-
-  // 2. Proses tiap item yang telah jatuh tempo
+  // 2. Proses tiap item yang telah jatuh tempo dengan token faskes masing-masing
   for (const item of dueItems) {
     try {
       await OutboxRepository.markProcessing(item.id);
@@ -126,6 +105,26 @@ export async function processOutboxQueue(
         continue;
       }
 
+      // Dapatkan token otentikasi SATUSEHAT khusus faskes encounter ini
+      const authRes = await SatusehatClient.getOrFetchToken(targetEnv, {
+        facilityId: encounter.facilityId || undefined,
+      });
+
+      if (!authRes.success || !authRes.data?.accessToken) {
+        const errorMsg = authRes.error?.message || "Gagal memperoleh token SATUSEHAT untuk faskes.";
+        await OutboxRepository.markFailed(item.id, item.retryCount, errorMsg);
+        result.failedCount++;
+        result.details.push({
+          id: item.id,
+          encounterId: item.encounterId,
+          status: "failed",
+          message: `Otentikasi faskes gagal: ${errorMsg}`,
+        });
+        continue;
+      }
+
+      const token = authRes.data.accessToken;
+
       // Jalankan proses sinkronisasi ulang via internal request ke API sync-retry
       const baseUrl =
         process.env.NEXT_PUBLIC_APP_URL ||
@@ -143,7 +142,7 @@ export async function processOutboxQueue(
         encounter,
         targetResourceTypes: payloadParsed.targetResourceTypes || undefined,
         token,
-        env: targetEnv || (process.env.SATUSEHAT_ENV as SatusehatEnvironment) || "staging",
+        env: targetEnv || "staging",
       };
 
       const syncRes = await fetch(`${baseUrl}/api/satusehat/sync-retry`, {

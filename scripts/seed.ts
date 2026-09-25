@@ -11,6 +11,7 @@ import {
   ClinicQueuePatientItem,
 } from "../src/lib/satusehat/types";
 import { hashPassword } from "../src/lib/auth/password";
+import { encryptSecret } from "../src/lib/auth/encryption";
 import { KFA_MEDICATIONS_DATABASE } from "../src/lib/satusehat/kfa-database";
 
 // ============================================================================
@@ -76,6 +77,11 @@ async function createTables() {
       name TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'rumah_sakit',
       satusehat_org_id TEXT NOT NULL DEFAULT 'b15a7ae7-f366-4a84-8385-0b8196c05002',
+      satusehat_client_id TEXT,
+      satusehat_client_secret_enc TEXT,
+      satusehat_env TEXT NOT NULL DEFAULT 'staging',
+      satusehat_status TEXT NOT NULL DEFAULT 'unverified',
+      satusehat_last_tested_at TEXT,
       address TEXT DEFAULT '',
       phone TEXT DEFAULT '',
       license_number TEXT DEFAULT '',
@@ -87,10 +93,13 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS departments (
       id TEXT PRIMARY KEY,
       facility_id TEXT NOT NULL REFERENCES facilities(id) ON DELETE CASCADE,
+      code TEXT NOT NULL DEFAULT '',
+      queue_prefix TEXT NOT NULL DEFAULT 'A',
       name TEXT NOT NULL,
       room TEXT NOT NULL,
       quota INTEGER NOT NULL DEFAULT 30,
       default_doctor_name TEXT,
+      satusehat_location_id TEXT,
       is_active BOOLEAN NOT NULL DEFAULT true,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
@@ -104,6 +113,7 @@ async function createTables() {
       name TEXT NOT NULL,
       role TEXT NOT NULL,
       sip TEXT,
+      nik TEXT UNIQUE,
       ihs_practitioner_id TEXT,
       is_active BOOLEAN NOT NULL DEFAULT true,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -113,6 +123,7 @@ async function createTables() {
       id TEXT PRIMARY KEY,
       nik TEXT NOT NULL UNIQUE,
       mrn TEXT NOT NULL UNIQUE,
+      ihs_number TEXT,
       name TEXT NOT NULL,
       gender TEXT NOT NULL,
       birth_date TEXT NOT NULL,
@@ -129,6 +140,8 @@ async function createTables() {
       last_visit_doctor TEXT,
       last_visit_diagnosis TEXT,
       total_visits_count INTEGER DEFAULT 1,
+      patient_status TEXT DEFAULT 'outpatient',
+      inpatient_details TEXT,
       satusehat_consent TEXT DEFAULT 'opt-in',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -394,6 +407,16 @@ async function createTables() {
     ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS encounter_id TEXT REFERENCES encounters(id) ON DELETE SET NULL;
     ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS registration_number TEXT;
     ALTER TABLE queue_items ADD COLUMN IF NOT EXISTS triage_priority TEXT DEFAULT 'regular';
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS nik TEXT UNIQUE;
+    CREATE INDEX IF NOT EXISTS idx_users_nik ON users(nik);
+
+    -- Multi-tenant SATUSEHAT Credentials per Facility
+    ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_client_id TEXT;
+    ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_client_secret_enc TEXT;
+    ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_env TEXT NOT NULL DEFAULT 'staging';
+    ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_status TEXT NOT NULL DEFAULT 'unverified';
+    ALTER TABLE facilities ADD COLUMN IF NOT EXISTS satusehat_last_tested_at TEXT;
+    CREATE INDEX IF NOT EXISTS idx_facilities_satusehat_org ON facilities(satusehat_org_id);
 
     -- Performance Indexes
     CREATE INDEX IF NOT EXISTS idx_patients_name ON patients(name);
@@ -465,31 +488,45 @@ async function seedDatabase() {
     "⏳ Memulai pengisian data faskes, user, dan data klinis SIMRS ke PostgreSQL...\n",
   );
 
-  // Seed Facilities
+  // Seed Facilities (Multi-Tenant dengan Kredensial SATUSEHAT Terenkripsi AES-256-GCM)
+  const defaultRsSecretEnc = encryptSecret(process.env.SATUSEHAT_CLIENT_SECRET || "SAMPLE_CLIENT_SECRET_987654321");
+  const defaultRsClientId = process.env.SATUSEHAT_CLIENT_ID || "SAMPLE_CLIENT_ID_KEMENKES";
+  const defaultKlinikSecretEnc = encryptSecret("KLINIK_PRATAMA_SECRET_KEY_987654");
+  const defaultKlinikClientId = "KLINIK_PRATAMA_CLIENT_ID_KEMENKES";
+  const nowIso = new Date().toISOString();
+
   await sql`
-    INSERT INTO facilities (id, name, type, satusehat_org_id, address, phone, license_number, is_active)
+    INSERT INTO facilities (id, name, type, satusehat_org_id, satusehat_client_id, satusehat_client_secret_enc, satusehat_env, satusehat_status, satusehat_last_tested_at, address, phone, license_number, is_active)
     VALUES
-      ('fac-rsud-01', 'RS Umum Daerah Sehat Sejahtera', 'rumah_sakit', 'b15a7ae7-f366-4a84-8385-0b8196c05002', 'Jl. Kesehatan Medika No. 45, Jakarta Pusat', '021-5550199', '440/012/Dinkes/RS-B/2024', true)
+      ('fac-rsud-01', 'RS Umum Daerah Sehat Sejahtera', 'rumah_sakit', 'b15a7ae7-f366-4a84-8385-0b8196c05002', ${defaultRsClientId}, ${defaultRsSecretEnc}, 'staging', 'connected', ${nowIso}, 'Jl. Kesehatan Medika No. 45, Jakarta Pusat', '021-5550199', '440/012/Dinkes/RS-B/2024', true),
+      ('fac-klinik-01', 'Klinik Pratama Medixia Medika', 'klinik_pratama', '10000004', ${defaultKlinikClientId}, ${defaultKlinikSecretEnc}, 'staging', 'connected', ${nowIso}, 'Jl. Sudirman No. 88, Jakarta Selatan', '021-7788990', '445/008/Klinik-P/2025', true)
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       type = EXCLUDED.type,
       satusehat_org_id = EXCLUDED.satusehat_org_id,
+      satusehat_client_id = EXCLUDED.satusehat_client_id,
+      satusehat_client_secret_enc = EXCLUDED.satusehat_client_secret_enc,
+      satusehat_env = EXCLUDED.satusehat_env,
+      satusehat_status = EXCLUDED.satusehat_status,
+      satusehat_last_tested_at = EXCLUDED.satusehat_last_tested_at,
       address = EXCLUDED.address,
       phone = EXCLUDED.phone,
       license_number = EXCLUDED.license_number,
       is_active = EXCLUDED.is_active;
   `;
 
-  // Seed Departments
+  // Seed Departments (Disinkronkan dengan UUID Lokasi Resmi SATUSEHAT Kemenkes)
   await sql`
-    INSERT INTO departments (id, facility_id, name, room, quota, default_doctor_name, code, queue_prefix, is_active)
+    INSERT INTO departments (id, facility_id, name, room, quota, default_doctor_name, code, queue_prefix, satusehat_location_id, is_active)
     VALUES
-      ('dept-rs-01', 'fac-rsud-01', 'Poli Penyakit Dalam', 'Ruang 204 (Lt. 2)', 35, 'dr. Rian Pratama, Sp.PD', 'INT', 'A', true),
-      ('dept-rs-02', 'fac-rsud-01', 'Poli Umum', 'Ruang 101 (Lt. 1)', 50, 'dr. Amanda Putri, M.Biomed', 'UMU', 'B', true),
-      ('dept-rs-03', 'fac-rsud-01', 'Poli Anak', 'Ruang 208 (Lt. 2)', 30, 'dr. Sarah Amanda, Sp.A', 'ANA', 'C', true),
-      ('dept-rs-04', 'fac-rsud-01', 'Poli Gigi & Mulut', 'Ruang 105 (Lt. 1)', 25, 'drg. Hendra Wijaya', 'GIG', 'D', true),
-      ('dept-rs-05', 'fac-rsud-01', 'Poli Jantung & Pembuluh Darah', 'Ruang 301 (Lt. 3)', 20, 'dr. Maya Kartika, Sp.JP', 'JAN', 'E', true),
-      ('dept-rs-06', 'fac-rsud-01', 'Poli Mata', 'Ruang 107 (Lt. 1)', 25, 'dr. Budi Setiawan, Sp.M', 'MAT', 'F', true)
+      ('dept-rs-01', 'fac-rsud-01', 'Poli Penyakit Dalam', 'Ruang 204 (Lt. 2)', 35, 'dr. Syarifuddin, Sp.PD', 'INT', 'A', '3362d984-af65-43ac-8e5c-7db2b3be3f8b', true),
+      ('dept-rs-02', 'fac-rsud-01', 'Poli Umum', 'Ruang 101 (Lt. 1)', 50, 'dr. Alexander', 'UMU', 'B', '79e96b97-b551-41bd-aadc-cb856a8ab332', true),
+      ('dept-rs-03', 'fac-rsud-01', 'Poli Anak', 'Ruang 208 (Lt. 2)', 30, 'dr. Yoga Yandika, Sp.A', 'ANA', 'C', 'b017aa54-f1df-4429-b472-3e029619854e', true),
+      ('dept-rs-04', 'fac-rsud-01', 'Poli Gigi & Mulut', 'Ruang 105 (Lt. 1)', 25, 'drg. Kevin Tanuwidjaja', 'GIG', 'D', '311defd2-ac8d-489b-a577-3703847b42b4', true),
+      ('dept-rs-05', 'fac-rsud-01', 'Poli Jantung & Pembuluh Darah', 'Ruang 301 (Lt. 3)', 20, 'dr. Nicholas Evan, Sp.B', 'JAN', 'E', '4f17bb54-f1df-4429-b472-3e029619854f', true),
+      ('dept-rs-06', 'fac-rsud-01', 'Poli Mata', 'Ruang 107 (Lt. 1)', 25, 'dr. Dito Arifin, Sp.M', 'MAT', 'F', '6b39dd54-f1df-4429-b472-3e029619854b', true),
+      ('dept-kl-01', 'fac-klinik-01', 'Poli Umum Pratama', 'Ruang 1', 40, 'dr. Alexander', 'UMU', 'A', '79e96b97-b551-41bd-aadc-cb856a8ab332', true),
+      ('dept-kl-02', 'fac-klinik-01', 'Poli Gigi Pratama', 'Ruang 2', 20, 'drg. Kevin Tanuwidjaja', 'GIG', 'B', '311defd2-ac8d-489b-a577-3703847b42b4', true)
     ON CONFLICT (id) DO UPDATE SET
       name = EXCLUDED.name,
       room = EXCLUDED.room,
@@ -497,23 +534,33 @@ async function seedDatabase() {
       default_doctor_name = EXCLUDED.default_doctor_name,
       code = EXCLUDED.code,
       queue_prefix = EXCLUDED.queue_prefix,
+      satusehat_location_id = EXCLUDED.satusehat_location_id,
       is_active = EXCLUDED.is_active;
   `;
 
   // Purge legacy alias users if any
   await sql`DELETE FROM users WHERE id IN ('usr-admin-alias', 'usr-nurse-alias', 'usr-reg-alias', 'usr-pharm-alias');`;
 
-  // Seed Users & Administrators (3 Core Users for Single-Tenant SIMRS)
+  // Seed Users & Practitioners (Super Admin Vendor RME + Faskes Admins & Nakes)
   const hashedAdminPass = await hashPassword("admin123");
-  const hashedDoctorPass = await hashPassword("password123");
-  const hashedNursePass = await hashPassword("password123");
+  const defaultPass = await hashPassword("password123");
 
   await sql`
-    INSERT INTO users (id, facility_id, department_id, username, password_hash, name, role, sip, ihs_practitioner_id, is_active)
+    INSERT INTO users (id, facility_id, department_id, username, password_hash, name, role, sip, nik, ihs_practitioner_id, is_active)
     VALUES
-      ('usr-admin', 'fac-rsud-01', NULL, 'admin', ${hashedAdminPass}, 'Administrator SIMRS', 'admin', NULL, NULL, true),
-      ('usr-dr-rian', 'fac-rsud-01', 'dept-rs-01', 'dr.rian', ${hashedDoctorPass}, 'dr. Rian Pratama, Sp.PD', 'doctor', 'SIP.446/089/DS/Dinkes/2026', 'N10000001', true),
-      ('usr-nurse-siti', 'fac-rsud-01', 'dept-rs-01', 'ns.siti', ${hashedNursePass}, 'Ns. Siti Rahmawati, S.Kep', 'nurse', 'SIP.446/102/SKEP/Dinkes/2026', 'N10000001', true)
+      ('usr-superadmin', NULL, NULL, 'superadmin', ${hashedAdminPass}, 'Vendor RME Platform Super Admin', 'super_admin', NULL, NULL, NULL, true),
+      ('usr-admin', 'fac-rsud-01', NULL, 'admin', ${hashedAdminPass}, 'Administrator RSUD Sehat Sejahtera', 'admin', NULL, NULL, NULL, true),
+      ('usr-admin-klinik', 'fac-klinik-01', NULL, 'admin.klinik', ${hashedAdminPass}, 'Administrator Klinik Pratama', 'admin', NULL, NULL, NULL, true),
+      ('usr-dr-rian', 'fac-rsud-01', 'dept-rs-01', 'dr.rian', ${defaultPass}, 'dr. Syarifuddin, Sp.PD', 'doctor', 'SIP.446/089/DS/Dinkes/2026', '3171071609900003', '10001354453', true),
+      ('usr-nurse-siti', 'fac-rsud-01', 'dept-rs-01', 'ns.siti', ${defaultPass}, 'Sheila Annisa, S.Kep', 'nurse', 'SIP.446/102/SKEP/Dinkes/2026', '3313096403900009', '10014058550', true),
+      ('usr-dr-alexander', 'fac-rsud-01', 'dept-rs-02', 'dr.alexander', ${defaultPass}, 'dr. Alexander', 'doctor', 'SIP.446/012/DU/Dinkes/2026', '7209061211900001', '10009880728', true),
+      ('usr-dr-yoga', 'fac-rsud-01', 'dept-rs-03', 'dr.yoga', ${defaultPass}, 'dr. Yoga Yandika, Sp.A', 'doctor', 'SIP.446/033/SPA/Dinkes/2026', '3322071302900002', '10006926841', true),
+      ('usr-dr-nicholas', 'fac-rsud-01', 'dept-rs-05', 'dr.nicholas', ${defaultPass}, 'dr. Nicholas Evan, Sp.B', 'doctor', 'SIP.446/044/SPB/Dinkes/2026', '3207192310600004', '10010910332', true),
+      ('usr-dr-dito', 'fac-rsud-01', 'dept-rs-06', 'dr.dito', ${defaultPass}, 'dr. Dito Arifin, Sp.M', 'doctor', 'SIP.446/055/SPM/Dinkes/2026', '6408130207800005', '10018180913', true),
+      ('usr-dr-olivia', 'fac-rsud-01', 'dept-rs-01', 'dr.olivia', ${defaultPass}, 'dr. Olivia Kirana, Sp.OG', 'doctor', 'SIP.446/066/SPOG/Dinkes/2026', '3217040109800006', '10002074224', true),
+      ('usr-dr-alicia', 'fac-rsud-01', 'dept-rs-01', 'dr.alicia', ${defaultPass}, 'dr. Alicia Chrissy, Sp.N', 'doctor', 'SIP.446/077/SPN/Dinkes/2026', '3519111703800007', '10012572188', true),
+      ('usr-dr-nathalie', 'fac-rsud-01', 'dept-rs-01', 'dr.nathalie', ${defaultPass}, 'dr. Nathalie Tan, Sp.PK', 'doctor', 'SIP.446/088/SPPK/Dinkes/2026', '5271002009700008', '10018452434', true),
+      ('usr-apt-aditya', 'fac-rsud-01', 'dept-rs-01', 'apt.aditya', ${defaultPass}, 'apt. Aditya Pradhana, S.Farm.', 'pharmacy', 'SIPA.446/011/SIPA/Dinkes/2026', '3578083008700010', '10001915884', true)
     ON CONFLICT (id) DO UPDATE SET
       facility_id = EXCLUDED.facility_id,
       department_id = EXCLUDED.department_id,
@@ -522,6 +569,7 @@ async function seedDatabase() {
       name = EXCLUDED.name,
       role = EXCLUDED.role,
       sip = EXCLUDED.sip,
+      nik = EXCLUDED.nik,
       ihs_practitioner_id = EXCLUDED.ihs_practitioner_id,
       is_active = EXCLUDED.is_active;
   `;
@@ -549,17 +597,19 @@ async function seedDatabase() {
     medicationCount++;
   }
 
-  // 1.2 Seed Master Kamus Diagnosa ICD-10
+  // 1.2 Seed Master Kamus Diagnosa ICD-10 Standar Kemenkes RI
   const COMMON_ICD10_LIST = [
     { code: "I10", display: "Essential (primary) hypertension", patientFriendlyName: "Hipertensi Primer", category: "Sistem Sirkulasi" },
     { code: "E11.9", display: "Type 2 diabetes mellitus without complications", patientFriendlyName: "Diabetes Melitus Tipe 2", category: "Endokrin & Metabolik" },
     { code: "J00", display: "Acute nasopharyngitis [common cold]", patientFriendlyName: "Nasofaringitis Akut (Flu/Batuk Pilek)", category: "Sistem Pernapasan" },
     { code: "J06.9", display: "Acute upper respiratory infection, unspecified", patientFriendlyName: "ISPA (Infeksi Saluran Pernapasan Akut)", category: "Sistem Pernapasan" },
+    { code: "J02.9", display: "Acute pharyngitis, unspecified", patientFriendlyName: "Faringitis Akut (Radang Tenggorokan)", category: "Sistem Pernapasan" },
     { code: "K29.7", display: "Gastritis, unspecified", patientFriendlyName: "Gastritis (Maag)", category: "Sistem Pencernaan" },
     { code: "K30", display: "Functional dyspepsia", patientFriendlyName: "Dispepsia Fungsional", category: "Sistem Pencernaan" },
     { code: "K21.9", display: "Gastro-esophageal reflux disease without esophagitis", patientFriendlyName: "GERD (Penyakit Asam Lambung)", category: "Sistem Pencernaan" },
     { code: "M54.5", display: "Low back pain", patientFriendlyName: "Nyeri Punggung Bawah (LBP)", category: "Muskuloskeletal" },
     { code: "M79.1", display: "Myalgia", patientFriendlyName: "Nyeri Otot (Myalgia)", category: "Muskuloskeletal" },
+    { code: "M17.9", display: "Osteoarthritis of knee, unspecified", patientFriendlyName: "Osteoartritis Lutut", category: "Muskuloskeletal" },
     { code: "R50.9", display: "Fever, unspecified", patientFriendlyName: "Demam Tanpa Penyebab Khusus", category: "Gejala & Tanda Klinis" },
     { code: "R53.83", display: "Other fatigue", patientFriendlyName: "Kelelahan Fisik Ringan", category: "Gejala & Tanda Klinis" },
     { code: "R51", display: "Headache", patientFriendlyName: "Sakit Kepala", category: "Gejala & Tanda Klinis" },
@@ -567,8 +617,14 @@ async function seedDatabase() {
     { code: "J45.9", display: "Other and unspecified asthma", patientFriendlyName: "Asma Bronkial", category: "Sistem Pernapasan" },
     { code: "E78.0", display: "Pure hypercholesterolaemia", patientFriendlyName: "Hiperkolesterolemia (Kolesterol Tinggi)", category: "Endokrin & Metabolik" },
     { code: "N39.0", display: "Urinary tract infection, site not specified", patientFriendlyName: "Infeksi Saluran Kemih (ISK)", category: "Sistem Genitourinaria" },
+    { code: "N40", display: "Hyperplasia of prostate", patientFriendlyName: "BPH (Pembesaran Prostat Jinak)", category: "Sistem Genitourinaria" },
     { code: "L20.9", display: "Atopic dermatitis, unspecified", patientFriendlyName: "Dermatitis Atopik (Eksim Alergi)", category: "Penyakit Kulit" },
     { code: "B35.4", display: "Tinea corporis", patientFriendlyName: "Infeksi Jamur Kulit (Kurap)", category: "Penyakit Infeksi" },
+    { code: "H52.1", display: "Myopia", patientFriendlyName: "Miopia (Rabun Jauh)", category: "Penyakit Mata" },
+    { code: "K04.0", display: "Pulpitis", patientFriendlyName: "Pulpitis Gigi", category: "Kesehatan Gigi & Mulut" },
+    { code: "I20.0", display: "Unstable angina", patientFriendlyName: "Angina Pektoris Tidak Stabil", category: "Sistem Sirkulasi" },
+    { code: "Z00.0", display: "General medical examination", patientFriendlyName: "Pemeriksaan Kesehatan Umum (Medical Check-Up)", category: "Faktor Status Kesehatan" },
+    { code: "Z38.0", display: "Single liveborn infant, born in hospital", patientFriendlyName: "Bayi Baru Lahir Tunggal di Rumah Sakit", category: "Perinatal & Bayi Baru Lahir" },
   ];
 
   let icd10Count = 0;
@@ -584,7 +640,7 @@ async function seedDatabase() {
     icd10Count++;
   }
 
-  // 1.3 Seed Master Kamus Tindakan ICD-9-CM
+  // 1.3 Seed Master Kamus Tindakan ICD-9-CM Standar Kemenkes RI
   const COMMON_ICD9_LIST = [
     { code: "89.07", display: "General medical consultation", category: "Konsultasi & Pemeriksaan Fisik" },
     { code: "89.52", display: "Electrocardiogram", category: "Pemeriksaan Kardiovaskular" },
@@ -596,6 +652,9 @@ async function seedDatabase() {
     { code: "99.29", display: "Injection or infusion of other therapeutic substance", category: "Pemberian Terapi Injeksi / Infus" },
     { code: "89.38", display: "Other nonoperative respiratory measurement", category: "Pemeriksaan Fungsi Paru & Spirometri" },
     { code: "96.04", display: "Insertion of endotracheal tube", category: "Tindakan Jalan Napas" },
+    { code: "96.54", display: "Dental scaling and prophylaxis", category: "Tindakan Gigi & Mulut" },
+    { code: "95.02", display: "Comprehensive eye examination", category: "Pemeriksaan Kesehatan Mata" },
+    { code: "99.55", display: "Prophylactic vaccination against other diseases", category: "Imunisasi & Vaksinasi" },
   ];
 
   let icd9Count = 0;
@@ -610,6 +669,9 @@ async function seedDatabase() {
     icd9Count++;
   }
 
+  // Lepaskan sementara konflik unique constraint MRN & NIK dari record pasien dummy lama
+  await sql`UPDATE patients SET mrn = mrn || '-legacy', nik = nik || '-legacy' WHERE id LIKE 'P-%' AND NOT (mrn LIKE '%-legacy')`;
+
   const allPatients: PatientProfile[] = [
     MOCK_PATIENT,
     ...SAMPLE_PATIENTS.filter((p) => p.id !== MOCK_PATIENT.id),
@@ -619,22 +681,27 @@ async function seedDatabase() {
   for (const p of allPatients) {
     await sql`
       INSERT INTO patients (
-        id, nik, mrn, name, gender, birth_date, phone, address, blood_type,
+        id, nik, mrn, ihs_number, name, gender, birth_date, phone, address, blood_type,
         allergies, emergency_contact_name, emergency_contact_relation, emergency_contact_phone,
         payment_payer, last_visit_date, last_visit_department, last_visit_doctor, last_visit_diagnosis,
         total_visits_count, satusehat_consent
       ) VALUES (
-        ${p.id}, ${p.nik}, ${p.mrn}, ${p.name}, ${p.gender}, ${p.birthDate}, ${p.phone}, ${p.address}, ${p.bloodType},
+        ${p.id}, ${p.nik}, ${p.mrn}, ${p.ihsNumber || (p.id.startsWith("P") ? p.id : null)}, ${p.name}, ${p.gender}, ${p.birthDate}, ${p.phone}, ${p.address}, ${p.bloodType},
         ${JSON.stringify(p.allergies || [])}, ${p.emergencyContact?.name || "-"}, ${p.emergencyContact?.relation || "-"}, ${p.emergencyContact?.phone || "-"},
         ${p.paymentPayer || "BPJS Kesehatan"}, ${p.lastVisitDate || null}, ${p.lastVisitDepartment || null}, ${p.lastVisitDoctor || null}, ${p.lastVisitDiagnosis || null},
         ${p.totalVisitsCount || 1}, ${p.satusehatConsent || "opt-in"}
       )
       ON CONFLICT (id) DO UPDATE SET
+        nik = EXCLUDED.nik,
+        mrn = EXCLUDED.mrn,
         name = EXCLUDED.name,
+        gender = EXCLUDED.gender,
+        birth_date = EXCLUDED.birth_date,
         phone = EXCLUDED.phone,
         address = EXCLUDED.address,
         blood_type = EXCLUDED.blood_type,
         allergies = EXCLUDED.allergies,
+        ihs_number = EXCLUDED.ihs_number,
         payment_payer = EXCLUDED.payment_payer,
         last_visit_date = EXCLUDED.last_visit_date,
         last_visit_department = EXCLUDED.last_visit_department,
@@ -647,6 +714,11 @@ async function seedDatabase() {
     patientCount++;
   }
 
+  // Migrasikan relasi data encounters & queue_items lama ke pasien utama yang baru dan bersihkan record legacy
+  await sql`UPDATE encounters SET patient_id = 'P02478375538' WHERE patient_id LIKE 'P-%'`;
+  await sql`UPDATE queue_items SET patient_id = 'P02478375538' WHERE patient_id LIKE 'P-%'`;
+  await sql`DELETE FROM patients WHERE id LIKE 'P-%'`;
+
   let encounterCount = 0;
   let vitalsCount = 0;
   let diagnosisCount = 0;
@@ -658,8 +730,13 @@ async function seedDatabase() {
   let addendumCount = 0;
   let syncLogCount = 0;
 
+  const validPatientIds = new Set(allPatients.map((p) => p.id));
+  const fallbackPatientId = MOCK_PATIENT.id;
+
   for (const enc of ALL_SAMPLE_ENCOUNTERS) {
-    const patientId = enc.patientId || MOCK_PATIENT.id;
+    const patientId = (enc.patientId && validPatientIds.has(enc.patientId))
+      ? enc.patientId
+      : fallbackPatientId;
     const facilityId = enc.facilityId || "fac-rsud-01";
     const deptId = enc.departmentId || (
       enc.clinicDepartment.includes("Penyakit Dalam") ? "dept-rs-01" :
@@ -684,7 +761,7 @@ async function seedDatabase() {
         sync_status, synced_at, is_locked, locked_at, locked_by
       ) VALUES (
         ${enc.id}, ${patientId}, ${facilityId}, ${deptId}, ${doctorId}, ${enc.satusehatEncounterId || null}, ${enc.visitDate}, ${enc.clinicDepartment},
-        ${enc.doctorName}, ${enc.doctorSip}, ${enc.doctorIhsId || "N10000001"},
+        ${enc.doctorName}, ${enc.doctorSip}, ${enc.doctorIhsId || "10001354453"},
         ${enc.chiefComplaint}, ${enc.anamnesis}, ${enc.followUpPlan?.instruction || "Kontrol rutin bila keluhan berlanjut."}, ${enc.followUpPlan?.nextVisitDate || null}, ${enc.followUpPlan?.referredTo || null},
         ${enc.dischargeDisposition || "Pulang Berobat Jalan"}, ${enc.encounterStatus || "finished"}, ${enc.queueNumber || null}, ${enc.registrationNumber || null}, ${enc.consentStatus || "opt-in"},
         ${enc.syncStatus || "synced"}, ${enc.syncedAt || enc.visitDate}, ${isLocked}, ${lockedAt}, ${lockedBy}
@@ -855,16 +932,18 @@ async function seedDatabase() {
     // Ensure patient exists
     await sql`
       INSERT INTO patients (
-        id, nik, mrn, name, gender, birth_date, phone, address, blood_type,
+        id, nik, mrn, ihs_number, name, gender, birth_date, phone, address, blood_type,
         allergies, emergency_contact_name, emergency_contact_relation, emergency_contact_phone,
         payment_payer, last_visit_date, last_visit_department, last_visit_doctor, last_visit_diagnosis,
         total_visits_count, satusehat_consent
       ) VALUES (
-        ${q.patient.id}, ${q.patient.nik}, ${q.patient.mrn}, ${q.patient.name}, ${q.patient.gender}, ${q.patient.birthDate}, ${q.patient.phone}, ${q.patient.address}, ${q.patient.bloodType},
+        ${q.patient.id}, ${q.patient.nik}, ${q.patient.mrn}, ${q.patient.ihsNumber || (q.patient.id.startsWith("P") ? q.patient.id : null)}, ${q.patient.name}, ${q.patient.gender}, ${q.patient.birthDate}, ${q.patient.phone}, ${q.patient.address}, ${q.patient.bloodType},
         ${JSON.stringify(q.patient.allergies || [])}, ${q.patient.emergencyContact?.name || "-"}, ${q.patient.emergencyContact?.relation || "-"}, ${q.patient.emergencyContact?.phone || "-"},
         ${q.patient.paymentPayer || "BPJS Kesehatan"}, ${q.patient.lastVisitDate || null}, ${q.patient.lastVisitDepartment || null}, ${q.patient.lastVisitDoctor || null}, ${q.patient.lastVisitDiagnosis || null},
         ${q.patient.totalVisitsCount || 1}, ${q.patient.satusehatConsent || "opt-in"}
-      ) ON CONFLICT (id) DO NOTHING
+      ) ON CONFLICT (id) DO UPDATE SET
+        ihs_number = EXCLUDED.ihs_number,
+        name = EXCLUDED.name
     `;
 
     const deptId = q.departmentId || (

@@ -55,12 +55,6 @@ export function getValidEncounterRef(encounter: OutpatientEncounter): string {
 }
 
 export function getValidDoctorIhs(encounter?: OutpatientEncounter): string {
-  // 1. Cek env override jika faskes mengonfigurasi IHS nakes default di .env
-  const envDoctorIhs = process.env.SATUSEHAT_DOCTOR_IHS;
-  if (envDoctorIhs && envDoctorIhs.trim()) {
-    return envDoctorIhs.trim();
-  }
-
   if (!encounter) return "N10000001";
   const anyEnc = encounter as unknown as Record<string, unknown>;
   const rawIhs = encounter.doctorIhsId || anyEnc.practitionerIhs || anyEnc.doctorIhs;
@@ -88,18 +82,13 @@ export function getValidDoctorName(encounter?: OutpatientEncounter): string {
 }
 
 export function getValidOrgId(encounter?: OutpatientEncounter): string {
-  const envOrgId = process.env.SATUSEHAT_ORG_ID;
-  if (envOrgId && envOrgId.includes("-")) {
-    return envOrgId;
-  }
   if (
     encounter?.hospitalOrgId &&
-    encounter.hospitalOrgId !== "10000004" &&
-    encounter.hospitalOrgId.includes("-")
+    encounter.hospitalOrgId.trim()
   ) {
-    return encounter.hospitalOrgId;
+    return encounter.hospitalOrgId.trim();
   }
-  return envOrgId || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+  return "b15a7ae7-f366-4a84-8385-0b8196c05002";
 }
 
 export function getValidLocationId(encounter?: OutpatientEncounter): string {

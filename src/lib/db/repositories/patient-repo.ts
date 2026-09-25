@@ -36,6 +36,7 @@ function mapRowToPatient(row: typeof patients.$inferSelect): PatientProfile {
     lastVisitDoctor: row.lastVisitDoctor || undefined,
     lastVisitDiagnosis: row.lastVisitDiagnosis || undefined,
     totalVisitsCount: row.totalVisitsCount ?? 0,
+    ihsNumber: row.ihsNumber || (row.id.startsWith("P-") ? row.id : undefined),
     satusehatConsent: (row.satusehatConsent as "opt-in" | "opt-out") || "opt-in",
   };
 }
@@ -173,6 +174,7 @@ export const PatientRepository = {
       emergencyContactRelation: patient.emergencyContact?.relation || "-",
       emergencyContactPhone: patient.emergencyContact?.phone || "-",
       paymentPayer: patient.paymentPayer || null,
+      ihsNumber: patient.ihsNumber || (id.startsWith("P-") ? id : null),
       lastVisitDate: patient.lastVisitDate || null,
       lastVisitDepartment: patient.lastVisitDepartment || null,
       lastVisitDoctor: patient.lastVisitDoctor || null,
@@ -200,6 +202,7 @@ export const PatientRepository = {
     if (partial.phone !== undefined) valuesToUpdate.phone = partial.phone;
     if (partial.address !== undefined) valuesToUpdate.address = partial.address;
     if (partial.bloodType !== undefined) valuesToUpdate.bloodType = partial.bloodType;
+    if (partial.ihsNumber !== undefined) valuesToUpdate.ihsNumber = partial.ihsNumber;
     if (partial.allergies !== undefined)
       valuesToUpdate.allergies = JSON.stringify(partial.allergies);
     if (partial.paymentPayer !== undefined) valuesToUpdate.paymentPayer = partial.paymentPayer;

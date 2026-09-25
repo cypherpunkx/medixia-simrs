@@ -10,6 +10,7 @@ import {
   Sparkles,
   Check,
 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface CustomDatePickerPreset {
   label: string;
@@ -239,7 +240,7 @@ export function CustomDatePicker({
   return (
     <div
       ref={containerRef}
-      className={`relative text-left ${className || "inline-block"}`}
+      className={cn("relative text-left", className || "w-full")}
       title={title}
     >
       {/* Trigger Button */}
@@ -247,15 +248,18 @@ export function CustomDatePicker({
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between gap-2 rounded-xl border transition-all duration-150 cursor-pointer select-none ${
+        className={cn(
+          "w-full flex items-center justify-between gap-2 rounded-lg border transition-all duration-150 cursor-pointer select-none",
           disabled
             ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-70"
             : isEffectiveActive
             ? "bg-teal-700 text-white border-teal-800 shadow-xs ring-1 ring-teal-500/30 font-extrabold"
             : isOpen
             ? "bg-white border-teal-600 ring-2 ring-teal-500/20 shadow-xs text-slate-900"
-            : "bg-slate-50/90 hover:bg-white border-slate-200 hover:border-teal-400 shadow-2xs text-slate-700"
-        } ${sizeClasses[size]} ${buttonClassName}`}
+            : "bg-slate-50/90 hover:bg-white border-slate-200 hover:border-teal-400 shadow-2xs text-slate-700",
+          sizeClasses[size],
+          buttonClassName
+        )}
       >
         <div className="flex items-center gap-1.5 min-w-0 truncate">
           {prefixIcon ? (

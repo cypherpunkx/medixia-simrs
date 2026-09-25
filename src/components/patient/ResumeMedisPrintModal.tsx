@@ -161,7 +161,10 @@ export function ResumeMedisPrintModal({
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500 font-mono">
                   <span>No. Izin Faskes: {activeLicense}</span>
                   <span>•</span>
-                  <span>Kode Org SATUSEHAT: {activeOrgId}</span>
+                  <span className="inline-flex items-center gap-1">
+                    <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-2.5 w-2.5 object-contain shrink-0" />
+                    Kode Org SATUSEHAT: {activeOrgId}
+                  </span>
                 </div>
                 <p className="text-[10px] text-slate-500 italic">
                   Pelayanan Rekam Medis Elektronik Terintegrasi SATUSEHAT Kemenkes RI
@@ -538,8 +541,8 @@ export function ResumeMedisPrintModal({
                 <span className="font-bold text-slate-900 font-mono text-[11px] block">
                   {encounter.satusehatEncounterId}
                 </span>
-                <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
-                  <ShieldCheck className="h-3 w-3" />
+                <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1.5">
+                  <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-3 w-3 object-contain shrink-0" />
                   <span>Tervalidasi di Platform Kemenkes RI</span>
                 </span>
               </div>

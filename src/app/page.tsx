@@ -41,7 +41,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { QrCode, Loader2, Hospital, Pill, Activity, Calendar } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { QrCode, Loader2, Hospital, Pill, Activity, Calendar, Shield, ArrowRight, AlertTriangle, Archive } from "lucide-react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { generateUUIDv7, generatePrefixedId } from "@/lib/id-generator";
 import { toast } from "sonner";
@@ -1292,6 +1294,29 @@ export default function HomePage() {
         }`}
       />
 
+      {/* 0. Mode Inspeksi Vendor (Hanya Tampil Jika Login sebagai Super Admin) */}
+      {user?.role === "super_admin" && (
+        <div className="bg-slate-900 border-b border-indigo-500/40 px-4 sm:px-6 py-2 text-xs flex flex-wrap items-center justify-between gap-2 text-white relative z-50">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-indigo-400 animate-ping" />
+            <span className="font-bold text-indigo-300 flex items-center gap-1.5">
+              <Shield className="h-3.5 w-3.5" />
+              Mode Inspeksi Vendor:
+            </span>
+            <span className="text-slate-300 text-[11px] sm:text-xs">
+              Anda sedang meninjau SIMRS <strong>{facility?.name || effectiveHospitalName}</strong>
+            </span>
+          </div>
+          <Link
+            href="/admin"
+            className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1 rounded-lg text-[11px] transition-colors cursor-pointer shadow-xs"
+          >
+            <span>Kembali ke Vendor Console</span>
+            <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+      )}
+
       {/* 1. TOP HEADER (Sticky) */}
       <EhrHeader
         currentEnv={currentEnv}
@@ -1314,6 +1339,31 @@ export default function HomePage() {
         isDbSyncing={isDbSyncing}
         isBridgingActive={isBridgingActive}
       />
+
+      {/* Banner Peringatan Faskes Diarsipkan / Nonaktif (Read-Only Mode) */}
+      {facility?.isActive === false && (
+        <div className="w-full bg-amber-500 text-slate-950 px-4 py-2.5 shadow-sm border-b border-amber-600/30">
+          <div className="max-w-[1600px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5 font-medium">
+              <span className="p-1 rounded-md bg-amber-600/30 text-slate-950 font-bold shrink-0">
+                <AlertTriangle className="h-4 w-4" />
+              </span>
+              <span>
+                <strong>Mode Arsip (Faskes Nonaktif):</strong> Fasilitas kesehatan ini sedang diarsipkan oleh pengelola sistem. Seluruh data rekam medis pasien dapat ditinjau untuk audit, namun pendaftaran dan input transaksi baru dibatasi demi integritas data.
+              </span>
+            </div>
+            {user?.role === "super_admin" && (
+              <Button
+                size="sm"
+                onClick={() => router.push("/admin")}
+                className="h-7 text-[11px] font-bold bg-slate-900 hover:bg-slate-800 text-white rounded-lg px-3 shrink-0 cursor-pointer"
+              >
+                Kembali ke Vendor Portal
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* 2. HOLY GRAIL LAYOUT BODY (Left Sidebar + Center Canvas + Right Panel) */}
       <div className="flex-1 w-full max-w-[1600px] mx-auto p-4 sm:p-6 pb-24 flex flex-col lg:flex-row gap-6">
@@ -1601,6 +1651,7 @@ export default function HomePage() {
               <div className="canvas-content">
                 <AuthCard
                   env={currentEnv}
+                  initialSession={session}
                   onEnvChange={setCurrentEnv}
                   onAuthSuccess={handleAuthSuccess}
                   onAuthError={() => {}}

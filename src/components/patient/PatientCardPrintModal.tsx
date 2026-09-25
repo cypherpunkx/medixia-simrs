@@ -134,8 +134,9 @@ export function PatientCardPrintModal({
               {/* Card Footer with SATUSEHAT ID & QR Code */}
               <div className="flex items-end justify-between border-t border-teal-700/50 pt-3 relative z-10">
                 <div>
-                  <span className="text-[8px] text-teal-300/60 block uppercase font-mono">
-                    SATUSEHAT NATIONAL CITIZEN ID
+                  <span className="text-[8px] text-teal-300/80 uppercase font-mono flex items-center gap-1">
+                    <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-2.5 w-2.5 object-contain shrink-0" />
+                    <span>SATUSEHAT NATIONAL CITIZEN ID</span>
                   </span>
                   <span className="text-xs font-mono font-bold text-teal-300 tracking-wider">
                     {patient.id}

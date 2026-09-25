@@ -34,6 +34,8 @@ import {
 import { EhrModule } from "@/components/layout/EhrLeftSidebar";
 import { useAuth } from "@/lib/auth/auth-context";
 import { StaffManagementModal } from "@/components/admin/StaffManagementModal";
+import { SuperAdminFacilityManagerModal } from "@/components/facility/SuperAdminFacilityManagerModal";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 interface EhrHeaderProps {
@@ -49,12 +51,12 @@ interface EhrHeaderProps {
     patient: PatientProfile,
     targetModule?: EhrModule,
     targetQueueItemOrNumber?: ClinicQueuePatientItem | string,
-    targetDepartment?: string
+    targetDepartment?: string,
   ) => void;
   onUpdateQueueStatus?: (
     itemId: string,
     nextStatus: "arrived" | "in-progress" | "finished",
-    silent?: boolean
+    silent?: boolean,
   ) => void;
   onOpenRegistration?: () => void;
   isDbSyncing?: boolean;
@@ -65,6 +67,11 @@ const ROLE_LABELS: Record<
   UserRole,
   { label: string; color: string; icon: React.ElementType }
 > = {
+  super_admin: {
+    label: "Super Admin (Vendor RME)",
+    color: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    icon: Shield,
+  },
   doctor: {
     label: "Dokter DPJP",
     color: "bg-teal-50 text-teal-700 border-teal-200",
@@ -106,12 +113,8 @@ export function EhrHeader({
   isDbSyncing = false,
   isBridgingActive = false,
 }: EhrHeaderProps) {
-  const {
-    user,
-    facility,
-    departments: dynamicDepartments,
-    logout,
-  } = useAuth();
+  const router = useRouter();
+  const { user, facility, departments: dynamicDepartments, logout } = useAuth();
 
   // Search & Dropdowns State
   const [searchQuery, setSearchQuery] = useState("");
@@ -120,6 +123,7 @@ export function EhrHeader({
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isStaffModalOpen, setIsStaffModalOpen] = useState(false);
+  const [isFacilityManagerOpen, setIsFacilityManagerOpen] = useState(false);
 
   // Clinical Notifications State (Derived dynamically from live worklist)
   const [readNotifIds, setReadNotifIds] = useState<Set<string>>(
@@ -149,7 +153,10 @@ export function EhrHeader({
       return isNaN(bYear) ? 0 : cYear - bYear;
     };
 
-    const getItemTimestamp = (item: ClinicQueuePatientItem, fallbackIndex: number) => {
+    const getItemTimestamp = (
+      item: ClinicQueuePatientItem,
+      fallbackIndex: number,
+    ) => {
       if (item.arrivalTimestamp && item.arrivalTimestamp > 0) {
         return item.arrivalTimestamp;
       }
@@ -223,7 +230,8 @@ export function EhrHeader({
     );
     inProgress.forEach((c, idx) => {
       const notifId = `notif-consult-${c.id || idx}`;
-      const isGeriatric = c.triagePriority === "geriatric" || getAge(c.patient.birthDate) >= 60;
+      const isGeriatric =
+        c.triagePriority === "geriatric" || getAge(c.patient.birthDate) >= 60;
       list.push({
         id: notifId,
         type: "queue",
@@ -242,7 +250,8 @@ export function EhrHeader({
     // 3. Geriatric / High-priority patients yang sedang menunggu (non-CITO)
     const geriatric = worklist.filter(
       (w) =>
-        (w.triagePriority === "geriatric" || getAge(w.patient.birthDate) >= 60) &&
+        (w.triagePriority === "geriatric" ||
+          getAge(w.patient.birthDate) >= 60) &&
         w.status === "arrived" &&
         w.triagePriority !== "urgent" &&
         !(w.chiefComplaint && /\bcito\b/i.test(w.chiefComplaint)),
@@ -325,7 +334,7 @@ export function EhrHeader({
         ? "Gateway SATUSEHAT Kemenkes RI"
         : "Penyimpanan Basis Data Internal",
       desc: isBridgingActive
-        ? `Layanan interoperabilitas FHIR R4 terhubung aktif pada server ${currentEnv.toUpperCase()} Kemenkes RI.`
+        ? `Layanan interoperabilitas FHIR R4 terhubung aktif pada server ${currentEnv === "production" ? "Production" : "Staging"} Kemenkes RI.`
         : `Sistem beroperasi dalam mode penyimpanan basis data internal RS. Kredensial SATUSEHAT belum dihubungkan.`,
       time: isBridgingActive ? "Live Online" : "Internal (Offline)",
       timestamp: 0,
@@ -554,34 +563,74 @@ export function EhrHeader({
 
   return (
     <header className="sticky top-0 z-50 h-16 w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between shadow-2xs gap-3">
-      {/* 1. Left: Brand & Hospital Identity */}
-      <div className="flex items-center gap-2.5 shrink-0">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-600 text-white shadow-xs shrink-0">
-          <Hospital className="h-4.5 w-4.5" />
-        </div>
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <span className="font-extrabold text-sm text-slate-900 tracking-tight whitespace-nowrap truncate max-w-[200px] sm:max-w-[260px]">
-              {activeFacilityName}
-            </span>
-            <Badge
-              variant="outline"
-              className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-50 text-teal-800 border-teal-200 shrink-0 hidden sm:inline-flex"
-            >
-              {facility?.type === "rumah_sakit"
-                ? "RS"
-                : facility?.type === "klinik_pratama"
-                  ? "Klinik Pratama"
-                  : facility?.type === "klinik_utama"
-                    ? "Klinik Utama"
-                    : "Puskesmas"}
-            </Badge>
+      {/* 1. Left: Brand & Hospital Identity (Tenant Indicator / Super Admin Switcher) */}
+      {user?.role === "super_admin" ? (
+        <button
+          type="button"
+          onClick={() => setIsFacilityManagerOpen(true)}
+          className="flex items-center gap-2.5 shrink-0 text-left hover:bg-indigo-50/70 p-1.5 rounded-xl transition-all cursor-pointer group border border-transparent hover:border-indigo-200"
+          title="Mode Super Admin: Klik untuk Beralih Faskes atau Buka Konsol Multi-Tenant"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-xs shrink-0 group-hover:scale-105 transition-transform">
+            <Building2 className="h-4.5 w-4.5" />
           </div>
-          <p className="text-[10px] text-slate-400 font-medium truncate">
-            Org ID: {facility?.satusehatOrgId || "10000004"} • SATUSEHAT RME
-          </p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-sm text-slate-900 tracking-tight whitespace-nowrap truncate max-w-[190px] sm:max-w-[250px] group-hover:text-indigo-700 transition-colors">
+                {activeFacilityName}
+              </span>
+              <Badge
+                variant="outline"
+                className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-800 border-indigo-200 shrink-0 hidden sm:inline-flex"
+              >
+                Super Admin
+              </Badge>
+              <ChevronDown className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
+            </div>
+            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium truncate">
+              <span>Org ID: {facility?.satusehatOrgId || "10000004"}</span>
+              <span>•</span>
+              <span className="inline-flex items-center gap-1 font-semibold text-indigo-600">
+                <Building2 className="h-3 w-3" />
+                Ganti Faskes
+              </span>
+            </div>
+          </div>
+        </button>
+      ) : (
+        <div
+          className="flex items-center gap-2.5 shrink-0 text-left p-1 rounded-xl"
+          title={`Fasilitas Pelayanan Kesehatan: ${activeFacilityName}`}
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-600 text-white shadow-xs shrink-0">
+            <Hospital className="h-4.5 w-4.5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-extrabold text-sm text-slate-900 tracking-tight whitespace-nowrap truncate max-w-[190px] sm:max-w-[250px]">
+                {activeFacilityName}
+              </span>
+              <Badge
+                variant="outline"
+                className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-50 text-teal-800 border-teal-200 shrink-0 hidden sm:inline-flex"
+              >
+                {facility?.type === "rumah_sakit"
+                  ? "RS"
+                  : facility?.type === "klinik_pratama"
+                    ? "Klinik Pratama"
+                    : facility?.type === "klinik_utama"
+                      ? "Klinik Utama"
+                      : facility?.type === "praktik_mandiri"
+                        ? "Praktik Mandiri"
+                        : "Puskesmas"}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium truncate">
+              <span>Org ID: {facility?.satusehatOrgId || "10000004"}</span>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 2. Center: Direct Inline Search Bar & Department Selector */}
       <div className="flex items-center gap-2 sm:gap-3 flex-1 max-w-xl mx-2">
@@ -701,7 +750,9 @@ export function EhrHeader({
                             {/* Baris 2: No. Registrasi Kunjungan & Jam Kedatangan */}
                             <div className="text-[10px] text-slate-600 font-mono flex items-center gap-1.5 flex-wrap">
                               <span className="bg-slate-100 text-slate-800 px-1.5 py-0.2 rounded font-semibold text-[9px] border border-slate-200">
-                                No. Reg: {item.registrationNumber || `RJ-${item.queueNumber}`}
+                                No. Reg:{" "}
+                                {item.registrationNumber ||
+                                  `RJ-${item.queueNumber}`}
                               </span>
                               {item.arrivalTime && (
                                 <span className="text-slate-400 text-[9px]">
@@ -906,8 +957,12 @@ export function EhrHeader({
                   </div>
                 ) : (
                   notifications.map((notif) => {
-                    const isFinished = notif.time === "Selesai" || notif.queueItem?.status === "finished";
-                    const isCito = !isFinished && (notif.priority === "cito" || notif.time === "CITO");
+                    const isFinished =
+                      notif.time === "Selesai" ||
+                      notif.queueItem?.status === "finished";
+                    const isCito =
+                      !isFinished &&
+                      (notif.priority === "cito" || notif.time === "CITO");
                     const isGeriatric = notif.time === "Geriatri";
                     const isInProgress = notif.time === "Diperiksa";
                     const isWaiting = notif.time === "Menunggu";
@@ -950,6 +1005,8 @@ export function EhrHeader({
                             <Stethoscope className="h-4 w-4" />
                           ) : isWaiting ? (
                             <UserCheck className="h-4 w-4" />
+                          ) : notif.id === "notif-satusehat-gateway" ? (
+                            <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-4 w-4 object-contain shrink-0" />
                           ) : (
                             <ShieldCheck className="h-4 w-4" />
                           )}
@@ -1059,20 +1116,29 @@ export function EhrHeader({
               : "Bridging SATUSEHAT Belum Terhubung (Penyimpanan Internal RS). Buka modul Bridging untuk menghubungkan kredensial Kemenkes."
           }
         >
-          <span
-            className={`h-2 w-2 rounded-full ${
-              isBridgingActive
-                ? currentEnv === "production"
-                  ? "bg-emerald-500"
-                  : "bg-teal-500"
-                : "bg-amber-400"
-            } ${isBridgingActive ? "animate-pulse" : ""}`}
-          />
+          {isBridgingActive ? (
+            <div className="relative flex items-center justify-center shrink-0">
+              <img
+                src="/satusehat-default-logo.svg"
+                alt="SATUSEHAT"
+                className="h-3.5 w-3.5 object-contain"
+              />
+              <span
+                className={`absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ${
+                  currentEnv === "production"
+                    ? "bg-emerald-500"
+                    : "bg-teal-500"
+                } animate-pulse ring-1 ring-white`}
+              />
+            </div>
+          ) : (
+            <span className="h-2 w-2 rounded-full bg-amber-400 shrink-0" />
+          )}
           <span className="text-[10px] text-slate-600 font-bold">
             {isBridgingActive
               ? currentEnv === "production"
-                ? "SATUSEHAT Live (Prod)"
-                : "SATUSEHAT Live (Staging)"
+                ? "SATUSEHAT (Prod)"
+                : "SATUSEHAT (Staging)"
               : "Internal RS (Offline)"}
           </span>
         </div>
@@ -1145,9 +1211,18 @@ export function EhrHeader({
                         SIP: {user.sip}
                       </p>
                     )}
-                    {user?.ihsPractitionerId && (
-                      <p className="text-[10px] text-teal-700 font-mono truncate">
-                        IHS Nakes: <strong>{user.ihsPractitionerId}</strong>
+                    {user?.ihsPractitionerId ? (
+                      <div className="flex items-center gap-1.5 mt-1 text-[10px] text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded font-mono font-bold truncate">
+                        <img
+                          src="/satusehat-default-logo.svg"
+                          alt="SATUSEHAT"
+                          className="h-2.5 w-2.5 object-contain shrink-0"
+                        />
+                        <span>IHS Nakes: {user.ihsPractitionerId}</span>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 font-mono mt-1 truncate">
+                        IHS: Belum Terdaftar
                       </p>
                     )}
                   </div>
@@ -1163,13 +1238,20 @@ export function EhrHeader({
                   </div>
                   <Badge
                     variant="outline"
-                    className="text-[9px] font-bold px-1.5 py-0.2 rounded border bg-teal-50 text-teal-800 border-teal-200"
+                    className="text-[9px] font-bold px-1.5 py-0.2 rounded border bg-teal-50 text-teal-800 border-teal-200 flex items-center gap-1"
                   >
-                    {facility?.type === "rumah_sakit"
-                      ? "Rumah Sakit"
-                      : facility?.type === "puskesmas"
-                        ? "Puskesmas"
-                        : "Klinik Pratama"}
+                    <img
+                      src="/satusehat-default-logo.svg"
+                      alt="SATUSEHAT"
+                      className="h-2.5 w-2.5 object-contain shrink-0"
+                    />
+                    <span>
+                      {facility?.type === "rumah_sakit"
+                        ? "RS Terdaftar Kemenkes"
+                        : facility?.type === "puskesmas"
+                          ? "Puskesmas Kemenkes"
+                          : "Klinik Terdaftar Kemenkes"}
+                    </span>
                   </Badge>
                 </div>
 
@@ -1182,8 +1264,18 @@ export function EhrHeader({
                       <h4 className="font-extrabold text-xs text-slate-900 leading-tight">
                         {facility?.name || "RS Umum Daerah Sehat Sejahtera"}
                       </h4>
-                      <p className="text-[10px] text-slate-500 font-mono mt-0.5">
-                        Org ID SATUSEHAT: <strong className="text-teal-700 font-bold">{facility?.satusehatOrgId || "10000004"}</strong>
+                      <p className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5">
+                        <img
+                          src="/satusehat-default-logo.svg"
+                          alt="SATUSEHAT"
+                          className="h-3 w-3 object-contain shrink-0"
+                        />
+                        <span>
+                          Org ID SATUSEHAT:{" "}
+                          <strong className="text-teal-700 font-bold">
+                            {facility?.satusehatOrgId || "10000004"}
+                          </strong>
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -1198,15 +1290,46 @@ export function EhrHeader({
                   <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono border-t border-slate-200/60 pt-1.5">
                     <span>Poliklinik Terdaftar:</span>
                     <strong className="text-slate-800 font-sans font-bold">
-                      {dynamicDepartments?.length || facility?.departments?.length || 6} Unit Pelayanan
+                      {dynamicDepartments?.length ||
+                        facility?.departments?.length ||
+                        6}{" "}
+                      Unit Pelayanan
                     </strong>
                   </div>
                 </div>
               </div>
 
-              {/* 3. Admin Staff & User Management (Hanya untuk Admin Mitra) */}
+              {/* 3. Multi-Tenant Console & Admin Staff Management */}
+              {user?.role === "super_admin" && (
+                <div className="p-2.5 border-b border-slate-100 bg-slate-50/70 space-y-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      router.push("/admin");
+                    }}
+                    className="w-full p-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                  >
+                    <Shield className="h-3.5 w-3.5 text-indigo-200" />
+                    <span>Portal Vendor RME (/admin)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUserMenuOpen(false);
+                      setIsFacilityManagerOpen(true);
+                    }}
+                    className="w-full p-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                  >
+                    <Building2 className="h-3.5 w-3.5 text-indigo-700" />
+                    <span>Ganti Faskes SIMRS</span>
+                  </button>
+                </div>
+              )}
+
               {user?.role === "admin" && (
-                <div className="p-2.5 border-b border-slate-100 bg-slate-50/70">
+                <div className="p-2.5 border-b border-slate-100 bg-slate-50/70 space-y-1.5">
                   <button
                     type="button"
                     onClick={() => {
@@ -1235,7 +1358,9 @@ export function EhrHeader({
                     <LogOut className="h-3.5 w-3.5 text-rose-500 group-hover:-translate-x-0.5 transition-transform" />
                     <span>Keluar dari Aplikasi</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-mono group-hover:text-rose-400">Logout</span>
+                  <span className="text-[10px] text-slate-400 font-mono group-hover:text-rose-400">
+                    Logout
+                  </span>
                 </button>
               </div>
             </div>
@@ -1247,6 +1372,12 @@ export function EhrHeader({
       <StaffManagementModal
         isOpen={isStaffModalOpen}
         onClose={() => setIsStaffModalOpen(false)}
+      />
+
+      {/* Modal Dialog Manajemen Multi-Faskes RME Platform */}
+      <SuperAdminFacilityManagerModal
+        isOpen={isFacilityManagerOpen}
+        onClose={() => setIsFacilityManagerOpen(false)}
       />
     </header>
   );

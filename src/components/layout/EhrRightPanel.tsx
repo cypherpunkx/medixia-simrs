@@ -291,7 +291,11 @@ export function EhrRightPanel({
       <div className="ehr-card p-4 space-y-3">
         <div className="flex items-center justify-between gap-1.5 min-w-0">
           <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 shrink-0">
-            <ShieldCheck className="h-4 w-4 text-teal-600 shrink-0" />
+            <img
+              src="/satusehat-default-logo.svg"
+              alt="SATUSEHAT"
+              className="h-4 w-4 object-contain shrink-0"
+            />
             <span>Integrasi SATUSEHAT</span>
           </div>
           <span
@@ -473,7 +477,11 @@ export function EhrRightPanel({
           className="w-full text-xs font-semibold h-8 bg-white border-slate-200 hover:bg-slate-50 text-teal-700 hover:text-teal-800 justify-between px-3 btn-press transition-all duration-150 cursor-pointer"
         >
           <span className="flex items-center gap-1.5">
-            <Layers className="h-3.5 w-3.5 text-teal-600" />
+            <img
+              src="/satusehat-default-logo.svg"
+              alt="SATUSEHAT"
+              className="h-3.5 w-3.5 object-contain shrink-0"
+            />
             <span>Rincian Rekam Medis Kemenkes (FHIR)</span>
           </span>
           <ChevronRight className="h-3.5 w-3.5 text-slate-400 transition-transform duration-150 group-hover:translate-x-0.5" />

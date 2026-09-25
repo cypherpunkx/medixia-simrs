@@ -80,8 +80,12 @@ export function ClinicEmptyState({
 
         <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-0.5">
           <span className="text-[10px] font-bold text-slate-400 uppercase">SATUSEHAT Gateway</span>
-          <p className="font-bold text-teal-800 flex items-center gap-1">
-            <ShieldCheck className="h-3.5 w-3.5 text-teal-600" />
+          <p className="font-bold text-teal-800 flex items-center gap-1.5">
+            <img
+              src="/satusehat-default-logo.svg"
+              alt="SATUSEHAT"
+              className="h-3.5 w-3.5 object-contain shrink-0"
+            />
             Terhubung (200 OK)
           </p>
         </div>

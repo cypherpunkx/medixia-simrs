@@ -10,9 +10,9 @@ interface AuthContextType {
   allFacilities: FacilityProfile[];
   departments: DepartmentItem[];
   isLoading: boolean;
-  login: (username: string, passwordAttempt: string) => Promise<boolean>;
+  login: (username: string, passwordAttempt: string) => Promise<UserProfile | null>;
   switchFacility: (facilityId: string) => Promise<void>;
-  refreshFacilities: () => Promise<void>;
+  refreshFacilities: (includeAll?: boolean) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -30,23 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         setIsLoading(true);
 
-        // Fetch facilities
-        const facRes = await fetch("/api/facilities");
-        if (facRes.ok) {
-          const text = await facRes.text();
-          if (text) {
-            try {
-              const facData = JSON.parse(text);
-              if (facData.success && facData.data?.length > 0) {
-                setAllFacilities(facData.data);
-              }
-            } catch {
-              // Ignored during dev hot reload
-            }
-          }
-        }
-
-        // Fetch current session
+        // 1. Fetch current session
+        let currentUserRole: string | null = null;
         const authRes = await fetch("/api/auth/me");
         if (authRes.ok) {
           const authText = await authRes.text();
@@ -54,7 +39,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
               const authData = JSON.parse(authText);
               if (authData.success && authData.data) {
-                if (authData.data.user) setUser(authData.data.user);
+                if (authData.data.user) {
+                  setUser(authData.data.user);
+                  currentUserRole = authData.data.user.role;
+                }
                 if (authData.data.facility) setFacility(authData.data.facility);
               }
             } catch {
@@ -64,6 +52,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setUser(null);
           setFacility(null);
+        }
+
+        // 2. Fetch facilities (otomatis muat semua jika super_admin atau berada di portal /admin)
+        const shouldLoadAll =
+          currentUserRole === "super_admin" ||
+          (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
+
+        const facRes = await fetch(shouldLoadAll ? "/api/facilities?all=true" : "/api/facilities");
+        if (facRes.ok) {
+          const text = await facRes.text();
+          if (text) {
+            try {
+              const facData = JSON.parse(text);
+              if (facData.success && Array.isArray(facData.data)) {
+                setAllFacilities(facData.data);
+              }
+            } catch {
+              // Ignored during dev hot reload
+            }
+          }
         }
       } catch (err) {
         console.warn("Gagal inisialisasi sesi auth:", err);
@@ -79,9 +87,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const isLoggingInRef = React.useRef(false);
 
-  const login = async (username: string, passwordAttempt: string): Promise<boolean> => {
+  const login = async (username: string, passwordAttempt: string): Promise<UserProfile | null> => {
     if (isLoggingInRef.current) {
-      return false;
+      return null;
     }
 
     try {
@@ -98,16 +106,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.data.user);
         setFacility(data.data.facility);
         toast.success(`Login Berhasil: ${data.data.user.name}`, {
-          description: `Peran: ${data.data.user.role.toUpperCase()} • Faskes: ${data.data.facility?.name}`,
+          description: data.data.facility?.name ? `Faskes: ${data.data.facility.name}` : undefined,
         });
-        return true;
+        return data.data.user;
       } else {
         toast.error(data.error || "Gagal login. Periksa username dan password.");
-        return false;
+        return null;
       }
     } catch {
       toast.error("Terjadi gangguan koneksi saat login.");
-      return false;
+      return null;
     } finally {
       setIsLoading(false);
       isLoggingInRef.current = false;
@@ -119,6 +127,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const targetFac = allFacilities.find((f) => f.id === facilityId);
       if (!targetFac) return;
 
+      if (targetFac.isActive === false && user?.role !== "super_admin") {
+        toast.error("Akses Ditolak: Faskes ini sedang dinonaktifkan / diarsipkan.", {
+          description: "Staf non-vendor tidak dapat membuka sesi pelayanan faskes yang tidak aktif.",
+        });
+        return;
+      }
+
       setFacility(targetFac);
       if (user) {
         setUser({
@@ -129,25 +144,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      toast.success(`Faskes Aktif: ${targetFac.name}`, {
-        description: `Tipe: ${targetFac.type === "rumah_sakit" ? "Rumah Sakit" : "Klinik Pratama"} • Org ID: ${targetFac.satusehatOrgId}`,
-      });
+      if (targetFac.isActive === false) {
+        toast.warning(`Mode Arsip Aktif: ${targetFac.name}`, {
+          description: "Faskes berstatus nonaktif. Akses dibuka dalam mode inspeksi arsip (Read-Only).",
+        });
+      } else {
+        toast.success(`Faskes Aktif: ${targetFac.name}`, {
+          description: `Tipe: ${targetFac.type === "rumah_sakit" ? "Rumah Sakit" : "Klinik Pratama"} • Org ID: ${targetFac.satusehatOrgId}`,
+        });
+      }
     } catch (err) {
       console.error("Gagal beralih faskes:", err);
     }
   };
 
-  const refreshFacilities = async () => {
+  const refreshFacilities = React.useCallback(async (includeAll: boolean = false) => {
     try {
-      const facRes = await fetch("/api/facilities");
+      const url = includeAll ? "/api/facilities?all=true" : "/api/facilities";
+      const facRes = await fetch(url);
       const facData = await facRes.json();
-      if (facData.success && facData.data?.length > 0) {
+      if (facData.success && Array.isArray(facData.data)) {
         setAllFacilities(facData.data);
       }
     } catch (err) {
       console.error("Gagal memperbarui daftar faskes:", err);
     }
-  };
+  }, []);
 
   const logout = async () => {
     try {
@@ -156,13 +178,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setFacility(null);
       toast.info("Anda telah berhasil keluar dari sistem.");
       if (typeof window !== "undefined") {
-        window.location.href = "/login";
+        if (window.location.pathname.startsWith("/admin")) {
+          window.location.href = "/admin/login";
+        } else {
+          window.location.href = "/login";
+        }
       }
     } catch {
       setUser(null);
       setFacility(null);
       if (typeof window !== "undefined") {
-        window.location.href = "/login";
+        if (window.location.pathname.startsWith("/admin")) {
+          window.location.href = "/admin/login";
+        } else {
+          window.location.href = "/login";
+        }
       }
     }
   };

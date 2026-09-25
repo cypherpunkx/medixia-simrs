@@ -81,7 +81,11 @@ export function HeroSection() {
               variant="kemenkes"
               className="px-3.5 py-1 text-xs font-medium shadow-sm gap-1.5 rounded-full"
             >
-              <Sparkles className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+              <img
+                src="/satusehat-default-logo.svg"
+                alt="SATUSEHAT"
+                className="h-3.5 w-3.5 object-contain shrink-0"
+              />
               <span>Standar Integrasi RME Kemenkes RI</span>
             </Badge>
           </div>

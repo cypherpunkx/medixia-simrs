@@ -345,11 +345,19 @@ export function EhrLeftSidebar({
                   <div
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${
                       isActive
-                        ? "bg-white/20 text-white"
+                        ? "bg-white/95 shadow-xs"
                         : "bg-slate-100 text-slate-600"
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
+                    {item.id === "auth" ? (
+                      <img
+                        src="/satusehat-default-logo.svg"
+                        alt="SATUSEHAT"
+                        className="h-4 w-4 object-contain"
+                      />
+                    ) : (
+                      <Icon className="h-4 w-4" />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
                     <span className="text-xs font-bold block truncate leading-tight">

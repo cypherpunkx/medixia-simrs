@@ -160,7 +160,13 @@ export function SatusehatSyncLoadingModal({
               ) : isCorrectionMode ? (
                 <RefreshCw className="h-5 w-5 text-amber-200 animate-spin" />
               ) : (
-                <ShieldCheck className="h-5 w-5 text-emerald-300 animate-pulse" />
+                <div className="h-6 w-6 rounded-md bg-white/95 p-0.5 shadow-xs flex items-center justify-center animate-pulse">
+                  <img
+                    src="/satusehat-default-logo.svg"
+                    alt="SATUSEHAT"
+                    className="h-full w-full object-contain"
+                  />
+                </div>
               )}
             </div>
           </div>
