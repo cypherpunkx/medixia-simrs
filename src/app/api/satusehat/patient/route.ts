@@ -3,6 +3,7 @@ import { getSatusehatFhirUrl } from "@/lib/satusehat/config";
 import { SatusehatEnvironment } from "@/lib/satusehat/types";
 import { SatusehatClient } from "@/lib/satusehat/client";
 import { PatientRepository } from "@/lib/db/repositories/patient-repo";
+import { parseNikToRegion } from "@/lib/satusehat/indonesia-regions";
 
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
@@ -226,26 +227,23 @@ export async function GET(req: NextRequest) {
 
   // Generate verified Dukcapil/MPI profile structure for any valid 16-digit NIK
   const targetNik = nik || "3171010101900001";
-  const isFemale = parseInt(targetNik.substring(6, 8)) > 40;
-  const day = isFemale
-    ? parseInt(targetNik.substring(6, 8)) - 40
-    : parseInt(targetNik.substring(6, 8));
-  const month = targetNik.substring(8, 10);
-  const yearSuffix = targetNik.substring(10, 12);
-  const fullYear =
-    parseInt(yearSuffix) > 30 ? `19${yearSuffix}` : `20${yearSuffix}`;
-  const birthDate = `${fullYear}-${month.padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const regionInfo = parseNikToRegion(targetNik);
 
   const generatedPatient = {
     ihsId: id || `P-${targetNik.slice(0, 6)}${Math.floor(100000 + Math.random() * 900000)}`,
     nik: nik || "",
     name: "",
-    gender: isFemale ? ("female" as const) : ("male" as const),
-    birthDate,
+    gender: regionInfo.gender,
+    birthDate: regionInfo.birthDate,
     phone: "",
-    address: "",
+    address: regionInfo.formattedAddress,
     bloodType: "O" as "A" | "B" | "AB" | "O",
     allergies: [],
+    region: {
+      province: regionInfo.provinceName,
+      city: regionInfo.cityName,
+      district: regionInfo.districtName,
+    },
     emergencyContact: {
       name: "",
       relation: "Keluarga",

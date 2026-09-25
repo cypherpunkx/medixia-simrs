@@ -69,6 +69,7 @@ import {
   validatePhone,
   sanitizePhoneNumber,
 } from "@/lib/satusehat/validation";
+import { parseNikToRegion } from "@/lib/satusehat/indonesia-regions";
 import {
   speakIndonesianQueueCall,
   VOICE_PROFILES,
@@ -1257,19 +1258,23 @@ export function PatientRegistrationModule({
 
       if (data.success && data.data) {
         const resolvedIhs = data.data.ihsId || data.data.id;
+        const regionInfo = parseNikToRegion(nikInput);
+        const resolvedAddress = data.data.address || regionInfo.formattedAddress;
+
         setIsNikVerified(true);
-        setNewPatientData({
+        setNewPatientData((prev) => ({
+          ...prev,
           id: resolvedIhs,
           ihsNumber: resolvedIhs,
-          nik: data.data.nik,
-          name: data.data.name,
-          gender: data.data.gender,
-          birthDate: data.data.birthDate,
-          address: data.data.address,
-          phone: data.data.phone,
-          bloodType: data.data.bloodType || "O",
-          allergies: data.data.allergies || [],
-        });
+          nik: data.data.nik || nikInput,
+          name: data.data.name || prev.name || "",
+          gender: data.data.gender || regionInfo.gender,
+          birthDate: data.data.birthDate || regionInfo.birthDate,
+          address: resolvedAddress || prev.address || "",
+          phone: data.data.phone || prev.phone || "",
+          bloodType: data.data.bloodType || prev.bloodType || "O",
+          allergies: data.data.allergies || prev.allergies || [],
+        }));
         if (data.data.emergencyContact) {
           setEmergencyName(data.data.emergencyContact.name || "");
           setEmergencyRelation(
@@ -1277,9 +1282,16 @@ export function PatientRegistrationModule({
           );
           setEmergencyPhone(data.data.emergencyContact.phone || "");
         }
-        toast.success("NIK berhasil diverifikasi di SATUSEHAT", {
-          description: `IHS Patient ID: ${data.data.ihsId || data.data.id}`,
-        });
+
+        if (data.data.name) {
+          toast.success("Data KTP Ditemukan", {
+            description: `${data.data.name} • IHS: ${resolvedIhs}`,
+          });
+        } else {
+          toast.success("Data KTP Berhasil Diverifikasi", {
+            description: "Tanggal lahir, jenis kelamin, dan wilayah terisi otomatis.",
+          });
+        }
       } else {
         toast.error(data.error || "Gagal memverifikasi NIK.");
       }
@@ -4987,9 +4999,17 @@ export function PatientRegistrationModule({
             </div>
 
             <div className="space-y-1.5 md:col-span-2">
-              <Label className="text-xs font-bold text-slate-700">
-                Alamat Domisili KTP
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold text-slate-700">
+                  Alamat Domisili KTP
+                </Label>
+                {newPatientData.address && (
+                  <span className="text-[10px] text-teal-700 font-medium flex items-center gap-1">
+                    <MapPin className="h-2.5 w-2.5" />
+                    <span>Wilayah terisi otomatis dari NIK</span>
+                  </span>
+                )}
+              </div>
               <Input
                 type="text"
                 placeholder="Jl. Nama Jalan No. XX, Kelurahan, Kecamatan, Kota"
