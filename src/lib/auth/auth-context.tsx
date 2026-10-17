@@ -1,15 +1,18 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { UserProfile, UserRole, FacilityProfile, DepartmentItem } from "@/lib/satusehat/types";
-import { toast } from "sonner";
+import React, { createContext, useContext, useEffect } from "react";
+import { UserProfile, FacilityProfile, DepartmentItem } from "@/lib/satusehat/types";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { Activity, Loader2 } from "lucide-react";
+import { useShallow } from "zustand/shallow";
 
-interface AuthContextType {
+export interface AuthContextType {
   user: UserProfile | null;
   facility: FacilityProfile | null;
   allFacilities: FacilityProfile[];
   departments: DepartmentItem[];
   isLoading: boolean;
+  isLoggingOut: boolean;
   login: (username: string, passwordAttempt: string) => Promise<UserProfile | null>;
   switchFacility: (facilityId: string) => Promise<void>;
   refreshFacilities: (includeAll?: boolean) => Promise<void>;
@@ -19,183 +22,35 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserProfile | null>(null);
-  const [facility, setFacility] = useState<FacilityProfile | null>(null);
-  const [allFacilities, setAllFacilities] = useState<FacilityProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const {
+    user,
+    facility,
+    allFacilities,
+    isLoading,
+    isLoggingOut,
+    login,
+    switchFacility,
+    refreshFacilities,
+    logout,
+    initSession,
+  } = useAuthStore(
+    useShallow((s) => ({
+      user: s.user,
+      facility: s.facility,
+      allFacilities: s.allFacilities,
+      isLoading: s.isLoading,
+      isLoggingOut: s.isLoggingOut,
+      login: s.login,
+      switchFacility: s.switchFacility,
+      refreshFacilities: s.refreshFacilities,
+      logout: s.logout,
+      initSession: s.initSession,
+    }))
+  );
 
-  // Load session & facilities on mount
   useEffect(() => {
-    async function initSession() {
-      try {
-        setIsLoading(true);
-
-        // 1. Fetch current session
-        let currentUserRole: string | null = null;
-        const authRes = await fetch("/api/auth/me");
-        if (authRes.ok) {
-          const authText = await authRes.text();
-          if (authText) {
-            try {
-              const authData = JSON.parse(authText);
-              if (authData.success && authData.data) {
-                if (authData.data.user) {
-                  setUser(authData.data.user);
-                  currentUserRole = authData.data.user.role;
-                }
-                if (authData.data.facility) setFacility(authData.data.facility);
-              }
-            } catch {
-              // Ignored during dev hot reload
-            }
-          }
-        } else {
-          setUser(null);
-          setFacility(null);
-        }
-
-        // 2. Fetch facilities (otomatis muat semua jika super_admin atau berada di portal /admin)
-        const shouldLoadAll =
-          currentUserRole === "super_admin" ||
-          (typeof window !== "undefined" && window.location.pathname.startsWith("/admin"));
-
-        const facRes = await fetch(shouldLoadAll ? "/api/facilities?all=true" : "/api/facilities");
-        if (facRes.ok) {
-          const text = await facRes.text();
-          if (text) {
-            try {
-              const facData = JSON.parse(text);
-              if (facData.success && Array.isArray(facData.data)) {
-                setAllFacilities(facData.data);
-              }
-            } catch {
-              // Ignored during dev hot reload
-            }
-          }
-        }
-      } catch (err) {
-        console.warn("Gagal inisialisasi sesi auth:", err);
-        setUser(null);
-        setFacility(null);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
     initSession();
-  }, []);
-
-  const isLoggingInRef = React.useRef(false);
-
-  const login = async (username: string, passwordAttempt: string): Promise<UserProfile | null> => {
-    if (isLoggingInRef.current) {
-      return null;
-    }
-
-    try {
-      isLoggingInRef.current = true;
-      setIsLoading(true);
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password: passwordAttempt }),
-      });
-
-      const data = await res.json();
-      if (data.success && data.data) {
-        setUser(data.data.user);
-        setFacility(data.data.facility);
-        toast.success(`Login Berhasil: ${data.data.user.name}`, {
-          description: data.data.facility?.name ? `Faskes: ${data.data.facility.name}` : undefined,
-        });
-        return data.data.user;
-      } else {
-        toast.error(data.error || "Gagal login. Periksa username dan password.");
-        return null;
-      }
-    } catch {
-      toast.error("Terjadi gangguan koneksi saat login.");
-      return null;
-    } finally {
-      setIsLoading(false);
-      isLoggingInRef.current = false;
-    }
-  };
-
-  const switchFacility = async (facilityId: string) => {
-    try {
-      const targetFac = allFacilities.find((f) => f.id === facilityId);
-      if (!targetFac) return;
-
-      if (targetFac.isActive === false && user?.role !== "super_admin") {
-        toast.error("Akses Ditolak: Faskes ini sedang dinonaktifkan / diarsipkan.", {
-          description: "Staf non-vendor tidak dapat membuka sesi pelayanan faskes yang tidak aktif.",
-        });
-        return;
-      }
-
-      setFacility(targetFac);
-      if (user) {
-        setUser({
-          ...user,
-          facilityId: targetFac.id,
-          facilityName: targetFac.name,
-          facilityType: targetFac.type,
-        });
-      }
-
-      if (targetFac.isActive === false) {
-        toast.warning(`Mode Arsip Aktif: ${targetFac.name}`, {
-          description: "Faskes berstatus nonaktif. Akses dibuka dalam mode inspeksi arsip (Read-Only).",
-        });
-      } else {
-        toast.success(`Faskes Aktif: ${targetFac.name}`, {
-          description: `Tipe: ${targetFac.type === "rumah_sakit" ? "Rumah Sakit" : "Klinik Pratama"} • Org ID: ${targetFac.satusehatOrgId}`,
-        });
-      }
-    } catch (err) {
-      console.error("Gagal beralih faskes:", err);
-    }
-  };
-
-  const refreshFacilities = React.useCallback(async (includeAll: boolean = false) => {
-    try {
-      const url = includeAll ? "/api/facilities?all=true" : "/api/facilities";
-      const facRes = await fetch(url);
-      const facData = await facRes.json();
-      if (facData.success && Array.isArray(facData.data)) {
-        setAllFacilities(facData.data);
-      }
-    } catch (err) {
-      console.error("Gagal memperbarui daftar faskes:", err);
-    }
-  }, []);
-
-  const logout = async () => {
-    try {
-      await fetch("/api/auth/logout", { method: "POST" });
-      setUser(null);
-      setFacility(null);
-      toast.info("Anda telah berhasil keluar dari sistem.");
-      if (typeof window !== "undefined") {
-        if (window.location.pathname.startsWith("/admin")) {
-          window.location.href = "/admin/login";
-        } else {
-          window.location.href = "/login";
-        }
-      }
-    } catch {
-      setUser(null);
-      setFacility(null);
-      if (typeof window !== "undefined") {
-        if (window.location.pathname.startsWith("/admin")) {
-          window.location.href = "/admin/login";
-        } else {
-          window.location.href = "/login";
-        }
-      }
-    }
-  };
+  }, [initSession]);
 
   const departments = facility?.departments || [];
 
@@ -207,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         allFacilities,
         departments,
         isLoading,
+        isLoggingOut,
         login,
         switchFacility,
         refreshFacilities,
@@ -214,6 +70,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+
+      {/* Global Logout Transition */}
+      {isLoggingOut && (
+        <div className="fixed inset-0 z-[9999] min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center space-y-3 select-none animate-in fade-in duration-200">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-600 text-white shadow-md">
+            <Activity className="h-6 w-6 animate-pulse" />
+          </div>
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+            <Loader2 className="h-4 w-4 animate-spin text-teal-600" />
+            <span>Sesi diakhiri. Mengarahkan ke halaman login...</span>
+          </div>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }

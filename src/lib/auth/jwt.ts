@@ -9,9 +9,18 @@ export interface SessionPayload {
   exp?: number;
 }
 
-const JWT_SECRET =
-  process.env.SESSION_SECRET ||
-  "medixia_simrs_enterprise_jwt_secret_key_prod_2026_fhir_satusehat";
+function getJwtSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "FATAL KEAMANAN: Environment variable SESSION_SECRET wajib disetel pada environment produksi. Sistem menolak penandatanganan JWT dengan kunci default."
+      );
+    }
+    return "medixia_simrs_enterprise_jwt_secret_key_prod_2026_fhir_satusehat";
+  }
+  return secret.trim();
+}
 
 function base64UrlEncode(str: string): string {
   return Buffer.from(str)
@@ -49,7 +58,7 @@ export function signSessionToken(
   const encodedPayload = base64UrlEncode(JSON.stringify(fullPayload));
 
   const signature = crypto
-    .createHmac("sha256", JWT_SECRET)
+    .createHmac("sha256", getJwtSecret())
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest("base64")
     .replace(/=/g, "")
@@ -76,7 +85,7 @@ export function verifySessionToken(token: string): SessionPayload | null {
 
   // 1. Verifikasi tanda tangan kriptografis HMAC-SHA256
   const expectedSignature = crypto
-    .createHmac("sha256", JWT_SECRET)
+    .createHmac("sha256", getJwtSecret())
     .update(`${encodedHeader}.${encodedPayload}`)
     .digest("base64")
     .replace(/=/g, "")

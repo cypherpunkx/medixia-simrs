@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
       }
 
       if (!session || !session.userId) {
-        return NextResponse.json(
+        const res = NextResponse.json(
           {
             success: false,
             data: null,
@@ -43,11 +43,13 @@ export async function GET(req: NextRequest) {
           },
           { status: 401 }
         );
+        res.cookies.delete("medixia_simrs_session");
+        return res;
       }
 
       const user = await UserRepository.getById(session.userId);
       if (!user) {
-        return NextResponse.json(
+        const res = NextResponse.json(
           {
             success: false,
             data: null,
@@ -55,6 +57,8 @@ export async function GET(req: NextRequest) {
           },
           { status: 401 }
         );
+        res.cookies.delete("medixia_simrs_session");
+        return res;
       }
 
       const facility = await FacilityRepository.getById(session.facilityId || user.facilityId || "fac-rsud-01");

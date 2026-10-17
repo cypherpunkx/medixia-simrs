@@ -27,16 +27,24 @@ function getEncryptionCandidateKeys(): Buffer[] {
   return uniqueKeys.map((k) => crypto.createHash("sha256").update(k).digest());
 }
 
-/**
- * Mengambil master key enkripsi utama untuk mengenkripsi data baru
- */
 function getPrimaryEncryptionKey(): Buffer {
-  const masterKey =
-    process.env.APP_ENCRYPTION_KEY ||
-    process.env.NEXTAUTH_SECRET ||
-    "medixia-simrs-master-encryption-key-2026-secret-secure-32b";
+  const masterKey = process.env.APP_ENCRYPTION_KEY || process.env.NEXTAUTH_SECRET;
 
-  return crypto.createHash("sha256").update(masterKey).digest();
+  if (!masterKey) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(
+        "FATAL KEAMANAN: Environment variable APP_ENCRYPTION_KEY wajib disetel pada environment produksi. Sistem menolak enkripsi dengan kunci default."
+      );
+    }
+    // Development fallback dengan peringatan
+    console.warn("⚠️ PERINGATAN KEAMANAN: APP_ENCRYPTION_KEY tidak ditemukan di .env, menggunakan fallback lokal.");
+    return crypto
+      .createHash("sha256")
+      .update("medixia-simrs-master-encryption-key-2026-secret-secure-32b")
+      .digest();
+  }
+
+  return crypto.createHash("sha256").update(masterKey.trim()).digest();
 }
 
 /**
