@@ -12,6 +12,7 @@ export class MemoryCache {
   private static store = new Map<string, CacheEntry<any>>();
   private static hits = 0;
   private static misses = 0;
+  private static readonly MAX_ENTRIES = 500;
 
   /**
    * Retrieve item from cache if not expired
@@ -35,8 +36,13 @@ export class MemoryCache {
 
   /**
    * Set item in cache with TTL in milliseconds (default: 30 seconds)
+   * Enforces bounded memory footprint via FIFO/LRU eviction of oldest entries
    */
   public static set<T>(key: string, value: T, ttlMs: number = 30000): void {
+    if (this.store.size >= this.MAX_ENTRIES && !this.store.has(key)) {
+      const oldestKey = this.store.keys().next().value;
+      if (oldestKey) this.store.delete(oldestKey);
+    }
     this.store.set(key, {
       value,
       expiresAt: Date.now() + ttlMs,

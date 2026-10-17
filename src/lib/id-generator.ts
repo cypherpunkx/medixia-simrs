@@ -23,7 +23,9 @@ export type EntityPrefix =
   | "sync_"
   | "add_"
   | "obx_"
-  | "sess_";
+  | "sess_"
+  | "med_"
+  | "mut_";
 
 /**
  * Generates an RFC 9562 compliant UUID v7 (Time-Ordered Monotonic UUID)
