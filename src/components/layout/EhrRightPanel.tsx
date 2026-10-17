@@ -22,13 +22,16 @@ import {
   VitalSigns,
 } from "@/lib/satusehat/types";
 import { SatusehatFhirDetailModal } from "@/components/compliance/SatusehatFhirDetailModal";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
+import { useSatusehatStore } from "@/stores/useSatusehatStore";
 
 interface EhrRightPanelProps {
   vitals?: VitalSigns;
   encounter?: OutpatientEncounter | null;
-  session: AuthSession | null;
+  session?: AuthSession | null;
   patient?: PatientProfile | null;
-  onOpenPrintModal: () => void;
+  onOpenPrintModal?: () => void;
   onOpenPrescriptionPrint?: () => void;
   onOpenLockModal?: () => void;
   onRefreshToken?: () => void;
@@ -38,18 +41,45 @@ interface EhrRightPanelProps {
 }
 
 export function EhrRightPanel({
-  vitals,
-  encounter,
-  session,
-  patient,
-  onOpenPrintModal,
-  onOpenPrescriptionPrint,
-  onOpenLockModal,
-  onRefreshToken,
-  isRefreshing = false,
+  vitals: propVitals,
+  encounter: propEncounter,
+  session: propSession,
+  patient: propPatient,
+  onOpenPrintModal: propOnOpenPrintModal,
+  onOpenPrescriptionPrint: propOnOpenPrescriptionPrint,
+  onOpenLockModal: propOnOpenLockModal,
+  onRefreshToken: propOnRefreshToken,
+  isRefreshing: propIsRefreshing,
   onSelectiveRetry,
   isRetrying = false,
-}: EhrRightPanelProps) {
+}: EhrRightPanelProps = {}) {
+  // Zustand Stores Integration with Fallback
+  const storePatient = useClinicalStore((s) => s.patient);
+  const storeEncounter = useClinicalStore((s) =>
+    s.encounters.find((e) => e.id === s.selectedEncounterId) || null
+  );
+  const storeSession = useSatusehatStore((s) => s.session);
+  const storeIsRefreshing = useSatusehatStore((s) => s.isRefreshing);
+  const storeRefreshToken = () => useSatusehatStore.getState().fetchSession();
+  const storeOpenPrintModal = () =>
+    useUIStore.getState().setModalOpen("isPrintModalOpen", true);
+  const storeOpenPrescriptionPrint = () =>
+    useUIStore.getState().setModalOpen("isPrescriptionPrintOpen", true);
+  const storeOpenLockModal = () =>
+    useUIStore.getState().setModalOpen("isLockModalOpen", true);
+
+  const patient = propPatient ?? storePatient;
+  const encounter = propEncounter ?? storeEncounter;
+  const vitals = propVitals ?? encounter?.vitals;
+  const session = propSession ?? storeSession;
+  const onOpenPrintModal = propOnOpenPrintModal ?? storeOpenPrintModal;
+  const onOpenPrescriptionPrint =
+    propOnOpenPrescriptionPrint ?? storeOpenPrescriptionPrint;
+  const onOpenLockModal = propOnOpenLockModal ?? storeOpenLockModal;
+  const onRefreshToken = propOnRefreshToken ?? storeRefreshToken;
+  const isRefreshing =
+    propIsRefreshing !== undefined ? propIsRefreshing : storeIsRefreshing;
+
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const isBpWarning = Boolean(
     vitals?.systolic &&

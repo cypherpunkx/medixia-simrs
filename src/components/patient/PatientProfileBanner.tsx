@@ -28,25 +28,77 @@ import {
 } from "@/components/ui/dialog";
 import { PatientProfile, OutpatientEncounter } from "@/lib/satusehat/types";
 import { calculatePatientAge } from "@/lib/utils";
+import { useClinicalStore } from "@/stores/useClinicalStore";
+import { useUIStore } from "@/stores/useUIStore";
+import {
+  useSatusehatStore,
+  selectIsBridgingActive,
+} from "@/stores/useSatusehatStore";
 
 interface PatientProfileBannerProps {
   patient?: PatientProfile | null;
   encounter?: OutpatientEncounter | null;
-  onOpenPrintModal: () => void;
+  onOpenPrintModal?: () => void;
   isBridgingActive?: boolean;
 }
 
 export function PatientProfileBanner({
-  patient,
-  encounter,
-  onOpenPrintModal,
-  isBridgingActive = false,
-}: PatientProfileBannerProps) {
+  patient: propPatient,
+  encounter: propEncounter,
+  onOpenPrintModal: propOnOpenPrintModal,
+  isBridgingActive: propIsBridgingActive,
+}: PatientProfileBannerProps = {}) {
+  // Zustand Store Fallbacks
+  const storePatient = useClinicalStore((s) => s.patient);
+  const storeEncounter = useClinicalStore(
+    (s) => s.encounters.find((e) => e.id === s.selectedEncounterId) || null,
+  );
+  const storeOpenPrintModal = () =>
+    useUIStore.getState().setModalOpen("isPrintModalOpen", true);
+  const storeIsBridgingActive = useSatusehatStore(selectIsBridgingActive);
+
+  const patient = propPatient !== undefined ? propPatient : storePatient;
+  const encounter =
+    propEncounter !== undefined ? propEncounter : storeEncounter;
+  const onOpenPrintModal = propOnOpenPrintModal ?? storeOpenPrintModal;
+  const isBridgingActive =
+    propIsBridgingActive !== undefined
+      ? propIsBridgingActive
+      : storeIsBridgingActive;
+
+  const matchingQueue = useClinicalStore((s) =>
+    s.worklist.find(
+      (w) =>
+        (encounter?.id &&
+          (w.encounterId === encounter.id || w.id === encounter.id)) ||
+        (encounter?.registrationNumber &&
+          w.registrationNumber === encounter.registrationNumber) ||
+        (patient?.id && w.patient?.id === patient.id),
+    ),
+  );
+
+  const displayRegNumber =
+    encounter?.registrationNumber ||
+    matchingQueue?.registrationNumber ||
+    (encounter?.id && !encounter.id.startsWith("ENC-")
+      ? encounter.id
+      : undefined) ||
+    encounter?.id ||
+    "-";
+
   const [showQrModal, setShowQrModal] = useState(false);
 
   if (!patient || !patient.id) return null;
 
   const age = calculatePatientAge(patient.birthDate);
+
+  const hasIhs = Boolean(
+    patient.ihsNumber ||
+    (patient.id &&
+      patient.id.startsWith("P") &&
+      !patient.id.startsWith("pat_")),
+  );
+  const displayIhs = patient.ihsNumber || (hasIhs ? patient.id : null);
 
   return (
     <div className="ehr-card p-5 space-y-3.5">
@@ -84,7 +136,7 @@ export function PatientProfileBanner({
                     alt="SATUSEHAT"
                     className="h-3 w-3 object-contain shrink-0"
                   />
-                  <span>SATUSEHAT Terverifikasi • Live</span>
+                  <span>SATUSEHAT</span>
                 </span>
               ) : (
                 <span
@@ -128,110 +180,141 @@ export function PatientProfileBanner({
         </div>
       </div>
 
-      {/* 2. Full-Width Sub-bar: Clean Demographics & Clinical Status */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 pt-0.5">
-        {/* Monospaced Demographics - Clean Single-Line Strip */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-600 font-mono">
-          <div className="inline-flex items-center gap-1 whitespace-nowrap">
-            <span className="text-slate-400 font-sans text-[11px]">No. RM:</span>
-            <strong className="text-slate-900 font-bold">{patient.mrn.replace(/^RM-?/i, "")}</strong>
+      {/* 2. Structured Demographics & Clinical Context Bar (Super Bersih & Rapi) */}
+      <div className="bg-slate-50/70 border border-slate-200/80 rounded-xl p-3 space-y-2.5 shadow-2xs">
+        {/* Uniform Metadata Grid Tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {/* Tile 1: No. Reg */}
+          <div
+            title="Nomor Registrasi Kunjungan Poliklinik"
+            className="bg-white border border-slate-200/90 rounded-lg px-2.5 py-1.5 shadow-2xs flex flex-col justify-center min-w-0"
+          >
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              No. Registrasi
+            </span>
+            <span className="font-mono font-bold text-xs text-teal-900 truncate">
+              {displayRegNumber}
+            </span>
           </div>
-          {encounter?.registrationNumber && (
-            <>
-              <span className="text-slate-300 hidden sm:inline select-none">•</span>
-              <div className="inline-flex items-center gap-1 whitespace-nowrap">
-                <span className="text-blue-600 font-sans text-[11px]">No. Reg:</span>
-                <strong className="text-blue-900 font-bold">{encounter.registrationNumber}</strong>
-              </div>
-            </>
-          )}
-          <span className="text-slate-300 hidden sm:inline select-none">•</span>
-          <div className="inline-flex items-center gap-1 whitespace-nowrap">
-            <span className="text-slate-400 font-sans text-[11px]">NIK:</span>
-            <strong className="text-slate-800 font-medium">{patient.nik}</strong>
+
+          {/* Tile 2: No. RM */}
+          <div
+            title="Nomor Rekam Medis Pasien"
+            className="bg-white border border-slate-200/90 rounded-lg px-2.5 py-1.5 shadow-2xs flex flex-col justify-center min-w-0"
+          >
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              No. Rekam Medis
+            </span>
+            <span className="font-mono font-bold text-slate-900 truncate">
+              {patient.mrn.replace(/^RM-?/i, "")}
+            </span>
           </div>
-          <span className="text-slate-300 hidden sm:inline select-none">•</span>
-          {(() => {
-            const hasIhs = Boolean(
-              patient.ihsNumber ||
-                (patient.id &&
-                  patient.id.startsWith("P") &&
-                  !patient.id.startsWith("pat_"))
-            );
-            const displayIhs =
-              patient.ihsNumber || (hasIhs ? patient.id : null);
-            return (
-              <div
-                className={`inline-flex items-center gap-1.5 whitespace-nowrap px-2 py-0.5 rounded-md font-sans font-bold text-[10px] shadow-2xs ${
-                  hasIhs
-                    ? "bg-teal-50 text-teal-800 border border-teal-200"
-                    : "bg-slate-100 text-slate-500 border border-slate-200"
-                }`}
-                title={
-                  hasIhs
-                    ? `Pasien Terdaftar di SATUSEHAT Kemkes RI (Nomor IHS: ${displayIhs})`
-                    : "Pasien belum memiliki nomor IHS SATUSEHAT. Silakan lakukan Verifikasi NIK."
-                }
-              >
-                <img
-                  src="/satusehat-default-logo.svg"
-                  alt="SATUSEHAT"
-                  className="h-2.5 w-2.5 object-contain shrink-0"
-                />
-                <span>
-                  {hasIhs ? `IHS: ${displayIhs}` : "IHS: Belum Terdaftar"}
-                </span>
-              </div>
-            );
-          })()}
-          <span className="text-slate-300 hidden sm:inline select-none">•</span>
-          <div className="inline-flex items-center gap-1 whitespace-nowrap">
-            <span className="text-slate-400 font-sans text-[11px]">Usia:</span>
-            <strong className="text-slate-900 font-medium">{age} Tahun</strong>
-            <span className="text-slate-500 font-sans text-[11px]">({patient.gender === "male" ? "Laki-laki" : "Perempuan"})</span>
+
+          {/* Tile 3: NIK */}
+          <div
+            title="Nomor Induk Kependudukan (Dukcapil)"
+            className="bg-white border border-slate-200/90 rounded-lg px-2.5 py-1.5 shadow-2xs flex flex-col justify-center min-w-0"
+          >
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              NIK KTP
+            </span>
+            <span className="font-mono font-bold text-xs text-slate-800 truncate">
+              {patient.nik}
+            </span>
+          </div>
+
+          {/* Tile 4: IHS SATUSEHAT */}
+          <div
+            title={
+              hasIhs
+                ? `Pasien Terdaftar di SATUSEHAT Kemkes RI (Nomor IHS: ${displayIhs})`
+                : "Pasien belum memiliki nomor IHS SATUSEHAT. Silakan lakukan Verifikasi NIK."
+            }
+            className="bg-white border border-slate-200/90 rounded-lg px-2.5 py-1.5 shadow-2xs flex flex-col justify-center min-w-0"
+          >
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <img
+                src="/satusehat-default-logo.svg"
+                alt="SATUSEHAT"
+                className="h-2.5 w-2.5 object-contain shrink-0"
+              />
+              <span>IHS SATUSEHAT</span>
+            </span>
+            <span className="font-mono font-bold text-xs text-slate-900 truncate">
+              {displayIhs || "Belum Terdaftar"}
+            </span>
+          </div>
+
+          {/* Tile 5: Usia & Gender */}
+          <div
+            title="Usia dan Jenis Kelamin Pasien"
+            className="bg-white border border-slate-200/90 rounded-lg px-2.5 py-1.5 shadow-2xs flex flex-col justify-center min-w-0 col-span-2 sm:col-span-1"
+          >
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Usia & Gender
+            </span>
+            <span className="font-bold text-xs text-slate-900 truncate">
+              {age} Tahun <span className="font-medium text-slate-500 text-[11px]">({patient.gender === "male" ? "Laki-laki" : "Perempuan"})</span>
+            </span>
           </div>
         </div>
 
-        {/* Clinical Workflow & Locking Status */}
-        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-          {encounter?.encounterStatus === "in-progress" && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
-              <span>Sedang Diperiksa</span>
-            </span>
-          )}
-          {encounter?.encounterStatus === "finished" && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
-              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
-              <span>Selesai Pelayanan</span>
-            </span>
-          )}
-          {encounter?.encounterStatus === "arrived" && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              <span>Menunggu Antrean</span>
-            </span>
-          )}
-          {encounter?.isLocked ? (
-            <span className="inline-flex items-center gap-1 rounded-md bg-slate-900 text-teal-300 px-2 py-0.5 text-[10px] font-bold border border-slate-700 shadow-2xs">
-              <Lock className="h-3 w-3 text-teal-400" />
-              <span>Terkunci (Final)</span>
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 text-amber-900 px-2 py-0.5 text-[10px] font-bold border border-amber-300 shadow-2xs">
-              <Unlock className="h-3 w-3 text-amber-700" />
-              <span>Terbuka (Draft)</span>
-            </span>
-          )}
-          {((encounter?.labResults && encounter.labResults.length > 0) ||
-            (encounter?.radiologyResults && encounter.radiologyResults.length > 0)) && (
-            <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 text-teal-900 px-2 py-0.5 text-[10px] font-bold border border-teal-200 shadow-2xs">
-              <FlaskConical className="h-3 w-3 text-teal-600" />
-              <span>
-                {encounter?.labResults?.length ? `${encounter.labResults.length} Lab` : ""}
-                {encounter?.labResults?.length && encounter?.radiologyResults?.length ? " • " : ""}
-                {encounter?.radiologyResults?.length ? `${encounter.radiologyResults.length} Rad` : ""}
+        {/* Status Alur Klinis & Kunci Medis Baris Bawah */}
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/70 text-xs flex-wrap">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {encounter?.encounterStatus === "in-progress" && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 border border-blue-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+                <span>Sedang Diperiksa</span>
               </span>
+            )}
+            {encounter?.encounterStatus === "finished" && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 border border-emerald-200">
+                <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                <span>Selesai Pelayanan</span>
+              </span>
+            )}
+            {encounter?.encounterStatus === "arrived" && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                <span>Menunggu Antrean</span>
+              </span>
+            )}
+            {encounter?.isLocked ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-slate-900 text-teal-300 px-2 py-0.5 text-[10px] font-bold border border-slate-700 shadow-2xs">
+                <Lock className="h-3 w-3 text-teal-400" />
+                <span>Terkunci (Final)</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 text-amber-900 px-2 py-0.5 text-[10px] font-bold border border-amber-300 shadow-2xs">
+                <Unlock className="h-3 w-3 text-amber-700" />
+                <span>Terbuka (Draft)</span>
+              </span>
+            )}
+            {((encounter?.labResults && encounter.labResults.length > 0) ||
+              (encounter?.radiologyResults &&
+                encounter.radiologyResults.length > 0)) && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-teal-50 text-teal-900 px-2 py-0.5 text-[10px] font-bold border border-teal-200 shadow-2xs">
+                <FlaskConical className="h-3 w-3 text-teal-600" />
+                <span>
+                  {encounter?.labResults?.length
+                    ? `${encounter.labResults.length} Lab`
+                    : ""}
+                  {encounter?.labResults?.length &&
+                  encounter?.radiologyResults?.length
+                    ? " • "
+                    : ""}
+                  {encounter?.radiologyResults?.length
+                    ? `${encounter.radiologyResults.length} Rad`
+                    : ""}
+                </span>
+              </span>
+            )}
+          </div>
+
+          {patient.paymentPayer && (
+            <span className="text-[10px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded shadow-2xs">
+              Penjamin: {patient.paymentPayer}
             </span>
           )}
         </div>
@@ -277,7 +360,7 @@ export function PatientProfileBanner({
               Kontak Darurat
             </span>
             {patient.emergencyContact?.relation && (
-              <span className="text-[9px] font-semibold text-slate-600 bg-slate-200/70 px-1.5 py-0.2 rounded shrink-0">
+              <span className="text-[9px] font-semibold text-slate-600 bg-slate-200/70 px-1.5 py-0.5 rounded shrink-0">
                 {patient.emergencyContact.relation}
               </span>
             )}
@@ -292,7 +375,9 @@ export function PatientProfileBanner({
             {patient.emergencyContact?.phone ? (
               <div className="flex items-center gap-1.5 text-teal-700 font-mono font-bold text-[11px] mt-0.5">
                 <Phone className="h-2.5 w-2.5 text-teal-600 shrink-0" />
-                <span className="tracking-tight">{patient.emergencyContact.phone}</span>
+                <span className="tracking-tight">
+                  {patient.emergencyContact.phone}
+                </span>
               </div>
             ) : (
               <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
@@ -302,58 +387,35 @@ export function PatientProfileBanner({
           </div>
         </div>
 
-        {(() => {
-          const hasIhs = Boolean(
-            patient.ihsNumber ||
-              (patient.id &&
-                patient.id.startsWith("P") &&
-                !patient.id.startsWith("pat_"))
-          );
-          const displayIhs =
-            patient.ihsNumber || (hasIhs ? patient.id : null);
-          return (
-            <div
-              className={`rounded-lg p-2.5 border flex flex-col justify-between ${
-                hasIhs
-                  ? "bg-teal-50/50 border-teal-200/80"
-                  : "bg-slate-50 border-slate-200"
-              }`}
+        {/* Card 4: Kunjungan & Poli Terakhir */}
+        <div className="rounded-lg bg-slate-50 p-2.5 border border-slate-200 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate">
+              Kunjungan
+            </span>
+            <span className="text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded shrink-0">
+              {patient.totalVisitsCount ? `${patient.totalVisitsCount}x Datang` : "Pasien Baru"}
+            </span>
+          </div>
+          <div className="mt-0.5 min-w-0">
+            <span
+              className="font-bold text-slate-900 text-xs block truncate"
+              title={patient.lastVisitDepartment || patient.lastVisitDiagnosis || "Poli Rawat Jalan"}
             >
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 text-slate-500">
-                  <img
-                    src="/satusehat-default-logo.svg"
-                    alt="SATUSEHAT"
-                    className="h-2.5 w-2.5 object-contain"
-                  />
-                  <span>ID SATUSEHAT</span>
-                </span>
-                <span
-                  className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded shrink-0 ${
-                    hasIhs
-                      ? "text-teal-700 bg-teal-100/80"
-                      : "text-slate-500 bg-slate-200/70"
-                  }`}
-                >
-                  {hasIhs ? "Terverifikasi" : "Belum Terdaftar"}
-                </span>
-              </div>
-              <div className="mt-0.5">
-                <span
-                  className={`font-mono text-xs font-bold block truncate ${
-                    hasIhs ? "text-teal-950" : "text-slate-500 italic"
-                  }`}
-                  title={displayIhs || "Belum ada nomor IHS"}
-                >
-                  {displayIhs || "Belum Terdaftar"}
-                </span>
-                <span className="text-[10px] text-slate-400 font-medium block">
-                  {hasIhs ? "FHIR Patient Resource" : "Sinkronisasi via NIK"}
-                </span>
-              </div>
-            </div>
-          );
-        })()}
+              {patient.lastVisitDepartment || patient.lastVisitDiagnosis || "Poli Rawat Jalan"}
+            </span>
+            <span className="text-[10px] text-slate-500 font-medium block truncate">
+              {patient.lastVisitDate
+                ? (() => {
+                    const d = new Date(patient.lastVisitDate);
+                    return isNaN(d.getTime())
+                      ? `Tgl: ${patient.lastVisitDate}`
+                      : `Tgl: ${d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}`;
+                  })()
+                : "Pemeriksaan Hari Ini"}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Allergy Alert */}
@@ -395,7 +457,8 @@ export function PatientProfileBanner({
               </p>
             </div>
             <p className="text-[11px] text-slate-500">
-              Pindai QR ini pada mesin kiosk pendaftaran rumah sakit untuk verifikasi otomatis.
+              Pindai QR ini pada mesin kiosk pendaftaran rumah sakit untuk
+              verifikasi otomatis.
             </p>
           </div>
         </DialogContent>

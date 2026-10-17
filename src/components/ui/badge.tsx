@@ -8,11 +8,11 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default:
-          "border-transparent bg-teal-600 text-white shadow-xs hover:bg-teal-700",
+          "border-transparent bg-teal-600 text-white shadow-xs",
         secondary:
-          "border-slate-200 bg-slate-100 text-slate-800 hover:bg-slate-200",
+          "border-slate-200 bg-slate-100 text-slate-800",
         destructive:
-          "border-red-200 bg-red-50 text-red-800 hover:bg-red-100",
+          "border-red-200 bg-red-50 text-red-800",
         outline: "border-slate-300 text-slate-800",
         // Clinical Variants
         staging:

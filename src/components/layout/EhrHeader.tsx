@@ -37,12 +37,15 @@ import { StaffManagementModal } from "@/components/admin/StaffManagementModal";
 import { SuperAdminFacilityManagerModal } from "@/components/facility/SuperAdminFacilityManagerModal";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
+import { useSatusehatStore, selectIsBridgingActive } from "@/stores/useSatusehatStore";
 
 interface EhrHeaderProps {
-  currentEnv: SatusehatEnvironment;
+  currentEnv?: SatusehatEnvironment;
   onEnvChange?: (env: SatusehatEnvironment) => void;
   hospitalName?: string;
-  department: string;
+  department?: string;
   onDepartmentChange?: (dept: string) => void;
   onOpenPrintModal?: () => void;
   doctorName?: string;
@@ -100,21 +103,50 @@ const ROLE_LABELS: Record<
 };
 
 export function EhrHeader({
-  currentEnv,
+  currentEnv: propCurrentEnv,
+  onEnvChange: propOnEnvChange,
   hospitalName,
-  department,
-  onDepartmentChange,
-  onOpenPrintModal,
+  department: propDepartment,
+  onDepartmentChange: propOnDepartmentChange,
+  onOpenPrintModal: propOnOpenPrintModal,
   doctorName,
-  worklist = [],
+  worklist: propWorklist,
   onSelectPatient,
   onUpdateQueueStatus,
-  onOpenRegistration,
-  isDbSyncing = false,
-  isBridgingActive = false,
-}: EhrHeaderProps) {
+  onOpenRegistration: propOnOpenRegistration,
+  isDbSyncing: propIsDbSyncing,
+  isBridgingActive: propIsBridgingActive,
+}: EhrHeaderProps = {}) {
   const router = useRouter();
-  const { user, facility, departments: dynamicDepartments, logout } = useAuth();
+  const { user, facility, departments: dynamicDepartments, logout, isLoggingOut } = useAuth();
+
+  // Zustand Stores Integration with Fallback
+  const storeDepartment = useUIStore((s) => s.activeDepartment);
+  const storeSetDepartment = useUIStore((s) => s.setActiveDepartment);
+  const storeEnv = useSatusehatStore((s) => s.currentEnv);
+  const storeSetEnv = useSatusehatStore((s) => s.setCurrentEnv);
+  const storeIsBridgingActive = useSatusehatStore(selectIsBridgingActive);
+  const storeIsDbSyncing = useClinicalStore((s) => s.isDbSyncing);
+  const storeWorklist = useClinicalStore((s) => s.worklist);
+  const storeOpenPrintModal = () =>
+    useUIStore.getState().setModalOpen("isPrintModalOpen", true);
+  const storeOpenRegistration = () =>
+    useUIStore.getState().setActiveModule("registration");
+
+  const department = propDepartment ?? storeDepartment;
+  const onDepartmentChange = propOnDepartmentChange ?? storeSetDepartment;
+  const currentEnv = propCurrentEnv ?? storeEnv;
+  const onEnvChange = propOnEnvChange ?? storeSetEnv;
+  const isBridgingActive =
+    propIsBridgingActive !== undefined
+      ? propIsBridgingActive
+      : storeIsBridgingActive;
+  const isDbSyncing =
+    propIsDbSyncing !== undefined ? propIsDbSyncing : storeIsDbSyncing;
+  const worklist =
+    propWorklist && propWorklist.length > 0 ? propWorklist : storeWorklist;
+  const onOpenPrintModal = propOnOpenPrintModal ?? storeOpenPrintModal;
+  const onOpenRegistration = propOnOpenRegistration ?? storeOpenRegistration;
 
   // Search & Dropdowns State
   const [searchQuery, setSearchQuery] = useState("");
@@ -581,14 +613,14 @@ export function EhrHeader({
               </span>
               <Badge
                 variant="outline"
-                className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-800 border-indigo-200 shrink-0 hidden sm:inline-flex"
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-800 border-indigo-200 shrink-0 hidden sm:inline-flex"
               >
                 Super Admin
               </Badge>
               <ChevronDown className="h-3 w-3 text-slate-400 group-hover:text-slate-600 transition-colors" />
             </div>
             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium truncate">
-              <span>Org ID: {facility?.satusehatOrgId || "10000004"}</span>
+              <span>Org ID: {facility?.satusehatOrgId || "-"}</span>
               <span>•</span>
               <span className="inline-flex items-center gap-1 font-semibold text-indigo-600">
                 <Building2 className="h-3 w-3" />
@@ -612,7 +644,7 @@ export function EhrHeader({
               </span>
               <Badge
                 variant="outline"
-                className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-50 text-teal-800 border-teal-200 shrink-0 hidden sm:inline-flex"
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 border-teal-200 shrink-0 hidden sm:inline-flex"
               >
                 {facility?.type === "rumah_sakit"
                   ? "RS"
@@ -626,7 +658,7 @@ export function EhrHeader({
               </Badge>
             </div>
             <div className="flex items-center gap-1 text-[10px] text-slate-400 font-medium truncate">
-              <span>Org ID: {facility?.satusehatOrgId || "10000004"}</span>
+              <span>Org ID: {facility?.satusehatOrgId || "-"}</span>
             </div>
           </div>
         </div>
@@ -663,7 +695,7 @@ export function EhrHeader({
                 <X className="h-3.5 w-3.5" />
               </button>
             ) : (
-              <kbd className="hidden lg:inline-flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center px-1.5 py-0.2 text-[9px] font-mono font-bold text-slate-400 bg-white border border-slate-200 rounded pointer-events-none shadow-2xs select-none">
+              <kbd className="hidden lg:inline-flex absolute right-2.5 top-1/2 -translate-y-1/2 items-center px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-400 bg-white border border-slate-200 rounded pointer-events-none shadow-2xs select-none">
                 Ctrl K
               </kbd>
             )}
@@ -731,17 +763,17 @@ export function EhrHeader({
                                 ({item.patient.gender === "male" ? "L" : "P"})
                               </span>
                               {item.triagePriority === "urgent" && (
-                                <span className="inline-flex items-center gap-1 text-[8px] bg-rose-600 text-white px-1.5 py-0.2 rounded font-black tracking-wider uppercase animate-pulse shadow-2xs">
+                                <span className="inline-flex items-center gap-1 text-[8px] bg-rose-600 text-white px-1.5 py-0.5 rounded font-black tracking-wider uppercase animate-pulse shadow-2xs">
                                   CITO
                                 </span>
                               )}
                               {item.triagePriority === "geriatric" && (
-                                <span className="text-[8px] bg-purple-50 text-purple-700 border border-purple-200 px-1 py-0.2 rounded font-bold">
+                                <span className="text-[8px] bg-purple-50 text-purple-700 border border-purple-200 px-1 py-0.5 rounded font-bold">
                                   Geriatri
                                 </span>
                               )}
                               {item.isSequentialMultiClinic && (
-                                <span className="text-[8px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 py-0.2 rounded font-bold">
+                                <span className="text-[8px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 py-0.5 rounded font-bold">
                                   Multi-Poli
                                 </span>
                               )}
@@ -749,7 +781,7 @@ export function EhrHeader({
 
                             {/* Baris 2: No. Registrasi Kunjungan & Jam Kedatangan */}
                             <div className="text-[10px] text-slate-600 font-mono flex items-center gap-1.5 flex-wrap">
-                              <span className="bg-slate-100 text-slate-800 px-1.5 py-0.2 rounded font-semibold text-[9px] border border-slate-200">
+                              <span className="bg-slate-100 text-slate-800 px-1.5 py-0.5 rounded font-semibold text-[9px] border border-slate-200">
                                 No. Reg:{" "}
                                 {item.registrationNumber ||
                                   `RJ-${item.queueNumber}`}
@@ -777,7 +809,7 @@ export function EhrHeader({
                             {item.status === "arrived" && item.pausedReason && (
                               <Badge
                                 variant="outline"
-                                className="text-[8px] font-bold px-1.5 py-0.2 rounded-full whitespace-nowrap bg-amber-50 text-amber-900 border-amber-300 shadow-2xs"
+                                className="text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap bg-amber-50 text-amber-900 border-amber-300 shadow-2xs"
                                 title={item.pausedReason}
                               >
                                 Ditunda
@@ -785,7 +817,7 @@ export function EhrHeader({
                             )}
                             <Badge
                               variant="outline"
-                              className={`text-[8px] font-bold px-1.5 py-0.2 rounded-full whitespace-nowrap shadow-2xs ${
+                              className={`text-[8px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap shadow-2xs ${
                                 isInProgress
                                   ? "bg-teal-50 text-teal-700 border-teal-300 animate-pulse"
                                   : isFinished
@@ -888,7 +920,7 @@ export function EhrHeader({
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0 ml-2">
                         <span
-                          className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${
+                          className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
                             isSelected
                               ? "bg-teal-200 text-teal-950"
                               : "bg-slate-100 text-slate-600"
@@ -1198,7 +1230,7 @@ export function EhrHeader({
                     <div className="flex items-center gap-1.5 mt-0.5">
                       <Badge
                         variant="outline"
-                        className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${activeRoleConfig.color}`}
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${activeRoleConfig.color}`}
                       >
                         {activeRoleConfig.label}
                       </Badge>
@@ -1238,7 +1270,7 @@ export function EhrHeader({
                   </div>
                   <Badge
                     variant="outline"
-                    className="text-[9px] font-bold px-1.5 py-0.2 rounded border bg-teal-50 text-teal-800 border-teal-200 flex items-center gap-1"
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-teal-50 text-teal-800 border-teal-200 flex items-center gap-1"
                   >
                     <img
                       src="/satusehat-default-logo.svg"
@@ -1273,7 +1305,7 @@ export function EhrHeader({
                         <span>
                           Org ID SATUSEHAT:{" "}
                           <strong className="text-teal-700 font-bold">
-                            {facility?.satusehatOrgId || "10000004"}
+                            {facility?.satusehatOrgId || "-"}
                           </strong>
                         </span>
                       </p>
@@ -1348,18 +1380,23 @@ export function EhrHeader({
               <div className="p-2 border-t border-slate-100 bg-slate-50/40">
                 <button
                   type="button"
+                  disabled={isLoggingOut}
                   onClick={async () => {
                     setIsUserMenuOpen(false);
                     await logout();
                   }}
-                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer group"
+                  className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer group disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <div className="flex items-center gap-2">
-                    <LogOut className="h-3.5 w-3.5 text-rose-500 group-hover:-translate-x-0.5 transition-transform" />
-                    <span>Keluar dari Aplikasi</span>
+                    {isLoggingOut ? (
+                      <Loader2 className="h-3.5 w-3.5 text-rose-500 animate-spin" />
+                    ) : (
+                      <LogOut className="h-3.5 w-3.5 text-rose-500 group-hover:-translate-x-0.5 transition-transform" />
+                    )}
+                    <span>{isLoggingOut ? "Mengakhiri Sesi..." : "Keluar dari Aplikasi"}</span>
                   </div>
                   <span className="text-[10px] text-slate-400 font-mono group-hover:text-rose-400">
-                    Logout
+                    {isLoggingOut ? "Proses..." : "Logout"}
                   </span>
                 </button>
               </div>

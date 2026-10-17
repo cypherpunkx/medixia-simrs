@@ -37,6 +37,7 @@ export async function PATCH(
       { status: 400 }
     );
   } catch (error) {
+    console.error("[PATCH /api/queue/[id] Error]:", error);
     return NextResponse.json(
       {
         success: false,

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,13 +39,18 @@ import { generatePrefixedId } from "@/lib/id-generator";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ModuleEmptyState } from "@/components/layout/ModuleEmptyState";
 import { toast } from "sonner";
+import { useClinicalStore } from "@/stores/useClinicalStore";
+import { useSatusehatStore } from "@/stores/useSatusehatStore";
+import { useUIStore } from "@/stores/useUIStore";
+import { useDiagnosticStore } from "@/stores/useDiagnosticStore";
+import { useShallow } from "zustand/react/shallow";
 
 interface DiagnosticSupportModuleProps {
   patient?: PatientProfile | null;
   encounter?: OutpatientEncounter | null;
   session?: AuthSession | null;
   env?: SatusehatEnvironment | string;
-  onUpdateEncounter: (updated: OutpatientEncounter) => void;
+  onUpdateEncounter?: (updated: OutpatientEncounter) => void;
   onOpenRegistration?: () => void;
 }
 
@@ -148,33 +153,123 @@ const PRESET_RAD_TESTS: Array<{
 ];
 
 export function DiagnosticSupportModule({
-  patient,
-  encounter,
-  session,
-  env,
-  onUpdateEncounter,
-  onOpenRegistration,
-}: DiagnosticSupportModuleProps) {
+  patient: propPatient,
+  encounter: propEncounter,
+  session: propSession,
+  env: propEnv,
+  onUpdateEncounter: propOnUpdateEncounter,
+  onOpenRegistration: propOnOpenRegistration,
+}: DiagnosticSupportModuleProps = {}) {
+  const storePatient = useClinicalStore((s) => s.patient);
+  const storeEncounter = useClinicalStore((s) =>
+    s.encounters.find((e) => e.id === s.selectedEncounterId) || null
+  );
+  const storeUpdateEncounter = useClinicalStore((s) => s.updateEncounter);
+  const storeSession = useSatusehatStore((s) => s.session);
+  const storeEnv = useSatusehatStore((s) => s.currentEnv);
+  const storeOpenRegistration = () =>
+    useUIStore.getState().setActiveModule("registration");
+
+  const patient = propPatient !== undefined ? propPatient : storePatient;
+  const encounter = propEncounter !== undefined ? propEncounter : storeEncounter;
+  const session = propSession !== undefined ? propSession : storeSession;
+  const env = propEnv !== undefined ? propEnv : storeEnv;
+  const onUpdateEncounter = propOnUpdateEncounter ?? storeUpdateEncounter;
+  const onOpenRegistration = propOnOpenRegistration ?? storeOpenRegistration;
+
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<"order" | "lab" | "rad">("order");
-  const [selectedCategory, setSelectedCategory] = useState<
-    "laboratory" | "radiology"
-  >("laboratory");
-  const [selectedPreset, setSelectedPreset] = useState(
-    PRESET_LAB_TESTS[0].code,
+
+  // Zustand Diagnostic Store
+  const {
+    activeTab,
+    selectedCategory,
+    priority,
+    selectedPreset,
+    clinicalNotes,
+    searchTest,
+    searchLabPreset,
+    searchRadPreset,
+    customTest,
+    isAddingOrder,
+    isSyncing,
+    isAddingLab,
+    editingLabId,
+    labForm,
+    isAddingRad,
+    editingRadId,
+    radForm,
+    setActiveTab,
+    setSelectedCategory,
+    setPriority,
+    setSelectedPreset,
+    setClinicalNotes,
+    setSearchTest,
+    setSearchLabPreset,
+    setSearchRadPreset,
+    setCustomTest,
+    setIsAddingOrder,
+    setIsSyncing,
+    setLabForm,
+    startEditLab,
+    cancelEditLab,
+    setIsAddingLab,
+    setRadForm,
+    startEditRad,
+    cancelEditRad,
+    setIsAddingRad,
+    resetOrderForm,
+  } = useDiagnosticStore(
+    useShallow((state) => ({
+      activeTab: state.activeTab,
+      selectedCategory: state.selectedCategory,
+      priority: state.priority,
+      selectedPreset: state.selectedPreset,
+      clinicalNotes: state.clinicalNotes,
+      searchTest: state.searchTest,
+      searchLabPreset: state.searchLabPreset,
+      searchRadPreset: state.searchRadPreset,
+      customTest: state.customTest,
+      isAddingOrder: state.isAddingOrder,
+      isSyncing: state.isSyncing,
+      isAddingLab: state.isAddingLab,
+      editingLabId: state.editingLabId,
+      labForm: state.labForm,
+      isAddingRad: state.isAddingRad,
+      editingRadId: state.editingRadId,
+      radForm: state.radForm,
+      setActiveTab: state.setActiveTab,
+      setSelectedCategory: state.setSelectedCategory,
+      setPriority: state.setPriority,
+      setSelectedPreset: state.setSelectedPreset,
+      setClinicalNotes: state.setClinicalNotes,
+      setSearchTest: state.setSearchTest,
+      setSearchLabPreset: state.setSearchLabPreset,
+      setSearchRadPreset: state.setSearchRadPreset,
+      setCustomTest: state.setCustomTest,
+      setIsAddingOrder: state.setIsAddingOrder,
+      setIsSyncing: state.setIsSyncing,
+      setLabForm: state.setLabForm,
+      startEditLab: state.startEditLab,
+      cancelEditLab: state.cancelEditLab,
+      setIsAddingLab: state.setIsAddingLab,
+      setRadForm: state.setRadForm,
+      startEditRad: state.startEditRad,
+      cancelEditRad: state.cancelEditRad,
+      setIsAddingRad: state.setIsAddingRad,
+      resetOrderForm: state.resetOrderForm,
+    }))
   );
-  const [priority, setPriority] = useState<"routine" | "urgent" | "stat">(
-    "routine",
-  );
-  const [clinicalNotes, setClinicalNotes] = useState("");
+
+  // Dropdown UI toggle states (local transient)
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [searchTest, setSearchTest] = useState("");
-  const [customTest, setCustomTest] = useState<{
-    code: string;
-    name: string;
-  } | null>(null);
-  const [isAddingOrder, setIsAddingOrder] = useState(false);
-  const [isSyncing, setIsSyncing] = useState<string | null>(null);
+  const [isLabPresetOpen, setIsLabPresetOpen] = useState(false);
+  const [isRadPresetOpen, setIsRadPresetOpen] = useState(false);
+
+  // Aliases for compatibility
+  const handleStartEditLab = startEditLab;
+  const handleCancelEditLab = cancelEditLab;
+  const handleStartEditRad = startEditRad;
+  const handleCancelEditRad = cancelEditRad;
 
   // Direct SATUSEHAT Sync Helper for Diagnostic Addendums
   const syncResourceToSatusehat = async (
@@ -220,107 +315,39 @@ export function DiagnosticSupportModule({
     }
   };
 
-  // Lab Form State
-  const [isAddingLab, setIsAddingLab] = useState(false);
-  const [editingLabId, setEditingLabId] = useState<string | null>(null);
-  const [isLabPresetOpen, setIsLabPresetOpen] = useState(false);
-  const [searchLabPreset, setSearchLabPreset] = useState("");
-  const [labForm, setLabForm] = useState<{
-    testCode: string;
-    testName: string;
-    category: string;
-    value: string;
-    unit: string;
-    referenceRange: string;
-    flag: "normal" | "high" | "low" | "critical";
-    performer: string;
-  }>({
-    testCode: PRESET_LAB_TESTS[0].code,
-    testName: PRESET_LAB_TESTS[0].name,
-    category: PRESET_LAB_TESTS[0].category,
-    value: "",
-    unit: PRESET_LAB_TESTS[0].unit,
-    referenceRange: PRESET_LAB_TESTS[0].refRange,
-    flag: "normal",
-    performer: "Laboratorium Patologi RSUD",
-  });
+  // Dynamic Placement Refs & Hooks to prevent dropdown clipping
+  const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPlacement, setDropdownPlacement] = useState<"bottom" | "top">("bottom");
 
-  const handleStartEditLab = (lr: LabResult) => {
-    setEditingLabId(lr.id);
-    setLabForm({
-      testCode: lr.testCode,
-      testName: lr.testName,
-      category: lr.category,
-      value: String(lr.value),
-      unit: lr.unit,
-      referenceRange: lr.referenceRange,
-      flag: lr.flag,
-      performer: lr.performer,
-    });
-    setIsAddingLab(true);
-  };
+  const labPresetTriggerRef = useRef<HTMLButtonElement>(null);
+  const [labPresetPlacement, setLabPresetPlacement] = useState<"bottom" | "top">("bottom");
 
-  const handleCancelEditLab = () => {
-    setEditingLabId(null);
-    setIsAddingLab(false);
-    setLabForm({
-      testCode: PRESET_LAB_TESTS[0].code,
-      testName: PRESET_LAB_TESTS[0].name,
-      category: PRESET_LAB_TESTS[0].category,
-      value: "",
-      unit: PRESET_LAB_TESTS[0].unit,
-      referenceRange: PRESET_LAB_TESTS[0].refRange,
-      flag: "normal",
-      performer: "Laboratorium Patologi RSUD",
-    });
-  };
+  const radPresetTriggerRef = useRef<HTMLButtonElement>(null);
+  const [radPresetPlacement, setRadPresetPlacement] = useState<"bottom" | "top">("bottom");
 
-  // Rad Form State
-  const [isAddingRad, setIsAddingRad] = useState(false);
-  const [editingRadId, setEditingRadId] = useState<string | null>(null);
-  const [isRadPresetOpen, setIsRadPresetOpen] = useState(false);
-  const [searchRadPreset, setSearchRadPreset] = useState("");
-  const [radForm, setRadForm] = useState<{
-    examCode: string;
-    examName: string;
-    modality: "X-Ray" | "CT-Scan" | "USG" | "MRI" | "EKG";
-    findings: string;
-    conclusion: string;
-    radiologistName: string;
-  }>({
-    examCode: PRESET_RAD_TESTS[0].code,
-    examName: PRESET_RAD_TESTS[0].name,
-    modality: PRESET_RAD_TESTS[0].modality,
-    findings: "",
-    conclusion: "",
-    radiologistName: "dr. Hendra Pratama, Sp.Rad",
-  });
+  useEffect(() => {
+    if (isDropdownOpen && dropdownTriggerRef.current) {
+      const rect = dropdownTriggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setDropdownPlacement(spaceBelow < 280 && rect.top > 280 ? "top" : "bottom");
+    }
+  }, [isDropdownOpen]);
 
-  const handleStartEditRad = (rad: RadiologyResult) => {
-    setEditingRadId(rad.id);
-    setRadForm({
-      examCode: rad.examCode,
-      examName: rad.examName,
-      modality: rad.modality,
-      findings: rad.findings,
-      conclusion: rad.conclusion,
-      radiologistName: rad.radiologistName,
-    });
-    setIsAddingRad(true);
-  };
+  useEffect(() => {
+    if (isLabPresetOpen && labPresetTriggerRef.current) {
+      const rect = labPresetTriggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setLabPresetPlacement(spaceBelow < 280 && rect.top > 280 ? "top" : "bottom");
+    }
+  }, [isLabPresetOpen]);
 
-  const handleCancelEditRad = () => {
-    setEditingRadId(null);
-    setIsAddingRad(false);
-    setRadForm({
-      examCode: PRESET_RAD_TESTS[0].code,
-      examName: PRESET_RAD_TESTS[0].name,
-      modality: PRESET_RAD_TESTS[0].modality,
-      findings: "",
-      conclusion: "",
-      radiologistName: "dr. Hendra Pratama, Sp.Rad",
-    });
-  };
+  useEffect(() => {
+    if (isRadPresetOpen && radPresetTriggerRef.current) {
+      const rect = radPresetTriggerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      setRadPresetPlacement(spaceBelow < 280 && rect.top > 280 ? "top" : "bottom");
+    }
+  }, [isRadPresetOpen]);
 
   const currentPresetList =
     selectedCategory === "laboratory" ? PRESET_LAB_TESTS : PRESET_RAD_TESTS;
@@ -365,7 +392,8 @@ export function DiagnosticSupportModule({
 
     if (user && user.role !== "doctor" && user.role !== "admin") {
       toast.error("Wewenang Khusus Dokter DPJP", {
-        description: "Order pemeriksaan penunjang hanya dapat diterbitkan oleh Dokter Penanggung Jawab (DPJP).",
+        description:
+          "Order pemeriksaan penunjang hanya dapat diterbitkan oleh Dokter Penanggung Jawab (DPJP).",
         duration: 5000,
       });
       return;
@@ -415,13 +443,11 @@ export function DiagnosticSupportModule({
         );
       } finally {
         setIsSyncing(null);
-        setIsAddingOrder(false);
-        setClinicalNotes("");
+        resetOrderForm();
       }
     } else {
       onUpdateEncounter(updatedEncounter);
-      setIsAddingOrder(false);
-      setClinicalNotes("");
+      resetOrderForm();
       toast.success(`Order ${testName} berhasil dibuat`);
     }
   };
@@ -473,7 +499,7 @@ export function DiagnosticSupportModule({
               resultDate: new Date().toISOString(),
               performer: labForm.performer.trim() || "Laboratorium RSUD",
             }
-          : l
+          : l,
       );
       const updatedEncounter: OutpatientEncounter = {
         ...encounter,
@@ -497,7 +523,7 @@ export function DiagnosticSupportModule({
         onUpdateEncounter(updatedEncounter);
         handleCancelEditLab();
         toast.success(
-          `Hasil laboratorium ${labForm.testName} berhasil diperbarui!`
+          `Hasil laboratorium ${labForm.testName} berhasil diperbarui!`,
         );
       }
       return;
@@ -588,10 +614,10 @@ export function DiagnosticSupportModule({
               findings: radForm.findings.trim(),
               conclusion: radForm.conclusion.trim(),
               radiologistName:
-                radForm.radiologistName.trim() || "dr. Hendra Pratama, Sp.Rad",
+                radForm.radiologistName.trim() || user?.name || encounter.doctorName || "Dokter Radiologi",
               resultDate: new Date().toISOString(),
             }
-          : r
+          : r,
       );
       const updatedEncounter: OutpatientEncounter = {
         ...encounter,
@@ -615,7 +641,7 @@ export function DiagnosticSupportModule({
         onUpdateEncounter(updatedEncounter);
         handleCancelEditRad();
         toast.success(
-          `Ekspertise radiologi ${radForm.examName} berhasil diperbarui!`
+          `Ekspertise radiologi ${radForm.examName} berhasil diperbarui!`,
         );
       }
       return;
@@ -629,7 +655,7 @@ export function DiagnosticSupportModule({
       findings: radForm.findings.trim(),
       conclusion: radForm.conclusion.trim(),
       radiologistName:
-        radForm.radiologistName.trim() || "dr. Hendra Pratama, Sp.Rad",
+        radForm.radiologistName.trim() || user?.name || encounter.doctorName || "Dokter Radiologi",
       resultDate: new Date().toISOString(),
     };
 
@@ -655,7 +681,9 @@ export function DiagnosticSupportModule({
     } else {
       onUpdateEncounter(updatedEncounter);
       handleCancelEditRad();
-      toast.success(`Hasil ekspertise radiologi ${newRad.examName} berhasil disimpan`);
+      toast.success(
+        `Hasil ekspertise radiologi ${newRad.examName} berhasil disimpan`,
+      );
     }
   };
 
@@ -689,46 +717,49 @@ export function DiagnosticSupportModule({
   }
 
   return (
-    <Card className="border-border/60 bg-white shadow-sm overflow-hidden">
-      <CardHeader className="pb-3 border-b border-border/40 bg-slate-50/60">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+    <Card className="border-border/60 bg-white shadow-sm">
+      <CardHeader className="pb-3 border-b border-border/40 bg-slate-50/60 rounded-t-xl space-y-2.5">
+        {/* Tier 1: Module Identity on Left, SATUSEHAT Interoperability Status on Right */}
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <div className="h-9 w-9 rounded-xl bg-teal-50 text-teal-600 border border-teal-200 flex items-center justify-center font-bold shadow-2xs shrink-0">
               <FlaskConical className="h-4.5 w-4.5" />
             </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <CardTitle className="text-sm font-bold text-slate-900 leading-tight">
-                  Penunjang Diagnostik (Lab &amp; Radiologi)
-                </CardTitle>
-                {encounter.satusehatEncounterId ? (
-                  <span
-                    title={`ID Kunjungan SATUSEHAT: ${encounter.satusehatEncounterId}`}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-300 whitespace-nowrap shrink-0 shadow-2xs cursor-help"
-                  >
-                    <img
-                      src="/satusehat-default-logo.svg"
-                      alt="SATUSEHAT"
-                      className="w-3 h-3 object-contain shrink-0"
-                    />
-                    SATUSEHAT Aktif
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap shrink-0 shadow-2xs">
-                    <Clock className="w-3 h-3 text-slate-500" />
-                    Draf Internal
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Permintaan dan pencatatan hasil pemeriksaan terstandar LOINC
-                Kemenkes RI
+            <div className="min-w-0">
+              <CardTitle className="text-sm sm:text-base font-extrabold text-slate-900 leading-tight truncate">
+                Penunjang Diagnostik (Lab &amp; Radiologi)
+              </CardTitle>
+              <p className="text-xs text-slate-500 mt-0.5 truncate">
+                Permintaan dan pencatatan hasil pemeriksaan terstandar LOINC Kemenkes RI
               </p>
             </div>
           </div>
 
-          {/* Navigation Sub-Tabs */}
-          <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 shadow-2xs self-start lg:self-auto shrink-0 overflow-x-auto max-w-full">
+          {/* Right: SATUSEHAT Status Badge */}
+          <div className="shrink-0">
+            {encounter.satusehatEncounterId ? (
+              <span
+                title={`ID Kunjungan SATUSEHAT: ${encounter.satusehatEncounterId}`}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/90 whitespace-nowrap shadow-2xs cursor-help"
+              >
+                <img
+                  src="/satusehat-default-logo.svg"
+                  alt="SATUSEHAT"
+                  className="w-2.5 h-2.5 object-contain shrink-0"
+                />
+                SATUSEHAT Aktif
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200/90 whitespace-nowrap shadow-2xs">
+                <Clock className="w-2.5 h-2.5 text-slate-500" />
+                Draf Internal
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Tier 2: Navigation Sub-Tabs (Full Width, Balanced & Accessible) */}
+        <div className="flex items-center bg-slate-100/90 p-1 rounded-xl border border-slate-200/80 shadow-2xs overflow-x-auto max-w-full">
             <button
               type="button"
               onClick={() => setActiveTab("order")}
@@ -793,7 +824,6 @@ export function DiagnosticSupportModule({
               </span>
             </button>
           </div>
-        </div>
       </CardHeader>
 
       <CardContent className="p-4 space-y-4">
@@ -804,9 +834,7 @@ export function DiagnosticSupportModule({
               <div>
                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
                   <Plus className="h-3.5 w-3.5 text-teal-600" />
-                  <span>
-                    Daftar &amp; Permintaan Pemeriksaan Penunjang
-                  </span>
+                  <span>Daftar &amp; Permintaan Pemeriksaan Penunjang</span>
                 </h4>
                 <p className="text-[11px] text-slate-500">
                   Permintaan pemeriksaan laboratorium dan radiologi terstandar
@@ -835,7 +863,7 @@ export function DiagnosticSupportModule({
                   ) : (
                     <>
                       <Plus className="h-3.5 w-3.5" />
-                      <span>+ Buat Permintaan Baru</span>
+                      <span>Buat Permintaan Baru</span>
                     </>
                   )}
                 </Button>
@@ -850,7 +878,6 @@ export function DiagnosticSupportModule({
               >
                 <div className="flex items-center justify-between pb-2 border-b border-teal-200/60">
                   <span className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-teal-600" />
                     Formulir Permintaan Pemeriksaan Penunjang
                   </span>
                   <span className="text-[10px] text-teal-700 font-mono">
@@ -922,6 +949,7 @@ export function DiagnosticSupportModule({
                       </div>
 
                       <button
+                        ref={dropdownTriggerRef}
                         type="button"
                         onClick={() => setIsDropdownOpen((prev) => !prev)}
                         className="w-full text-left text-xs rounded-xl border border-slate-300 bg-white p-2.5 text-slate-900 hover:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 focus:outline-none transition-all shadow-2xs flex items-center justify-between gap-2 cursor-pointer btn-press"
@@ -947,8 +975,15 @@ export function DiagnosticSupportModule({
                             className="fixed inset-0 z-40"
                             onClick={() => setIsDropdownOpen(false)}
                           />
-                          <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
-                            <div className="p-1.5 sticky top-0 bg-white z-10">
+                          <div
+                            className={`absolute left-0 right-0 ${
+                              dropdownPlacement === "top"
+                                ? "bottom-full mb-1.5 slide-in-from-bottom-2"
+                                : "top-full mt-1.5 slide-in-from-top-2"
+                            } bg-white border border-slate-200/90 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in-0 zoom-in-95`}
+                          >
+                            {/* Pinned Non-scrolling Search Header */}
+                            <div className="p-2 bg-slate-50/95 border-b border-slate-200/80">
                               <div className="relative">
                                 <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                                 <input
@@ -958,74 +993,78 @@ export function DiagnosticSupportModule({
                                     setSearchTest(e.target.value)
                                   }
                                   placeholder="Cari nama tes atau kode LOINC..."
-                                  className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-500 focus:bg-white"
+                                  className="w-full text-xs bg-white border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-2xs"
                                   onClick={(e) => e.stopPropagation()}
+                                  autoFocus
                                 />
                               </div>
                             </div>
 
-                            <div className="py-1 space-y-0.5">
-                              {filteredPresetList.map((t) => {
-                                const isSelected = selectedPreset === t.code;
-                                return (
+                            {/* Scrollable Items Container */}
+                            <div className="max-h-72 overflow-y-auto overscroll-contain p-1 divide-y divide-slate-100/70">
+                              <div className="py-0.5 space-y-0.5">
+                                {filteredPresetList.map((t) => {
+                                  const isSelected = selectedPreset === t.code;
+                                  return (
+                                    <button
+                                      key={t.code}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedPreset(t.code);
+                                        setIsDropdownOpen(false);
+                                        setSearchTest("");
+                                      }}
+                                      className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                                        isSelected
+                                          ? "bg-teal-50 border border-teal-200 text-teal-950 font-bold"
+                                          : "hover:bg-slate-50 text-slate-800"
+                                      }`}
+                                    >
+                                      <div className="min-w-0">
+                                        <span className="font-semibold block truncate">
+                                          {t.name}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <span className="font-mono text-[10px] font-bold text-teal-800 bg-white px-1.5 py-0.5 rounded border border-teal-200">
+                                          {t.code}
+                                        </span>
+                                        {isSelected && (
+                                          <Check className="h-3.5 w-3.5 text-teal-600" />
+                                        )}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+
+                                {searchTest.trim() && (
                                   <button
-                                    key={t.code}
                                     type="button"
                                     onClick={() => {
-                                      setSelectedPreset(t.code);
+                                      const code = `CUSTOM-${Date.now().toString().slice(-4)}`;
+                                      setCustomTest({
+                                        code,
+                                        name: searchTest.trim(),
+                                      });
+                                      setSelectedPreset(code);
                                       setIsDropdownOpen(false);
                                       setSearchTest("");
                                     }}
-                                    className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
-                                      isSelected
-                                        ? "bg-teal-50 border border-teal-200 text-teal-950 font-bold"
-                                        : "hover:bg-slate-50 text-slate-800"
-                                    }`}
+                                    className="w-full text-left p-2 rounded-lg text-xs bg-teal-50/80 hover:bg-teal-100 text-teal-950 border border-dashed border-teal-300 font-semibold flex items-center justify-between gap-2 mt-1 cursor-pointer transition-colors"
                                   >
-                                    <div className="min-w-0">
-                                      <span className="font-semibold block truncate">
-                                        {t.name}
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <Plus className="h-3.5 w-3.5 text-teal-700 shrink-0" />
+                                      <span className="truncate">
+                                        Gunakan: &quot;{searchTest.trim()}&quot;
+                                        (Kustom)
                                       </span>
                                     </div>
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      <span className="font-mono text-[10px] font-bold text-teal-800 bg-white px-1.5 py-0.5 rounded border border-teal-200">
-                                        {t.code}
-                                      </span>
-                                      {isSelected && (
-                                        <Check className="h-3.5 w-3.5 text-teal-600" />
-                                      )}
-                                    </div>
-                                  </button>
-                                );
-                              })}
-
-                              {searchTest.trim() && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const code = `CUSTOM-${Date.now().toString().slice(-4)}`;
-                                    setCustomTest({
-                                      code,
-                                      name: searchTest.trim(),
-                                    });
-                                    setSelectedPreset(code);
-                                    setIsDropdownOpen(false);
-                                    setSearchTest("");
-                                  }}
-                                  className="w-full text-left p-2 rounded-lg text-xs bg-teal-50/80 hover:bg-teal-100 text-teal-950 border border-dashed border-teal-300 font-semibold flex items-center justify-between gap-2 mt-1 cursor-pointer transition-colors"
-                                >
-                                  <div className="flex items-center gap-1.5 truncate">
-                                    <Plus className="h-3.5 w-3.5 text-teal-700 shrink-0" />
-                                    <span className="truncate">
-                                      Gunakan: &quot;{searchTest.trim()}&quot;
-                                      (Kustom)
+                                    <span className="text-[10px] font-mono font-bold bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200 shrink-0">
+                                      Order Baru
                                     </span>
-                                  </div>
-                                  <span className="text-[10px] font-mono font-bold bg-white text-teal-800 px-1.5 py-0.5 rounded border border-teal-200 shrink-0">
-                                    Order Baru
-                                  </span>
-                                </button>
-                              )}
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </>
@@ -1212,12 +1251,12 @@ export function DiagnosticSupportModule({
                             </span>
                             <Badge
                               variant="outline"
-                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded-md ${
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md transition-colors ${
                                 ord.priority === "stat"
-                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  ? "bg-rose-50 text-rose-700 hover:bg-rose-100/70 border-rose-200"
                                   : ord.priority === "urgent"
-                                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                                    : "bg-slate-100 text-slate-700 border-slate-200"
+                                    ? "bg-amber-50 text-amber-700 hover:bg-amber-100/70 border-amber-200"
+                                    : "bg-slate-100 text-slate-700 hover:bg-slate-200/70 border-slate-200"
                               }`}
                             >
                               {ord.priority === "stat"
@@ -1242,7 +1281,10 @@ export function DiagnosticSupportModule({
                               title={`ID Order: ${ord.id}`}
                               className="text-[10px] font-mono text-slate-400 hover:text-slate-600 transition-colors cursor-default"
                             >
-                              #{ord.id.startsWith("ord_") ? ord.id.slice(4, 12) : ord.id.slice(0, 8)}
+                              #
+                              {ord.id.startsWith("ord_")
+                                ? ord.id.slice(4, 12)
+                                : ord.id.slice(0, 8)}
                             </span>
                           </div>
                         </div>
@@ -1254,7 +1296,7 @@ export function DiagnosticSupportModule({
                           <Badge
                             variant="outline"
                             title={`ID ServiceRequest SATUSEHAT: ${ord.satusehatServiceRequestId}`}
-                            className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold flex items-center gap-1 py-1 cursor-help"
+                            className="text-[10px] bg-emerald-50 text-emerald-800 hover:bg-emerald-100/70 border-emerald-300 font-bold flex items-center gap-1 py-1 cursor-help transition-colors"
                           >
                             <img
                               src="/satusehat-default-logo.svg"
@@ -1380,7 +1422,7 @@ export function DiagnosticSupportModule({
                   ) : (
                     <>
                       <Plus className="h-3.5 w-3.5" />
-                      <span>+ Input Hasil Lab Baru</span>
+                      <span>Input Hasil Lab Baru</span>
                     </>
                   )}
                 </Button>
@@ -1395,7 +1437,6 @@ export function DiagnosticSupportModule({
               >
                 <div className="flex items-center justify-between pb-2 border-b border-teal-200/60">
                   <span className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-teal-600" />
                     {editingLabId
                       ? "Mode Edit Hasil Laboratorium"
                       : "Formulir Pengisian Hasil Laboratorium"}
@@ -1421,6 +1462,7 @@ export function DiagnosticSupportModule({
                       )}
                     </div>
                     <button
+                      ref={labPresetTriggerRef}
                       type="button"
                       onClick={() => setIsLabPresetOpen((prev) => !prev)}
                       className="w-full text-left text-xs h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 hover:border-teal-400 focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 focus:outline-none transition-all shadow-2xs flex items-center justify-between gap-2 cursor-pointer btn-press"
@@ -1447,8 +1489,15 @@ export function DiagnosticSupportModule({
                           className="fixed inset-0 z-40"
                           onClick={() => setIsLabPresetOpen(false)}
                         />
-                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
-                          <div className="p-1.5 sticky top-0 bg-white z-10">
+                        <div
+                          className={`absolute left-0 right-0 ${
+                            labPresetPlacement === "top"
+                              ? "bottom-full mb-1.5 slide-in-from-bottom-2"
+                              : "top-full mt-1.5 slide-in-from-top-2"
+                          } bg-white border border-slate-200/90 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in-0 zoom-in-95`}
+                        >
+                          {/* Pinned Non-scrolling Search Header */}
+                          <div className="p-2 bg-slate-50/95 border-b border-slate-200/80">
                             <div className="relative">
                               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                               <input
@@ -1458,60 +1507,64 @@ export function DiagnosticSupportModule({
                                   setSearchLabPreset(e.target.value)
                                 }
                                 placeholder="Cari tes lab atau kode LOINC..."
-                                className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-teal-500 focus:bg-white"
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500 shadow-2xs"
                                 onClick={(e) => e.stopPropagation()}
+                                autoFocus
                               />
                             </div>
                           </div>
 
-                          <div className="py-1 space-y-0.5">
-                            {filteredLabPresets.map((t) => {
-                              const isSelected = labForm.testCode === t.code;
-                              return (
-                                <button
-                                  key={t.code}
-                                  type="button"
-                                  onClick={() => {
-                                    setLabForm((prev) => ({
-                                      ...prev,
-                                      testCode: t.code,
-                                      testName: t.name,
-                                      category: t.category,
-                                      unit: t.unit,
-                                      referenceRange: t.refRange,
-                                    }));
-                                    setIsLabPresetOpen(false);
-                                    setSearchLabPreset("");
-                                  }}
-                                  className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
-                                    isSelected
-                                      ? "bg-teal-50 border border-teal-200 text-teal-950 font-bold"
-                                      : "hover:bg-slate-50 text-slate-800"
-                                  }`}
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <div className="font-semibold truncate">
-                                      {t.name}
+                          {/* Scrollable Items Container */}
+                          <div className="max-h-72 overflow-y-auto overscroll-contain p-1 divide-y divide-slate-100/70">
+                            <div className="py-0.5 space-y-0.5">
+                              {filteredLabPresets.map((t) => {
+                                const isSelected = labForm.testCode === t.code;
+                                return (
+                                  <button
+                                    key={t.code}
+                                    type="button"
+                                    onClick={() => {
+                                      setLabForm((prev) => ({
+                                        ...prev,
+                                        testCode: t.code,
+                                        testName: t.name,
+                                        category: t.category,
+                                        unit: t.unit,
+                                        referenceRange: t.refRange,
+                                      }));
+                                      setIsLabPresetOpen(false);
+                                      setSearchLabPreset("");
+                                    }}
+                                    className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                                      isSelected
+                                        ? "bg-teal-50 border border-teal-200 text-teal-950 font-bold"
+                                        : "hover:bg-slate-50 text-slate-800"
+                                    }`}
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-semibold truncate">
+                                        {t.name}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                        <span>{t.category}</span>
+                                        <span>•</span>
+                                        <span>
+                                          Rujukan: {t.refRange} {t.unit}
+                                        </span>
+                                      </div>
                                     </div>
-                                    <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                                      <span>{t.category}</span>
-                                      <span>•</span>
-                                      <span>
-                                        Rujukan: {t.refRange} {t.unit}
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span className="font-mono text-[10px] font-bold text-teal-800 bg-white px-1.5 py-0.5 rounded border border-teal-200">
+                                        {t.code}
                                       </span>
+                                      {isSelected && (
+                                        <Check className="h-3.5 w-3.5 text-teal-600" />
+                                      )}
                                     </div>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className="font-mono text-[10px] font-bold text-teal-800 bg-white px-1.5 py-0.5 rounded border border-teal-200">
-                                      {t.code}
-                                    </span>
-                                    {isSelected && (
-                                      <Check className="h-3.5 w-3.5 text-teal-600" />
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       </>
@@ -1824,7 +1877,7 @@ export function DiagnosticSupportModule({
                             <Badge
                               variant="outline"
                               title={`ID DiagnosticReport SATUSEHAT: ${lr.satusehatDiagnosticReportId}`}
-                              className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold inline-flex items-center gap-1 py-1 cursor-help"
+                              className="text-[10px] bg-emerald-50 text-emerald-800 hover:bg-emerald-100/70 border-emerald-300 font-bold inline-flex items-center gap-1 py-1 cursor-help transition-colors"
                             >
                               <img
                                 src="/satusehat-default-logo.svg"
@@ -1953,7 +2006,7 @@ export function DiagnosticSupportModule({
                   ) : (
                     <>
                       <Plus className="h-3.5 w-3.5" />
-                      <span>+ Input Ekspertise Radiologi</span>
+                      <span>Input Ekspertise Radiologi</span>
                     </>
                   )}
                 </Button>
@@ -1993,6 +2046,7 @@ export function DiagnosticSupportModule({
                       )}
                     </div>
                     <button
+                      ref={radPresetTriggerRef}
                       type="button"
                       onClick={() => setIsRadPresetOpen((prev) => !prev)}
                       className="w-full text-left text-xs h-10 rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 hover:border-blue-400 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 focus:outline-none transition-all shadow-2xs flex items-center justify-between gap-2 cursor-pointer btn-press"
@@ -2019,8 +2073,15 @@ export function DiagnosticSupportModule({
                           className="fixed inset-0 z-40"
                           onClick={() => setIsRadPresetOpen(false)}
                         />
-                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 max-h-60 overflow-y-auto divide-y divide-slate-100 p-1 animate-in fade-in-0 zoom-in-95">
-                          <div className="p-1.5 sticky top-0 bg-white z-10">
+                        <div
+                          className={`absolute left-0 right-0 ${
+                            radPresetPlacement === "top"
+                              ? "bottom-full mb-1.5 slide-in-from-bottom-2"
+                              : "top-full mt-1.5 slide-in-from-top-2"
+                          } bg-white border border-slate-200/90 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in-0 zoom-in-95`}
+                        >
+                          {/* Pinned Non-scrolling Search Header */}
+                          <div className="p-2 bg-slate-50/95 border-b border-slate-200/80">
                             <div className="relative">
                               <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-400" />
                               <input
@@ -2030,54 +2091,58 @@ export function DiagnosticSupportModule({
                                   setSearchRadPreset(e.target.value)
                                 }
                                 placeholder="Cari pemeriksaan radiologi..."
-                                className="w-full text-xs bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 focus:outline-none focus:border-blue-500 focus:bg-white"
+                                className="w-full text-xs bg-white border border-slate-200 rounded-lg pl-8 pr-2.5 py-1.5 text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 shadow-2xs"
                                 onClick={(e) => e.stopPropagation()}
+                                autoFocus
                               />
                             </div>
                           </div>
 
-                          <div className="py-1 space-y-0.5">
-                            {filteredRadPresets.map((t) => {
-                              const isSelected = radForm.examCode === t.code;
-                              return (
-                                <button
-                                  key={t.code}
-                                  type="button"
-                                  onClick={() => {
-                                    setRadForm((prev) => ({
-                                      ...prev,
-                                      examCode: t.code,
-                                      examName: t.name,
-                                      modality: t.modality,
-                                    }));
-                                    setIsRadPresetOpen(false);
-                                    setSearchRadPreset("");
-                                  }}
-                                  className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
-                                    isSelected
-                                      ? "bg-blue-50 border border-blue-200 text-blue-950 font-bold"
-                                      : "hover:bg-slate-50 text-slate-800"
-                                  }`}
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <div className="font-semibold truncate">
-                                      {t.name}
+                          {/* Scrollable Items Container */}
+                          <div className="max-h-72 overflow-y-auto overscroll-contain p-1 divide-y divide-slate-100/70">
+                            <div className="py-0.5 space-y-0.5">
+                              {filteredRadPresets.map((t) => {
+                                const isSelected = radForm.examCode === t.code;
+                                return (
+                                  <button
+                                    key={t.code}
+                                    type="button"
+                                    onClick={() => {
+                                      setRadForm((prev) => ({
+                                        ...prev,
+                                        examCode: t.code,
+                                        examName: t.name,
+                                        modality: t.modality,
+                                      }));
+                                      setIsRadPresetOpen(false);
+                                      setSearchRadPreset("");
+                                    }}
+                                    className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                                      isSelected
+                                        ? "bg-blue-50 border border-blue-200 text-blue-950 font-bold"
+                                        : "hover:bg-slate-50 text-slate-800"
+                                    }`}
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="font-semibold truncate">
+                                        {t.name}
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 flex items-center gap-2">
+                                        <span>Modalitas: {t.modality}</span>
+                                      </div>
                                     </div>
-                                    <div className="text-[10px] text-slate-500 flex items-center gap-2">
-                                      <span>Modalitas: {t.modality}</span>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      <span className="font-mono text-[10px] font-bold text-blue-800 bg-white px-1.5 py-0.5 rounded border border-blue-200">
+                                        {t.code}
+                                      </span>
+                                      {isSelected && (
+                                        <Check className="h-3.5 w-3.5 text-blue-600" />
+                                      )}
                                     </div>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    <span className="font-mono text-[10px] font-bold text-blue-800 bg-white px-1.5 py-0.5 rounded border border-blue-200">
-                                      {t.code}
-                                    </span>
-                                    {isSelected && (
-                                      <Check className="h-3.5 w-3.5 text-blue-600" />
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })}
+                                  </button>
+                                );
+                              })}
+                            </div>
                           </div>
                         </div>
                       </>
@@ -2329,7 +2394,10 @@ export function DiagnosticSupportModule({
                             title={`ID Hasil: ${rad.id}`}
                             className="text-[10px] font-mono text-slate-400 hover:text-slate-600 transition-colors cursor-default"
                           >
-                            #{rad.id.startsWith("rad_") ? rad.id.slice(4, 12) : rad.id.slice(0, 8)}
+                            #
+                            {rad.id.startsWith("rad_")
+                              ? rad.id.slice(4, 12)
+                              : rad.id.slice(0, 8)}
                           </span>
                         </div>
                       </div>
@@ -2338,7 +2406,7 @@ export function DiagnosticSupportModule({
                           <Badge
                             variant="outline"
                             title={`ID DiagnosticReport SATUSEHAT: ${rad.satusehatDiagnosticReportId}`}
-                            className="text-[10px] bg-emerald-50 text-emerald-800 border-emerald-300 font-bold flex items-center gap-1 py-1 cursor-help"
+                            className="text-[10px] bg-emerald-50 text-emerald-800 hover:bg-emerald-100/70 border-emerald-300 font-bold flex items-center gap-1 py-1 cursor-help transition-colors"
                           >
                             <img
                               src="/satusehat-default-logo.svg"

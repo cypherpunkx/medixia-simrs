@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EncounterRepository } from "@/lib/db/repositories/encounter-repo";
 import { PatientRepository } from "@/lib/db/repositories/patient-repo";
+import { OutboxRepository } from "@/lib/db/repositories/outbox-repo";
 import { OutpatientEncounter } from "@/lib/satusehat/types";
 
 import { applyRateLimit } from "@/lib/middleware/rate-limiter";
+import { requireAuth } from "@/lib/auth/session-helper";
 
 export const dynamic = "force-dynamic";
 
@@ -16,12 +18,14 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const patientId = searchParams.get("patientId");
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "50", 10);
 
     let data: OutpatientEncounter[];
     if (patientId) {
       data = await EncounterRepository.getByPatientId(patientId);
     } else {
-      data = await EncounterRepository.getAll();
+      data = await EncounterRepository.getAll({ page, limit });
     }
 
     const durationMs = Number((performance.now() - startTime).toFixed(2));
@@ -48,6 +52,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = requireAuth(req, ["doctor", "nurse", "admin", "registration"]);
+    if (auth instanceof NextResponse) return auth;
+
     const body = (await req.json()) as { encounter: OutpatientEncounter; patientId: string };
 
     if (!body.encounter || !body.patientId) {
@@ -72,6 +79,14 @@ export async function POST(req: NextRequest) {
     }
 
     const { encounter, patientId } = body;
+
+    // Idempotency-Key Header: Mencegah pembuatan rekam medis duplikat saat network retry
+    const idempotencyKey =
+      req.headers.get("idempotency-key") || req.headers.get("x-idempotency-key");
+    if (idempotencyKey && !encounter.id) {
+      const cleanKey = idempotencyKey.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+      encounter.id = `enc_ik_${cleanKey}`;
+    }
 
     // 1. Mandatory fields validation
     if (!encounter.chiefComplaint || !encounter.chiefComplaint.trim()) {
@@ -164,6 +179,15 @@ export async function POST(req: NextRequest) {
     }
 
     const created = await EncounterRepository.create(encounter, patientId);
+
+    // Transactional Outbox Pattern: Daftarkan encounter jika berstatus pending dan bukan opt-out
+    if (created.syncStatus === "pending" && created.consentStatus !== "opt-out") {
+      OutboxRepository.enqueue(created.id, "encounter_bundle", {
+        encounterId: created.id,
+        patientId,
+      }).catch((e) => console.warn("Failed to enqueue created encounter to outbox:", e));
+    }
+
     return NextResponse.json({ success: true, data: created }, { status: 201 });
   } catch (error) {
     return NextResponse.json(

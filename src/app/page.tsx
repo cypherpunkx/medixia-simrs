@@ -23,6 +23,7 @@ import { PublicQueueDisplayModal } from "@/components/queue/PublicQueueDisplayMo
 import { DiagnosticSupportModule } from "@/components/diagnostic/DiagnosticSupportModule";
 import { OutpatientEntryForm } from "@/components/doctor/OutpatientEntryForm";
 import { PatientRegistrationModule } from "@/components/registration/PatientRegistrationModule";
+import { PharmacyDispenseModule } from "@/components/pharmacy/PharmacyDispenseModule";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { TokenDisplay } from "@/components/auth/TokenDisplay";
 import { OrgVerification } from "@/components/auth/OrgVerification";
@@ -47,23 +48,124 @@ import { QrCode, Loader2, Hospital, Pill, Activity, Calendar, Shield, ArrowRight
 import { useAuth } from "@/lib/auth/auth-context";
 import { generateUUIDv7, generatePrefixedId } from "@/lib/id-generator";
 import { toast } from "sonner";
+import { useShallow } from "zustand/shallow";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
+import { useSatusehatStore } from "@/stores/useSatusehatStore";
 
 gsap.registerPlugin(useGSAP);
 
 export default function HomePage() {
   const router = useRouter();
   const { user, facility, departments, isLoading } = useAuth();
-  const [activeDepartment, setActiveDepartment] = useState("Poli Penyakit Dalam");
-  const [activeModule, setActiveModule] = useState<EhrModule>("resume");
-  const [currentEnv, setCurrentEnv] = useState<SatusehatEnvironment>(
-    (process.env.NEXT_PUBLIC_SATUSEHAT_ENV as SatusehatEnvironment) || "staging"
+
+  // Zustand UI Store Integration
+  const {
+    activeDepartment,
+    setActiveDepartment,
+    activeModule,
+    setActiveModule,
+    isPrintModalOpen,
+    isQueueTicketOpen,
+    ticketQueueItem,
+    isPatientCardOpen,
+    isPrescriptionPrintOpen,
+    isLockModalOpen,
+    isQueueDisplayOpen,
+    isQrModalOpen,
+    setModalOpen,
+    openQueueTicketModal,
+  } = useUIStore(
+    useShallow((s) => ({
+      activeDepartment: s.activeDepartment,
+      setActiveDepartment: s.setActiveDepartment,
+      activeModule: s.activeModule,
+      setActiveModule: s.setActiveModule,
+      isPrintModalOpen: s.isPrintModalOpen,
+      isQueueTicketOpen: s.isQueueTicketOpen,
+      ticketQueueItem: s.ticketQueueItem,
+      isPatientCardOpen: s.isPatientCardOpen,
+      isPrescriptionPrintOpen: s.isPrescriptionPrintOpen,
+      isLockModalOpen: s.isLockModalOpen,
+      isQueueDisplayOpen: s.isQueueDisplayOpen,
+      isQrModalOpen: s.isQrModalOpen,
+      setModalOpen: s.setModalOpen,
+      openQueueTicketModal: s.openQueueTicketModal,
+    }))
   );
-  const [patient, setPatient] = useState<PatientProfile | null>(null);
-  const [encounters, setEncounters] = useState<OutpatientEncounter[]>([]);
-  const [worklist, setWorklist] = useState<ClinicQueuePatientItem[]>([]);
-  const [selectedEncounterId, setSelectedEncounterId] = useState<string | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
-  const [isDbSyncing, setIsDbSyncing] = useState(false);
+
+  // Zustand Clinical Store Integration
+  const {
+    patient,
+    setPatient,
+    encounters,
+    setEncounters,
+    worklist,
+    setWorklist,
+    selectedEncounterId,
+    setSelectedEncounterId,
+    isHydrated,
+    setIsHydrated,
+    isDbSyncing,
+    setIsDbSyncing,
+  } = useClinicalStore(
+    useShallow((s) => ({
+      patient: s.patient,
+      setPatient: s.setPatient,
+      encounters: s.encounters,
+      setEncounters: s.setEncounters,
+      worklist: s.worklist,
+      setWorklist: s.setWorklist,
+      selectedEncounterId: s.selectedEncounterId,
+      setSelectedEncounterId: s.setSelectedEncounterId,
+      isHydrated: s.isHydrated,
+      setIsHydrated: s.setIsHydrated,
+      isDbSyncing: s.isDbSyncing,
+      setIsDbSyncing: s.setIsDbSyncing,
+    }))
+  );
+
+  // Zustand SATUSEHAT Store Integration
+  const {
+    currentEnv,
+    setCurrentEnv,
+    session,
+    setSession,
+    logs,
+    setRefreshing,
+    isRefreshing,
+  } = useSatusehatStore(
+    useShallow((s) => ({
+      currentEnv: s.currentEnv,
+      setCurrentEnv: s.setCurrentEnv,
+      session: s.session,
+      setSession: s.setSession,
+      logs: s.logs,
+      setRefreshing: s.setRefreshing,
+      isRefreshing: s.isRefreshing,
+    }))
+  );
+
+  // Modal & Log Setters Shorthand for Zero Regression
+  const setIsPrintModalOpen = (open: boolean) => setModalOpen("isPrintModalOpen", open);
+  const setIsQueueTicketOpen = (open: boolean) => setModalOpen("isQueueTicketOpen", open);
+  const setTicketQueueItem = (item: ClinicQueuePatientItem | null) =>
+    useUIStore.setState({ ticketQueueItem: item });
+  const setIsPatientCardOpen = (open: boolean) => setModalOpen("isPatientCardOpen", open);
+  const setIsPrescriptionPrintOpen = (open: boolean) =>
+    setModalOpen("isPrescriptionPrintOpen", open);
+  const setIsLockModalOpen = (open: boolean) => setModalOpen("isLockModalOpen", open);
+  const setIsQueueDisplayOpen = (open: boolean) => setModalOpen("isQueueDisplayOpen", open);
+  const setIsQrModalOpen = (open: boolean) => setModalOpen("isQrModalOpen", open);
+  const setLogs = (newLogs: LogEntry[] | ((prev: LogEntry[]) => LogEntry[])) => {
+    if (typeof newLogs === "function") {
+      useSatusehatStore.setState((s) => ({ logs: newLogs(s.logs) }));
+    } else {
+      useSatusehatStore.setState({ logs: newLogs });
+    }
+  };
+  const setIsRefreshing = (refreshing: boolean) => setRefreshing(refreshing);
+
   const [isNavigating, setIsNavigating] = useState(false);
 
   // Authentication Route Guard
@@ -395,20 +497,6 @@ export default function HomePage() {
     };
   }, [facility?.id, user?.facilityId, departments]);
 
-  // Modals
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
-  const [isQueueTicketOpen, setIsQueueTicketOpen] = useState(false);
-  const [ticketQueueItem, setTicketQueueItem] = useState<ClinicQueuePatientItem | null>(null);
-  const [isPatientCardOpen, setIsPatientCardOpen] = useState(false);
-  const [isPrescriptionPrintOpen, setIsPrescriptionPrintOpen] = useState(false);
-  const [isLockModalOpen, setIsLockModalOpen] = useState(false);
-  const [isQueueDisplayOpen, setIsQueueDisplayOpen] = useState(false);
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-
-  // Auth & Gateway State
-  const [session, setSession] = useState<AuthSession | null>(null);
-  const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Single-Tenant: Auto-connect SATUSEHAT session on app startup dynamically from server ENV
   useEffect(() => {
@@ -439,34 +527,71 @@ export default function HomePage() {
       ? encounters.filter((e) => e.patientId === patient.id || !e.patientId)
       : encounters;
 
-    // 1. Explicit match by selectedEncounterId
+    // 1. Single Source of Truth: Explicit match by selectedEncounterId
+    // Jika pengguna atau sistem secara eksplisit telah memilih/menyelesaikan encounter ini,
+    // encounter ini WAJIB 100% ditampilkan (tidak boleh dibatalkan atau dialihkan ke poli lain).
     if (selectedEncounterId) {
       const match = patientEncounters.find((e) => e.id === selectedEncounterId);
-      if (match) return match;
+      if (match) {
+        return match;
+      }
     }
 
-    // 2. In Resume Medis module, prioritize finished encounters that contain clinical data (TTV / diagnosa)
-    if (activeModule === "resume") {
-      const finishedWithData = patientEncounters.find(
-        (e) => e.encounterStatus === "finished" && (e.vitals || (e.diagnoses && e.diagnoses.length > 0))
+    // 2. Identify active queue item for this patient in current context
+    const activeQueueForPatient = patient
+      ? worklist.find(
+          (w) =>
+            (w.patient.id === patient.id || w.patient.mrn === patient.mrn) &&
+            (activeDepartment === "Semua Poli" || w.department === activeDepartment) &&
+            w.status === "in-progress"
+        ) ||
+        worklist.find(
+          (w) =>
+            (w.patient.id === patient.id || w.patient.mrn === patient.mrn) &&
+            (activeDepartment === "Semua Poli" || w.department === activeDepartment) &&
+            w.status === "arrived"
+        ) ||
+        worklist.find(
+          (w) =>
+            (w.patient.id === patient.id || w.patient.mrn === patient.mrn) &&
+            (activeDepartment === "Semua Poli" || w.department === activeDepartment)
+        )
+      : null;
+
+    // 3. Match encounter directly linked to active queue item
+    if (activeQueueForPatient) {
+      const matchQueueEnc = patientEncounters.find(
+        (e) =>
+          (activeQueueForPatient.encounterId && e.id === activeQueueForPatient.encounterId) ||
+          (activeQueueForPatient.registrationNumber &&
+            e.registrationNumber === activeQueueForPatient.registrationNumber) ||
+          (activeQueueForPatient.queueNumber &&
+            e.queueNumber === activeQueueForPatient.queueNumber &&
+            e.clinicDepartment === activeQueueForPatient.department)
       );
-      if (finishedWithData) return finishedWithData;
-
-      const anyFinished = patientEncounters.find((e) => e.encounterStatus === "finished");
-      if (anyFinished) return anyFinished;
+      if (matchQueueEnc) return matchQueueEnc;
     }
 
-    // 3. For Entry/Doctor module, prefer active (in-progress / arrived) encounter
+    // 4. Department match if filtered
+    if (activeDepartment && activeDepartment !== "Semua Poli") {
+      const activeDeptMatch = patientEncounters.find(
+        (e) =>
+          e.clinicDepartment === activeDepartment &&
+          (e.encounterStatus === "in-progress" || e.encounterStatus === "arrived")
+      );
+      if (activeDeptMatch) return activeDeptMatch;
+
+      const anyDeptMatch = patientEncounters.find(
+        (e) => e.clinicDepartment === activeDepartment
+      );
+      if (anyDeptMatch) return anyDeptMatch;
+    }
+
+    // 5. For Entry/Doctor module, prefer active (in-progress / arrived) encounter
     const activeMatch = patientEncounters.find(
       (e) => e.encounterStatus === "in-progress" || e.encounterStatus === "arrived"
     );
     if (activeMatch) return activeMatch;
-
-    // 4. Department match if filtered
-    if (activeDepartment && activeDepartment !== "Semua Poli") {
-      const deptMatch = patientEncounters.find((e) => e.clinicDepartment === activeDepartment);
-      if (deptMatch) return deptMatch;
-    }
 
     return patientEncounters[0] || null;
   })();
@@ -583,11 +708,18 @@ export default function HomePage() {
           )
         : null;
 
+    const isReopeningFromFinished = target?.status === "finished" && nextStatus === "in-progress";
+
     // 1. Optimistic UI state update for worklist
     setWorklist((prev) =>
       prev.map((item) => {
         if (item.id === itemId) {
-          return { ...item, status: nextStatus, pausedReason: undefined };
+          return {
+            ...item,
+            status: nextStatus,
+            pausedReason: undefined,
+            isReopened: isReopeningFromFinished ? true : item.isReopened,
+          };
         }
         if (previousActiveInSameDept && item.id === previousActiveInSameDept.id) {
           // KESELAMATAN KLINIS: Pasien aktif sebelumnya TIDAK BOLEH difinish tanpa diagnosa/SOAP.
@@ -607,12 +739,16 @@ export default function HomePage() {
       setEncounters((prev) =>
         prev.map((e) => {
           const isTargetMatch =
-            (target.queueNumber && e.queueNumber === target.queueNumber) ||
             (target.registrationNumber && e.registrationNumber === target.registrationNumber) ||
             (target.encounterId && e.id === target.encounterId) ||
-            (target.id && (e.id === target.id || e.id === target.encounterId));
+            (target.id && (e.id === target.id || e.id === target.encounterId)) ||
+            (target.queueNumber && e.queueNumber === target.queueNumber && e.clinicDepartment === target.department);
           if (isTargetMatch) {
-            return { ...e, encounterStatus: nextStatus };
+            return {
+              ...e,
+              encounterStatus: nextStatus,
+              isReopened: isReopeningFromFinished ? true : e.isReopened,
+            };
           }
           return e;
         })
@@ -622,10 +758,10 @@ export default function HomePage() {
       setEncounters((prev) =>
         prev.map((e) => {
           const isPrevMatch =
-            (previousActiveInSameDept.queueNumber && e.queueNumber === previousActiveInSameDept.queueNumber) ||
             (previousActiveInSameDept.registrationNumber && e.registrationNumber === previousActiveInSameDept.registrationNumber) ||
             (previousActiveInSameDept.encounterId && e.id === previousActiveInSameDept.encounterId) ||
-            (previousActiveInSameDept.id && (e.id === previousActiveInSameDept.id || e.id === previousActiveInSameDept.encounterId));
+            (previousActiveInSameDept.id && (e.id === previousActiveInSameDept.id || e.id === previousActiveInSameDept.encounterId)) ||
+            (previousActiveInSameDept.queueNumber && e.queueNumber === previousActiveInSameDept.queueNumber && e.clinicDepartment === previousActiveInSameDept.department);
           if (isPrevMatch) {
             return { ...e, encounterStatus: "arrived" };
           }
@@ -663,17 +799,30 @@ export default function HomePage() {
 
     // 4. Immediate synchronous patient & module state transition (t = 0 ms)
     if (target) {
+      const updatedTargetQueue: ClinicQueuePatientItem = {
+        ...target,
+        status: nextStatus,
+        isReopened: isReopeningFromFinished ? true : target.isReopened,
+      };
+
       if (nextStatus === "in-progress") {
         // Direct jump to 'entry' (SOAP DPJP Form) with active patient instantly
-        handleSelectPatient(target.patient, "entry", "in-progress", target, target.department);
+        handleSelectPatient(target.patient, "entry", "in-progress", updatedTargetQueue, target.department);
         if (!silent) {
-          toast.success(
-            `Pasien ${target.patient.name} (${target.queueNumber}) kini sedang diperiksa di ${target.department}. Membuka formulir SOAP DPJP.`,
-            { duration: 4000 }
-          );
+          if (isReopeningFromFinished) {
+            toast.info(
+              `Membuka kembali rekam medis pasien ${target.patient.name} (${target.queueNumber}) dalam Mode Koreksi / Perbaikan.`,
+              { duration: 4500 }
+            );
+          } else {
+            toast.success(
+              `Pasien ${target.patient.name} (${target.queueNumber}) kini sedang diperiksa di ${target.department}. Membuka formulir SOAP DPJP.`,
+              { duration: 4000 }
+            );
+          }
         }
       } else if (nextStatus === "finished") {
-        handleSelectPatient(target.patient, "resume", "finished", target, target.department);
+        handleSelectPatient(target.patient, "resume", "finished", updatedTargetQueue, target.department);
         if (!silent) {
           toast.success(
             `Kunjungan pasien ${target.patient.name} (${target.queueNumber}) telah selesai. Menampilkan berkas resume medis.`,
@@ -776,7 +925,15 @@ export default function HomePage() {
       window.scrollTo({ top: 0, left: 0, behavior: "instant" });
     }
 
-    // 4. Find active queue for this patient to ensure encounter status consistency
+    // 4. Sinkronkan departemen aktif jika targetDepartment spesifik disertakan
+    if (targetDepartment && activeDepartment !== "Semua Poli" && activeDepartment !== targetDepartment) {
+      setActiveDepartment(targetDepartment);
+      try {
+        sessionStorage.setItem("simrs_active_department", targetDepartment);
+      } catch {}
+    }
+
+    // 5. Find active queue for this patient to ensure encounter status consistency
     const targetQueue =
       typeof targetQueueItemOrNumber === "object" && targetQueueItemOrNumber
         ? targetQueueItemOrNumber
@@ -826,12 +983,16 @@ export default function HomePage() {
       if (
         effectiveStatus &&
         targetQueue &&
-        ((targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
-          (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
+        ((targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
           (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
-          (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId)))
+          (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId)) ||
+          (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber && e.clinicDepartment === targetQueue.department))
       ) {
-        return { ...e, encounterStatus: effectiveStatus };
+        return {
+          ...e,
+          encounterStatus: effectiveStatus,
+          isReopened: targetQueue.isReopened ? true : e.isReopened,
+        };
       }
       return e;
     });
@@ -842,10 +1003,10 @@ export default function HomePage() {
       if (targetQueue) {
         const matchEnc = localMatch.find(
           (e) =>
-            (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
             (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
-            (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
-            (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId))
+            (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
+            (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId)) ||
+            (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber && e.clinicDepartment === targetQueue.department)
         );
         if (matchEnc) {
           targetEncId = matchEnc.id;
@@ -923,6 +1084,7 @@ export default function HomePage() {
             syncStatus: "pending",
             syncedAt: undefined,
             satusehatEncounterId: undefined,
+            isReopened: targetQueue?.isReopened,
           };
           patientEncounters = [draftEnc];
         }
@@ -932,12 +1094,16 @@ export default function HomePage() {
           patientEncounters = patientEncounters.map((e) => {
             const isMatch =
               targetQueue &&
-              ((targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
-                (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
+              ((targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
                 (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
-                (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId)));
+                (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId)) ||
+                (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber && e.clinicDepartment === targetQueue.department));
             if (isMatch) {
-              return { ...e, encounterStatus: effectiveStatus };
+              return {
+                ...e,
+                encounterStatus: effectiveStatus,
+                isReopened: targetQueue.isReopened ? true : e.isReopened,
+              };
             }
             return e;
           });
@@ -958,7 +1124,8 @@ export default function HomePage() {
               !merged.some(
                 (m) =>
                   m.id === prevEnc.id ||
-                  (m.queueNumber && prevEnc.queueNumber && m.queueNumber === prevEnc.queueNumber) ||
+                  (m.registrationNumber && prevEnc.registrationNumber && m.registrationNumber === prevEnc.registrationNumber) ||
+                  (m.queueNumber && prevEnc.queueNumber && m.queueNumber === prevEnc.queueNumber && m.clinicDepartment === prevEnc.clinicDepartment) ||
                   (m.clinicDepartment === prevEnc.clinicDepartment &&
                     new Date(m.visitDate).toDateString() === new Date(prevEnc.visitDate).toDateString() &&
                     prevEnc.id.includes("-DRAFT"))
@@ -988,17 +1155,17 @@ export default function HomePage() {
         const matchEnc =
           patientEncounters.find(
             (e) =>
-              (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
               (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
-              (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
-              (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId))
+              (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
+              (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId)) ||
+              (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber && e.clinicDepartment === targetQueue.department)
           ) ||
           localMatch.find(
             (e) =>
-              (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
               (targetQueue.registrationNumber && e.registrationNumber === targetQueue.registrationNumber) ||
-              (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber) ||
-              (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId))
+              (targetQueue.encounterId && e.id === targetQueue.encounterId) ||
+              (targetQueue.id && (e.id === targetQueue.id || e.id === targetQueue.encounterId)) ||
+              (targetQueue.queueNumber && e.queueNumber === targetQueue.queueNumber && e.clinicDepartment === targetQueue.department)
           );
 
         if (matchEnc) {
@@ -1119,6 +1286,12 @@ export default function HomePage() {
       ),
     ]);
     setSelectedEncounterId(newEncounter.id);
+    if (newEncounter.clinicDepartment && activeDepartment !== "Semua Poli" && activeDepartment !== newEncounter.clinicDepartment) {
+      setActiveDepartment(newEncounter.clinicDepartment);
+      try {
+        sessionStorage.setItem("simrs_active_department", newEncounter.clinicDepartment);
+      } catch {}
+    }
     if (typeof window !== "undefined") {
       try {
         sessionStorage.setItem("simrs_active_encounter_id", newEncounter.id);
@@ -1148,6 +1321,12 @@ export default function HomePage() {
       ),
     ]);
     setSelectedEncounterId(finalizedEnc.id);
+    if (finalizedEnc.clinicDepartment && activeDepartment !== "Semua Poli" && activeDepartment !== finalizedEnc.clinicDepartment) {
+      setActiveDepartment(finalizedEnc.clinicDepartment);
+      try {
+        sessionStorage.setItem("simrs_active_department", finalizedEnc.clinicDepartment);
+      } catch {}
+    }
     if (typeof window !== "undefined") {
       try {
         sessionStorage.setItem("simrs_active_encounter_id", finalizedEnc.id);
@@ -1261,7 +1440,13 @@ export default function HomePage() {
     }
   };
 
-  if (!isHydrated || isLoading || !user) {
+  // 1. Jika belum terotentikasi, hindari render DOM teks untuk mencegah Flash of Unstyled Content (FOUC)
+  if (!user) {
+    return null;
+  }
+
+  // 2. Jika sudah terotentikasi namun data klinis sedang di-hydrate atau sedang memuat, tampilkan ClinicalSkeleton
+  if (!isHydrated || isLoading) {
     return <ClinicalSkeleton />;
   }
 
@@ -1569,6 +1754,15 @@ export default function HomePage() {
             </div>
           )}
 
+          {/* Module: Farmasi & Apotek Terpadu (Dispensing, Stok Fisik & Etiket Kemenkes) */}
+          {activeModule === "pharmacy" && (
+            <div className="space-y-5">
+              <div className="canvas-content">
+                <PharmacyDispenseModule />
+              </div>
+            </div>
+          )}
+
           {/* Module 4: Riwayat Kunjungan Poli */}
           {activeModule === "history" && (
             <div className="space-y-5">
@@ -1619,12 +1813,27 @@ export default function HomePage() {
                       )
                     : null;
 
-                  const enrichedEncounter: OutpatientEncounter | undefined = selectedEncounter
+                  // Pastikan formulir SOAP DPJP terikat ke antrean aktif yang sedang diperiksa/menunggu
+                  let targetEncounter = selectedEncounter;
+                  if (currentActiveQueue) {
+                    const queueMatchedEnc = encounters.find(
+                      (e) =>
+                        (currentActiveQueue.registrationNumber && e.registrationNumber === currentActiveQueue.registrationNumber) ||
+                        (currentActiveQueue.encounterId && e.id === currentActiveQueue.encounterId) ||
+                        (currentActiveQueue.id && (e.id === currentActiveQueue.id || e.id === currentActiveQueue.encounterId)) ||
+                        (currentActiveQueue.queueNumber && e.queueNumber === currentActiveQueue.queueNumber && e.clinicDepartment === currentActiveQueue.department)
+                    );
+                    if (queueMatchedEnc) {
+                      targetEncounter = queueMatchedEnc;
+                    }
+                  }
+
+                  const enrichedEncounter: OutpatientEncounter | undefined = targetEncounter
                     ? {
-                        ...selectedEncounter,
-                        queueNumber: selectedEncounter.queueNumber || currentActiveQueue?.queueNumber,
+                        ...targetEncounter,
+                        queueNumber: targetEncounter.queueNumber || currentActiveQueue?.queueNumber,
                         registrationNumber:
-                          selectedEncounter.registrationNumber || currentActiveQueue?.registrationNumber,
+                          targetEncounter.registrationNumber || currentActiveQueue?.registrationNumber,
                       }
                     : undefined;
 

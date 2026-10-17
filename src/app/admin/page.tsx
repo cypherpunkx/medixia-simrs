@@ -54,7 +54,7 @@ import { CustomSelect } from "@/components/ui/custom-select";
 
 export default function SuperAdminVendorPortalPage() {
   const router = useRouter();
-  const { user, allFacilities, switchFacility, refreshFacilities, logout, isLoading } = useAuth();
+  const { user, allFacilities, switchFacility, refreshFacilities, logout, isLoading, isLoggingOut } = useAuth();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState<string>("all");
@@ -142,10 +142,18 @@ export default function SuperAdminVendorPortalPage() {
               Kembali ke SIMRS
             </Button>
             <Button
+              disabled={isLoggingOut}
               onClick={logout}
-              className="flex-1 bg-rose-600 hover:bg-rose-700 text-white text-xs rounded-xl"
+              className="flex-1 bg-rose-600 hover:bg-rose-700 text-white text-xs rounded-xl disabled:opacity-60 flex items-center justify-center gap-1.5"
             >
-              Ganti Akun
+              {isLoggingOut ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span>Mengakhiri Sesi...</span>
+                </>
+              ) : (
+                "Ganti Akun"
+              )}
             </Button>
           </div>
         </div>
@@ -282,7 +290,7 @@ export default function SuperAdminVendorPortalPage() {
               <span className="font-extrabold text-base tracking-tight text-slate-900">
                 MEDIXIA<span className="text-teal-600">.SIMRS</span>
               </span>
-              <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[10px] font-bold tracking-wide">
+              <Badge className="bg-teal-50 text-teal-700 hover:bg-teal-100/70 border-teal-200 text-[10px] font-bold tracking-wide transition-colors">
                 SUPER ADMIN
               </Badge>
             </div>
@@ -320,11 +328,16 @@ export default function SuperAdminVendorPortalPage() {
           <Button
             variant="ghost"
             size="sm"
+            disabled={isLoggingOut}
             onClick={logout}
-            className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-xl transition-colors cursor-pointer"
+            className="text-slate-400 hover:text-rose-600 hover:bg-rose-50 p-2 rounded-xl transition-colors cursor-pointer disabled:opacity-60"
             title="Keluar dari Portal"
           >
-            <LogOut className="h-4 w-4" />
+            {isLoggingOut ? (
+              <Loader2 className="h-4 w-4 animate-spin text-rose-600" />
+            ) : (
+              <LogOut className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </header>
@@ -599,11 +612,11 @@ export default function SuperAdminVendorPortalPage() {
                     {/* Header Card: Tipe, Action Quick Edit, Status Badge */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <Badge className="bg-slate-100 text-slate-700 border-slate-200 text-[10px] font-semibold">
+                        <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-200/80 border-slate-200 text-[10px] font-semibold transition-colors">
                           {getFacilityTypeLabel(f.type)}
                         </Badge>
                         {isInactive && (
-                          <Badge className="bg-slate-200 text-slate-600 border-slate-300 text-[9px] font-bold">
+                          <Badge className="bg-slate-200 text-slate-600 hover:bg-slate-300/80 border-slate-300 text-[9px] font-bold transition-colors">
                             DIARSIPKAN
                           </Badge>
                         )}

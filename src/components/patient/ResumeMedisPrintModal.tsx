@@ -14,20 +14,35 @@ import { Printer, Download, QrCode, ShieldCheck, Activity } from "lucide-react";
 import { OutpatientEncounter, PatientProfile } from "@/lib/satusehat/types";
 import { printHtmlElement } from "@/lib/print/print-service";
 import { useAuth } from "@/lib/auth/auth-context";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
 
 interface ResumeMedisPrintModalProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   patient?: PatientProfile | null;
   encounter?: OutpatientEncounter | null;
 }
 
 export function ResumeMedisPrintModal({
-  isOpen,
-  onOpenChange,
-  patient,
-  encounter,
-}: ResumeMedisPrintModalProps) {
+  isOpen: propIsOpen,
+  onOpenChange: propOnOpenChange,
+  patient: propPatient,
+  encounter: propEncounter,
+}: ResumeMedisPrintModalProps = {}) {
+  const storeIsOpen = useUIStore((s) => s.isPrintModalOpen);
+  const storeSetOpen = (open: boolean) =>
+    useUIStore.getState().setModalOpen("isPrintModalOpen", open);
+  const storePatient = useClinicalStore((s) => s.patient);
+  const storeEncounter = useClinicalStore((s) =>
+    s.encounters.find((e) => e.id === s.selectedEncounterId) || null
+  );
+
+  const isOpen = propIsOpen !== undefined ? propIsOpen : storeIsOpen;
+  const onOpenChange = propOnOpenChange ?? storeSetOpen;
+  const patient = propPatient !== undefined ? propPatient : storePatient;
+  const encounter = propEncounter !== undefined ? propEncounter : storeEncounter;
+
   const { facility, user } = useAuth();
   const printAreaRef = useRef<HTMLDivElement>(null);
 
@@ -63,14 +78,14 @@ export function ResumeMedisPrintModal({
   }
 
   const activeHospitalName =
-    facility?.name || encounter.hospitalName || "RS Umum Daerah Sehat Sejahtera";
+    facility?.name || encounter.hospitalName || "Fasilitas Pelayanan Kesehatan";
   const activeOrgId =
-    facility?.satusehatOrgId || encounter.hospitalOrgId || "10000004";
+    facility?.satusehatOrgId || encounter.hospitalOrgId || "-";
   const activeAddress =
-    facility?.address || "Jl. Kesehatan Medika No. 45, Jakarta Pusat";
-  const activePhone = facility?.phone || "021-5550199";
+    facility?.address || "";
+  const activePhone = facility?.phone || "";
   const activeLicense =
-    facility?.licenseNumber || "440/012/Dinkes/RS-B/2024";
+    facility?.licenseNumber || "";
   const isKlinik =
     facility?.type === "klinik_pratama" ||
     facility?.type === "klinik_utama" ||
@@ -173,7 +188,7 @@ export function ResumeMedisPrintModal({
             </div>
 
             <div className="text-right shrink-0">
-              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded border border-teal-200 uppercase tracking-wider block">
+              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-md border border-teal-200 uppercase tracking-wider inline-block">
                 RESUME RAWAT JALAN
               </span>
               <span className="text-[10px] text-blue-800 font-mono font-bold mt-1 block">

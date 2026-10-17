@@ -15,10 +15,12 @@ import { PatientProfile, OutpatientEncounter, ClinicQueuePatientItem } from "@/l
 import { printHtmlElement } from "@/lib/print/print-service";
 import { useAuth } from "@/lib/auth/auth-context";
 import { getLocalCompactDate } from "@/lib/id-generator";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
 
 interface QueueTicketPrintModalProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   patient?: PatientProfile | null;
   encounter?: OutpatientEncounter | null;
   worklist?: ClinicQueuePatientItem[];
@@ -28,15 +30,32 @@ interface QueueTicketPrintModalProps {
 }
 
 export function QueueTicketPrintModal({
-  isOpen,
-  onOpenChange,
-  patient,
-  encounter,
-  worklist,
+  isOpen: propIsOpen,
+  onOpenChange: propOnOpenChange,
+  patient: propPatient,
+  encounter: propEncounter,
+  worklist: propWorklist,
   queueNumber,
-  queueItem,
+  queueItem: propQueueItem,
   estimatedWaitMinutes = 15,
-}: QueueTicketPrintModalProps) {
+}: QueueTicketPrintModalProps = {}) {
+  const storeIsOpen = useUIStore((s) => s.isQueueTicketOpen);
+  const storeSetOpen = (open: boolean) =>
+    useUIStore.getState().setModalOpen("isQueueTicketOpen", open);
+  const storeQueueItem = useUIStore((s) => s.ticketQueueItem);
+  const storePatient = useClinicalStore((s) => s.patient);
+  const storeEncounter = useClinicalStore((s) =>
+    s.encounters.find((e) => e.id === s.selectedEncounterId) || null
+  );
+  const storeWorklist = useClinicalStore((s) => s.worklist);
+
+  const isOpen = propIsOpen !== undefined ? propIsOpen : storeIsOpen;
+  const onOpenChange = propOnOpenChange ?? storeSetOpen;
+  const queueItem = propQueueItem !== undefined ? propQueueItem : storeQueueItem;
+  const patient = propPatient !== undefined ? propPatient : storePatient;
+  const encounter = propEncounter !== undefined ? propEncounter : storeEncounter;
+  const worklist = propWorklist !== undefined ? propWorklist : storeWorklist;
+
   const { facility, user } = useAuth();
   const printAreaRef = useRef<HTMLDivElement>(null);
 
@@ -100,7 +119,7 @@ export function QueueTicketPrintModal({
     activeQueueItem?.registrationNumber ||
     matchingQueueItem?.registrationNumber ||
     activeEncounter?.registrationNumber ||
-    `RJ-${getLocalCompactDate()}-0001`;
+    "";
 
   const effectiveQueueNumber =
     activeQueueNumber ||
@@ -165,7 +184,7 @@ export function QueueTicketPrintModal({
     minute: "2-digit",
   });
 
-  const activeHospitalName = facility?.name || activeEncounter?.hospitalName || "RS Umum Daerah Sehat Sejahtera";
+  const activeHospitalName = facility?.name || activeEncounter?.hospitalName || "Fasilitas Pelayanan Kesehatan";
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>

@@ -11,6 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { CustomSelect } from "./custom-select";
 
 export interface CustomDatePickerPreset {
   label: string;
@@ -37,6 +38,7 @@ export interface CustomDatePickerProps {
   allowClear?: boolean;
   isActive?: boolean;
   variant?: "default" | "filter";
+  placement?: "bottom" | "top";
 }
 
 const MONTH_NAMES_ID = [
@@ -103,9 +105,28 @@ export function CustomDatePicker({
   allowClear = true,
   isActive,
   variant = "default",
+  placement,
 }: CustomDatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const [computedPlacement, setComputedPlacement] = useState<"bottom" | "top">(
+    placement || "bottom"
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (placement) {
+      setComputedPlacement(placement);
+    } else if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      if (spaceBelow < 340 && rect.top > 340) {
+        setComputedPlacement("top");
+      } else {
+        setComputedPlacement("bottom");
+      }
+    }
+  }, [isOpen, placement]);
 
   const isEffectiveActive =
     isActive !== undefined
@@ -237,6 +258,25 @@ export function CustomDatePicker({
   const currentYear = today.getFullYear();
   const yearOptions = Array.from({ length: currentYear - 1920 + 6 }, (_, i) => 1920 + i).reverse();
 
+  // Memoized options for CustomSelect Month & Year
+  const monthOptions = React.useMemo(
+    () =>
+      MONTH_NAMES_ID.map((m, idx) => ({
+        value: idx,
+        label: m,
+      })),
+    []
+  );
+
+  const yearSelectOptions = React.useMemo(
+    () =>
+      yearOptions.map((y) => ({
+        value: y,
+        label: String(y),
+      })),
+    [yearOptions]
+  );
+
   return (
     <div
       ref={containerRef}
@@ -320,7 +360,11 @@ export function CustomDatePicker({
       {/* Popover Calendar Modal */}
       {isOpen && (
         <div
-          className={`absolute z-50 mt-1.5 w-72 sm:w-80 rounded-2xl bg-white border border-slate-200/90 shadow-xl p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150 ${
+          className={`absolute z-50 ${
+            computedPlacement === "top"
+              ? "bottom-full mb-1.5 slide-in-from-bottom-2"
+              : "top-full mt-1.5 slide-in-from-top-2"
+          } w-72 sm:w-80 rounded-2xl bg-white border border-slate-200/90 shadow-xl p-3.5 space-y-3 animate-in fade-in zoom-in-95 duration-150 ${
             align === "right" ? "right-0" : "left-0"
           } ${popoverClassName}`}
         >
@@ -335,32 +379,31 @@ export function CustomDatePicker({
               <ChevronLeft className="h-4 w-4" />
             </button>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
               {/* Month Selector */}
-              <select
+              <CustomSelect<number>
+                size="sm"
                 value={viewMonth}
-                onChange={(e) => setViewMonth(Number(e.target.value))}
-                className="h-7 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-2 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer"
-              >
-                {MONTH_NAMES_ID.map((m, idx) => (
-                  <option key={m} value={idx}>
-                    {m}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setViewMonth(val)}
+                options={monthOptions}
+                className="w-[110px] sm:w-[122px]"
+                buttonClassName="h-7 text-xs font-bold text-slate-800 bg-slate-50 border-slate-200 hover:bg-white px-2 py-0.5 rounded-lg justify-between shadow-2xs"
+                dropdownClassName="w-36 shadow-2xl z-[70] border-slate-200"
+                accentColor="teal"
+              />
 
               {/* Year Selector */}
-              <select
+              <CustomSelect<number>
+                size="sm"
                 value={viewYear}
-                onChange={(e) => setViewYear(Number(e.target.value))}
-                className="h-7 text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-lg px-2 focus:outline-none focus:ring-1 focus:ring-teal-500 cursor-pointer font-mono"
-              >
-                {yearOptions.map((y) => (
-                  <option key={y} value={y}>
-                    {y}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setViewYear(val)}
+                options={yearSelectOptions}
+                className="w-[78px] sm:w-[84px]"
+                buttonClassName="h-7 text-xs font-bold font-mono text-slate-800 bg-slate-50 border-slate-200 hover:bg-white px-2 py-0.5 rounded-lg justify-between shadow-2xs"
+                dropdownClassName="w-28 shadow-2xl z-[70] border-slate-200 font-mono"
+                align="right"
+                accentColor="teal"
+              />
             </div>
 
             <button

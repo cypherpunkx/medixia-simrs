@@ -128,7 +128,7 @@ export default function SuperAdminLoginPage() {
             <h1 className="text-2xl font-black tracking-tight text-slate-900">
               MEDIXIA<span className="text-teal-600">.PORTAL</span>
             </h1>
-            <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[10px] font-bold tracking-wide">
+            <Badge className="bg-teal-50 text-teal-700 hover:bg-teal-100/70 border-teal-200 text-[10px] font-bold tracking-wide transition-colors">
               SUPER ADMIN
             </Badge>
           </div>

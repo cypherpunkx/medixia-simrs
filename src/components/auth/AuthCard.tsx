@@ -101,7 +101,7 @@ export function AuthCard({
   const [lastError, setLastError] = useState<AuthApiResponse["error"] | null>(null);
   const [copiedOrgId, setCopiedOrgId] = useState(false);
 
-  const activeOrgId = facility?.satusehatOrgId || activeSession?.orgId || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+  const activeOrgId = facility?.satusehatOrgId || activeSession?.orgId || "";
 
   const handleCopyOrgId = (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();

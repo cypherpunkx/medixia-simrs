@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { EncounterRepository } from "@/lib/db/repositories/encounter-repo";
 import { OutpatientEncounter } from "@/lib/satusehat/types";
+import { requireAuth } from "@/lib/auth/session-helper";
 
 export async function GET(
   _req: NextRequest,
@@ -35,6 +36,9 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = requireAuth(req, ["doctor", "nurse", "admin"]);
+    if (auth instanceof NextResponse) return auth;
+
     const { id } = await params;
     const body = (await req.json()) as Partial<OutpatientEncounter>;
 
@@ -147,4 +151,56 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   return PUT(req, { params });
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const auth = requireAuth(req, ["doctor", "admin"]);
+    if (auth instanceof NextResponse) return auth;
+
+    const { id } = await params;
+    const existing = await EncounterRepository.getById(id);
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: "Rekam medis kunjungan tidak ditemukan atau sudah dinonaktifkan." },
+        { status: 404 }
+      );
+    }
+
+    if (existing.isLocked) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Pelanggaran Regulasi: Rekam medis yang telah dikunci (locked) tidak dapat dihapus.",
+          code: "RECORD_LOCKED",
+        },
+        { status: 422 }
+      );
+    }
+
+    const deleted = await EncounterRepository.softDelete(id);
+    if (!deleted) {
+      return NextResponse.json(
+        { success: false, error: "Gagal menonaktifkan rekam medis kunjungan." },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Rekam medis kunjungan berhasil dinonaktifkan secara aman (Soft Delete).",
+    });
+  } catch (error) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Gagal menonaktifkan rekam medis kunjungan.",
+        detail: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
+    );
+  }
 }

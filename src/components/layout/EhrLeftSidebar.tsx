@@ -11,44 +11,66 @@ import {
   UserPlus,
   FlaskConical,
   Tv,
+  PackageCheck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth/auth-context";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
 
 export type EhrModule =
   | "resume"
   | "registration"
   | "vitals"
   | "prescriptions"
+  | "pharmacy"
   | "diagnostic"
   | "history"
   | "entry"
   | "auth";
 
 interface EhrLeftSidebarProps {
-  activeModule: EhrModule;
-  onModuleChange: (mod: EhrModule) => void;
+  activeModule?: EhrModule;
+  onModuleChange?: (mod: EhrModule) => void;
   onOpenQueueDisplay?: () => void;
   waitingCount?: number;
 }
 
 export function EhrLeftSidebar({
-  activeModule,
-  onModuleChange,
-  onOpenQueueDisplay,
-  waitingCount,
-}: EhrLeftSidebarProps) {
+  activeModule: propActiveModule,
+  onModuleChange: propOnModuleChange,
+  onOpenQueueDisplay: propOnOpenQueueDisplay,
+  waitingCount: propWaitingCount,
+}: EhrLeftSidebarProps = {}) {
   const { user } = useAuth();
   const isDoctor = user?.role === "doctor";
 
-  // 1. Loket & Antrean
-  const queueNavItems: Array<{
+  // Zustand Stores Integration with Fallback
+  const storeActiveModule = useUIStore((s) => s.activeModule);
+  const storeSetActiveModule = useUIStore((s) => s.setActiveModule);
+  const storeOpenQueueDisplay = () =>
+    useUIStore.getState().setModalOpen("isQueueDisplayOpen", true);
+  const storeWaitingCount = useClinicalStore(
+    (s) => s.worklist.filter((w) => w.status === "arrived").length
+  );
+
+  const activeModule = propActiveModule ?? storeActiveModule;
+  const onModuleChange = propOnModuleChange ?? storeSetActiveModule;
+  const onOpenQueueDisplay = propOnOpenQueueDisplay ?? storeOpenQueueDisplay;
+  const waitingCount = propWaitingCount !== undefined ? propWaitingCount : storeWaitingCount;
+
+  interface NavItem {
     id: EhrModule;
     label: string;
     sublabel: string;
     icon: React.ElementType;
     badge?: string;
-  }> = [
+    badgeCount?: number;
+    badgeTooltip?: string;
+  }
+
+  // 1. Loket & Antrean
+  const queueNavItems: NavItem[] = [
     {
       id: "registration",
       label: "Pendaftaran & Antrean",
@@ -56,19 +78,20 @@ export function EhrLeftSidebar({
       icon: UserPlus,
       badge:
         typeof waitingCount === "number" && waitingCount > 0
-          ? `${waitingCount} Menunggu`
+          ? waitingCount > 99
+            ? "99+"
+            : `${waitingCount}`
+          : undefined,
+      badgeCount: typeof waitingCount === "number" && waitingCount > 0 ? waitingCount : undefined,
+      badgeTooltip:
+        typeof waitingCount === "number" && waitingCount > 0
+          ? `${waitingCount} pasien menunggu antrean`
           : undefined,
     },
   ];
 
   // 2. Pelayanan Medis (Klinis)
-  const clinicalCareNavItems: Array<{
-    id: EhrModule;
-    label: string;
-    sublabel: string;
-    icon: React.ElementType;
-    badge?: string;
-  }> = [
+  const clinicalCareNavItems: NavItem[] = [
     {
       id: "entry",
       label: "Pemeriksaan Dokter (SOAP)",
@@ -93,16 +116,16 @@ export function EhrLeftSidebar({
       sublabel: "E-Resep Obat Standar KFA",
       icon: Pill,
     },
+    {
+      id: "pharmacy",
+      label: "Farmasi & Apotek",
+      sublabel: "Dispensing & Stok Obat",
+      icon: PackageCheck,
+    },
   ];
 
   // 3. Ringkasan & Histori
-  const summaryNavItems: Array<{
-    id: EhrModule;
-    label: string;
-    sublabel: string;
-    icon: React.ElementType;
-    badge?: string;
-  }> = [
+  const summaryNavItems: NavItem[] = [
     {
       id: "resume",
       label: "Resume Medis Rawat Jalan",
@@ -118,13 +141,7 @@ export function EhrLeftSidebar({
   ];
 
   // 4. Integrasi SATUSEHAT
-  const systemNavItems: Array<{
-    id: EhrModule;
-    label: string;
-    sublabel: string;
-    icon: React.ElementType;
-    badge?: string;
-  }> = [
+  const systemNavItems: NavItem[] = [
     {
       id: "auth",
       label: "Bridging SATUSEHAT",
@@ -132,6 +149,29 @@ export function EhrLeftSidebar({
       icon: KeyRound,
     },
   ];
+
+  const renderBadge = (item: NavItem, isActive: boolean) => {
+    if (!item.badge) return null;
+
+    const isHighAlert = typeof item.badgeCount === "number" && item.badgeCount > 10;
+
+    return (
+      <span
+        title={item.badgeTooltip}
+        className={`shrink-0 min-w-5 h-5 px-1.5 flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums transition-colors shadow-2xs ${
+          isHighAlert
+            ? isActive
+              ? "bg-amber-400 text-amber-950 font-black ring-1 ring-amber-300"
+              : "bg-amber-100 text-amber-800 border border-amber-300 font-bold"
+            : isActive
+              ? "bg-white/20 text-white border border-white/25"
+              : "bg-teal-50 text-teal-700 border border-teal-200/80"
+        }`}
+      >
+        {item.badge}
+      </span>
+    );
+  };
 
   return (
     <aside className="w-full lg:w-64 shrink-0 flex flex-col gap-3">
@@ -182,17 +222,7 @@ export function EhrLeftSidebar({
                   </div>
                 </div>
 
-                {item.badge && (
-                  <span
-                    className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase whitespace-nowrap ${
-                      isActive
-                        ? "bg-white/25 text-white"
-                        : "bg-teal-50 text-teal-800 border border-teal-200"
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
+                {renderBadge(item, isActive)}
               </button>
             );
           })}
@@ -243,17 +273,7 @@ export function EhrLeftSidebar({
                   </div>
                 </div>
 
-                {item.badge && (
-                  <span
-                    className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase whitespace-nowrap ${
-                      isActive
-                        ? "bg-white/25 text-white"
-                        : "bg-teal-50 text-teal-800 border border-teal-200"
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
+                {renderBadge(item, isActive)}
               </button>
             );
           })}
@@ -304,17 +324,7 @@ export function EhrLeftSidebar({
                   </div>
                 </div>
 
-                {item.badge && (
-                  <span
-                    className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase whitespace-nowrap ${
-                      isActive
-                        ? "bg-white/25 text-white"
-                        : "bg-teal-50 text-teal-800 border border-teal-200"
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
+                {renderBadge(item, isActive)}
               </button>
             );
           })}
@@ -373,17 +383,7 @@ export function EhrLeftSidebar({
                   </div>
                 </div>
 
-                {item.badge && (
-                  <span
-                    className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase whitespace-nowrap ${
-                      isActive
-                        ? "bg-white/25 text-white"
-                        : "bg-slate-100 text-slate-600 border border-slate-200"
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
+                {renderBadge(item, isActive)}
               </button>
             );
           })}

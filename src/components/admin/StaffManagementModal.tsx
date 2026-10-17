@@ -243,9 +243,19 @@ export function StaffManagementModal({
 
       const json = await res.json();
       if (json.success && json.data?.satusehatLocationId) {
-        toast.success("Poliklinik Berhasil Diregistrasi ke SATUSEHAT!", {
-          description: `Location ID resmi: ${json.data.satusehatLocationId}`,
-        });
+        if (json.source === "satusehat_verified") {
+          toast.success("Poliklinik Terverifikasi di SATUSEHAT Cloud!", {
+            description: `Location ID resmi: ${json.data.satusehatLocationId}`,
+          });
+        } else if (json.source === "local_retained") {
+          toast.info("Lokasi Poliklinik Sudah Terdaftar", {
+            description: `Location ID: ${json.data.satusehatLocationId}`,
+          });
+        } else {
+          toast.success("Poliklinik Berhasil Diregistrasi ke SATUSEHAT!", {
+            description: `Location ID resmi: ${json.data.satusehatLocationId}`,
+          });
+        }
         await refreshFacilities();
       } else {
         toast.error(
@@ -918,13 +928,13 @@ export function StaffManagementModal({
                                   </span>
                                   <Badge
                                     variant="outline"
-                                    className={`text-[9px] font-bold px-1.5 py-0.2 rounded border ${rInfo.color}`}
+                                    className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${rInfo.color}`}
                                   >
                                     {rInfo.label}
                                   </Badge>
                                   {staff.ihsPractitionerId ? (
                                     <span
-                                      className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded shadow-2xs cursor-help"
+                                      className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded shadow-2xs cursor-help"
                                       title={`Praktisi Medis Terdaftar di SATUSEHAT (IHS: ${staff.ihsPractitionerId})`}
                                     >
                                       <img
@@ -936,7 +946,7 @@ export function StaffManagementModal({
                                     </span>
                                   ) : (
                                     <span
-                                      className="inline-flex items-center gap-1 text-[9px] font-medium text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.2 rounded"
+                                      className="inline-flex items-center gap-1 text-[9px] font-medium text-slate-400 bg-slate-50 border border-slate-200 px-1.5 py-0.5 rounded"
                                       title="Belum terdaftar di SATUSEHAT (IHS Practitioner ID belum diisi)"
                                     >
                                       <span>Non-SATUSEHAT</span>
@@ -960,7 +970,7 @@ export function StaffManagementModal({
                                   {staff.ihsPractitionerId && (
                                     <>
                                       <span>•</span>
-                                      <span className="inline-flex items-center gap-1 font-mono text-[10px] text-teal-800 font-bold bg-teal-50/80 px-1.5 py-0.2 rounded border border-teal-200/80">
+                                      <span className="inline-flex items-center gap-1 font-mono text-[10px] text-teal-800 font-bold bg-teal-50/80 px-1.5 py-0.5 rounded border border-teal-200/80">
                                         <img
                                           src="/satusehat-default-logo.svg"
                                           alt="SATUSEHAT"
@@ -1196,7 +1206,7 @@ export function StaffManagementModal({
                             </Badge>
                             {dept.satusehatLocationId ? (
                               <span
-                                className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.2 rounded shadow-2xs cursor-help"
+                                className="inline-flex items-center gap-1 text-[9px] font-bold text-teal-800 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded shadow-2xs cursor-help"
                                 title={`Lokasi Poliklinik Terpetakan di SATUSEHAT FHIR (ID: ${dept.satusehatLocationId})`}
                               >
                                 <img
@@ -1210,7 +1220,7 @@ export function StaffManagementModal({
                               </span>
                             ) : (
                               <span
-                                className="inline-flex items-center gap-1 text-[9px] font-medium text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded"
+                                className="inline-flex items-center gap-1 text-[9px] font-medium text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded"
                                 title="Lokasi belum dipetakan ke SATUSEHAT"
                               >
                                 <span>Lokal Faskes</span>
@@ -1239,29 +1249,35 @@ export function StaffManagementModal({
 
                       {/* Actions */}
                       <div className="flex items-center gap-1 shrink-0">
-                        {/* Tombol Sinkronisasi / Registrasi SATUSEHAT Location */}
-                        <button
-                          type="button"
-                          disabled={syncingDeptId === dept.id}
-                          onClick={() => handleSyncDepartmentLocation(dept)}
-                          className="h-7 px-2 rounded-lg text-[10px] font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-200 flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                          title="Daftarkan / Sinkronisasi Ruang Poliklinik ke SATUSEHAT Location API (POST /Location)"
-                        >
-                          {syncingDeptId === dept.id ? (
-                            <Loader2 className="h-3 w-3 animate-spin text-teal-700" />
-                          ) : (
-                            <img
-                              src="/satusehat-default-logo.svg"
-                              alt="SATUSEHAT"
-                              className="h-3 w-3 object-contain shrink-0"
-                            />
-                          )}
-                          <span>
-                            {dept.satusehatLocationId
-                              ? "Re-sync Location"
-                              : "Daftarkan SATUSEHAT"}
-                          </span>
-                        </button>
+                        {/* Status / Tombol Registrasi SATUSEHAT Location */}
+                        {dept.satusehatLocationId ? (
+                          <div
+                            className="h-7 px-2.5 rounded-lg text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 flex items-center gap-1.5 select-none"
+                            title={`Ruang Poliklinik ini sudah resmi terdaftar di SATUSEHAT (ID: ${dept.satusehatLocationId}). Lokasi sudah aktif dan tidak perlu disinkronkan ulang.`}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            <span>Terdaftar</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={syncingDeptId === dept.id}
+                            onClick={() => handleSyncDepartmentLocation(dept)}
+                            className="h-7 px-2.5 rounded-lg text-[10px] font-bold text-teal-800 bg-teal-50 hover:bg-teal-100 border border-teal-300 flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs"
+                            title="Daftarkan Ruang Poliklinik ke SATUSEHAT Location API (POST /Location)"
+                          >
+                            {syncingDeptId === dept.id ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-teal-700" />
+                            ) : (
+                              <img
+                                src="/satusehat-default-logo.svg"
+                                alt="SATUSEHAT"
+                                className="h-3 w-3 object-contain shrink-0"
+                              />
+                            )}
+                            <span>Daftarkan SATUSEHAT</span>
+                          </button>
+                        )}
 
                         <button
                           type="button"

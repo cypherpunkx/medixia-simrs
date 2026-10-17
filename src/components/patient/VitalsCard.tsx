@@ -248,7 +248,7 @@ export function VitalsCard({ vitals, recordedDate }: VitalsCardProps) {
             <span className="text-[10px] font-bold text-slate-400 uppercase block">Body Mass Index (BMI)</span>
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-teal-800 font-mono text-sm">{vitals.bmi || 23.0}</span>
-              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+              <span className="text-[10px] font-bold text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
                 Ideal
               </span>
             </div>

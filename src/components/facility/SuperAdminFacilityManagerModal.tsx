@@ -119,7 +119,7 @@ export function SuperAdminFacilityManagerModal({
                 <div>
                   <DialogTitle className="text-lg font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
                     <span>Manajemen Fasilitas Layanan (Multi-Tenant RME)</span>
-                    <Badge className="bg-teal-50 text-teal-700 border-teal-200 text-[10px] font-bold">
+                    <Badge className="bg-teal-50 text-teal-700 hover:bg-teal-100/70 border-teal-200 text-[10px] font-bold transition-colors">
                       SaaS Vendor Edition
                     </Badge>
                   </DialogTitle>
@@ -208,24 +208,24 @@ export function SuperAdminFacilityManagerModal({
                             </Badge>
 
                             {isCurrent && (
-                              <Badge className="bg-teal-600 text-white text-[10px] font-bold gap-1 shadow-sm">
+                              <Badge className="bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-bold gap-1 shadow-sm transition-colors">
                                 <CheckCircle2 className="h-3 w-3" />
                                 <span>Tenant Aktif</span>
                               </Badge>
                             )}
 
                             {f.satusehatStatus === "connected" ? (
-                              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold gap-1">
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 border-emerald-200 text-[10px] font-bold gap-1 transition-colors">
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                                 <span>SATUSEHAT Terhubung</span>
                               </Badge>
                             ) : f.satusehatStatus === "error" ? (
-                              <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold gap-1">
+                              <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-100/70 border-rose-200 text-[10px] font-bold gap-1 transition-colors">
                                 <AlertCircle className="h-3 w-3 text-rose-500" />
                                 <span>Koneksi Terputus</span>
                               </Badge>
                             ) : (
-                              <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px] font-bold">
+                              <Badge className="bg-slate-100 text-slate-600 hover:bg-slate-200/70 border-slate-200 text-[10px] font-bold transition-colors">
                                 Belum Terverifikasi
                               </Badge>
                             )}

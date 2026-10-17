@@ -3,7 +3,7 @@ import { PatientRepository } from "@/lib/db/repositories/patient-repo";
 import { FacilityRepository } from "@/lib/db/repositories/facility-repo";
 import { PatientProfile } from "@/lib/satusehat/types";
 import { validatePhone } from "@/lib/satusehat/validation";
-import { extractFacilityIdFromRequest } from "@/lib/auth/session-helper";
+import { extractFacilityIdFromRequest, requireAuth } from "@/lib/auth/session-helper";
 import { applyRateLimit } from "@/lib/middleware/rate-limiter";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
     const q = searchParams.get("q");
     const nik = searchParams.get("nik");
     const mrn = searchParams.get("mrn");
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "50", 10);
 
     let data: PatientProfile | PatientProfile[] | null;
 
@@ -27,9 +29,9 @@ export async function GET(req: NextRequest) {
     } else if (mrn) {
       data = await PatientRepository.getByMrn(mrn);
     } else if (q) {
-      data = await PatientRepository.search(q);
+      data = await PatientRepository.search(q, limit);
     } else {
-      data = await PatientRepository.getAll();
+      data = await PatientRepository.getAll({ page, limit });
     }
 
     const durationMs = Number((performance.now() - startTime).toFixed(2));
@@ -56,6 +58,9 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = requireAuth(req, ["registration", "nurse", "doctor", "admin"]);
+    if (auth instanceof NextResponse) return auth;
+
     // Security Guard: Tolak pendaftaran pasien baru jika faskes sedang dinonaktifkan
     const resolvedFacilityId = extractFacilityIdFromRequest(req);
     if (resolvedFacilityId) {

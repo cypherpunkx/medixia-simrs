@@ -14,20 +14,35 @@ import { Printer, Pill, QrCode, ShieldAlert, Activity } from "lucide-react";
 import { PatientProfile, OutpatientEncounter } from "@/lib/satusehat/types";
 import { printHtmlElement } from "@/lib/print/print-service";
 import { useAuth } from "@/lib/auth/auth-context";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
 
 interface PrescriptionPrintModalProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   patient?: PatientProfile | null;
   encounter?: OutpatientEncounter | null;
 }
 
 export function PrescriptionPrintModal({
-  isOpen,
-  onOpenChange,
-  patient,
-  encounter,
-}: PrescriptionPrintModalProps) {
+  isOpen: propIsOpen,
+  onOpenChange: propOnOpenChange,
+  patient: propPatient,
+  encounter: propEncounter,
+}: PrescriptionPrintModalProps = {}) {
+  const storeIsOpen = useUIStore((s) => s.isPrescriptionPrintOpen);
+  const storeSetOpen = (open: boolean) =>
+    useUIStore.getState().setModalOpen("isPrescriptionPrintOpen", open);
+  const storePatient = useClinicalStore((s) => s.patient);
+  const storeEncounter = useClinicalStore((s) =>
+    s.encounters.find((e) => e.id === s.selectedEncounterId) || null
+  );
+
+  const isOpen = propIsOpen !== undefined ? propIsOpen : storeIsOpen;
+  const onOpenChange = propOnOpenChange ?? storeSetOpen;
+  const patient = propPatient !== undefined ? propPatient : storePatient;
+  const encounter = propEncounter !== undefined ? propEncounter : storeEncounter;
+
   const { facility, user } = useAuth();
   const printAreaRef = useRef<HTMLDivElement>(null);
 
@@ -63,12 +78,12 @@ export function PrescriptionPrintModal({
   }
 
   const activeHospitalName =
-    facility?.name || encounter.hospitalName || "RS Umum Daerah Sehat Sejahtera";
+    facility?.name || encounter.hospitalName || "Fasilitas Pelayanan Kesehatan";
   const activeAddress =
-    facility?.address || "Jl. Kesehatan Medika No. 45, Jakarta Pusat";
-  const activePhone = facility?.phone || "021-5550199";
+    facility?.address || "";
+  const activePhone = facility?.phone || "";
   const activeLicense =
-    facility?.licenseNumber || "440/012/Dinkes/RS-B/2024";
+    facility?.licenseNumber || "";
   const isKlinik =
     facility?.type === "klinik_pratama" ||
     facility?.type === "klinik_utama" ||
@@ -131,7 +146,7 @@ export function PrescriptionPrintModal({
                   {activeHospitalName}
                 </h3>
                 <span
-                  className={`text-[8px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                  className={`text-[8px] font-bold px-1.5 py-0.5 rounded uppercase ${
                     isKlinik
                       ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
                       : "bg-blue-100 text-blue-800 border border-blue-300"
@@ -176,7 +191,7 @@ export function PrescriptionPrintModal({
             </div>
             <div>
               <span className="text-[9px] text-slate-500 block">No. Registrasi:</span>
-              <strong className="font-mono text-blue-800 font-bold">{encounter.registrationNumber || `RJ-${encounter.visitDate.split("T")[0].replace(/-/g, "")}-0001`}</strong>
+              <strong className="font-mono text-blue-800 font-bold">{encounter.registrationNumber || "-"}</strong>
             </div>
             <div>
               <span className="text-[9px] text-slate-500 block">Tgl Lahir / JK:</span>

@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
     let targetClientId = clientId;
     let targetClientSecret = clientSecret;
     let targetEnv: SatusehatEnvironment = env || "staging";
-    let targetOrgId = orgId || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+    let targetOrgId = orgId || "";
 
     // 1. Jika diberikan facilityId, muat kredensial tersimpan dan didekripsi dari database
     if (facilityId) {

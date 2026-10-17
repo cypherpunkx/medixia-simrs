@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
     const created = await QueueRepository.add(body);
     return NextResponse.json({ success: true, data: created }, { status: 201 });
   } catch (error) {
+    console.error("[POST /api/queue Error]:", error);
     return NextResponse.json(
       {
         success: false,

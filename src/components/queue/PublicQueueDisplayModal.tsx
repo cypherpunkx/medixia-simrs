@@ -36,10 +36,12 @@ import {
 } from "@/lib/audio/queueVoiceAnnouncer";
 import { useAuth } from "@/lib/auth/auth-context";
 import { toast } from "sonner";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
 
 interface PublicQueueDisplayModalProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   hospitalName?: string;
   worklist?: ClinicQueuePatientItem[];
   onUpdateStatus?: (
@@ -64,57 +66,6 @@ interface DepartmentConfig {
   defaultDoctor: string;
 }
 
-const DEPARTMENTS: DepartmentConfig[] = [
-  {
-    id: "dept-rs-01",
-    code: "A",
-    deptCode: "INT",
-    department: "Poli Penyakit Dalam",
-    room: "Ruang 204 (Lt. 2)",
-    defaultDoctor: "dr. Rian Pratama, Sp.PD",
-  },
-  {
-    id: "dept-rs-02",
-    code: "B",
-    deptCode: "UMU",
-    department: "Poli Umum",
-    room: "Ruang 102 (Lt. 1)",
-    defaultDoctor: "dr. Amanda Putri, M.Biomed",
-  },
-  {
-    id: "dept-rs-03",
-    code: "C",
-    deptCode: "ANA",
-    department: "Poli Anak (Pediatri)",
-    room: "Ruang 105 (Lt. 1)",
-    defaultDoctor: "dr. Maya Anggraini, Sp.A",
-  },
-  {
-    id: "dept-rs-04",
-    code: "D",
-    deptCode: "GIG",
-    department: "Poli Gigi & Mulut",
-    room: "Ruang 201 (Lt. 2)",
-    defaultDoctor: "drg. Kevin Tanuwidjaja",
-  },
-  {
-    id: "dept-rs-05",
-    code: "E",
-    deptCode: "JAN",
-    department: "Poli Jantung & Pembuluh Darah",
-    room: "Ruang 208 (Lt. 2)",
-    defaultDoctor: "dr. Rian Hidayat, Sp.JP",
-  },
-  {
-    id: "dept-rs-06",
-    code: "F",
-    deptCode: "MAT",
-    department: "Poli Mata",
-    room: "Ruang 210 (Lt. 2)",
-    defaultDoctor: "dr. Nadia Putri, Sp.M",
-  },
-];
-
 export function matchesDepartment(itemDept?: string, targetDept?: string): boolean {
   if (!itemDept || !targetDept) return false;
   const a = itemDept.toLowerCase().trim();
@@ -135,29 +86,69 @@ export function isQueueItemForDept(item: ClinicQueuePatientItem, dept: Departmen
 }
 
 export function PublicQueueDisplayModal({
-  isOpen,
-  onOpenChange,
+  isOpen: propIsOpen,
+  onOpenChange: propOnOpenChange,
   hospitalName = "RS Umum Daerah Sehat Sejahtera",
-  worklist = [],
-  onUpdateStatus,
-  onSelectPatient,
-}: PublicQueueDisplayModalProps) {
+  worklist: propWorklist,
+  onUpdateStatus: propOnUpdateStatus,
+  onSelectPatient: propOnSelectPatient,
+}: PublicQueueDisplayModalProps = {}) {
+  const storeIsOpen = useUIStore((s) => s.isQueueDisplayOpen);
+  const storeSetOpen = (open: boolean) =>
+    useUIStore.getState().setModalOpen("isQueueDisplayOpen", open);
+  const storeWorklist = useClinicalStore((s) => s.worklist);
+  const storeUpdateStatus = (
+    id: string,
+    status: "arrived" | "in-progress" | "finished",
+    silent?: boolean
+  ) => useClinicalStore.getState().updateQueueStatus(id, status, silent);
+  const storeSelectPatient = (
+    p: PatientProfile,
+    mod?: string,
+    item?: ClinicQueuePatientItem,
+    dept?: string
+  ) =>
+    useClinicalStore.getState().selectPatient(p, {
+      targetModule: mod as any,
+      targetQueueItemOrNumber: item,
+      targetDepartment: dept,
+    });
+
+  const isOpen = propIsOpen !== undefined ? propIsOpen : storeIsOpen;
+  const onOpenChange = propOnOpenChange ?? storeSetOpen;
+  const worklist =
+    propWorklist && propWorklist.length > 0 ? propWorklist : storeWorklist;
+  const onUpdateStatus = propOnUpdateStatus ?? storeUpdateStatus;
+  const onSelectPatient = propOnSelectPatient ?? storeSelectPatient;
+
   const { departments: authDepartments } = useAuth();
 
   const activeDepartmentsList: DepartmentConfig[] = React.useMemo(() => {
+    const fallbackLetters = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"];
     if (authDepartments && authDepartments.length > 0) {
-      const fallbackLetters = ["A", "B", "C", "D", "E", "F", "G", "H"];
       return authDepartments.map((d, idx) => ({
         id: d.id,
         code: d.queuePrefix || fallbackLetters[idx % fallbackLetters.length],
         deptCode: d.code || d.name.substring(0, 3).toUpperCase(),
         department: d.name,
         room: d.room || `Ruang ${idx + 1}`,
-        defaultDoctor: d.defaultDoctorName || "dr. Dokter DPJP",
+        defaultDoctor: d.defaultDoctorName || "Dokter DPJP",
       }));
     }
-    return DEPARTMENTS;
-  }, [authDepartments]);
+
+    const uniqueDepts = Array.from(new Set(worklist.map((w) => w.department).filter(Boolean)));
+    if (uniqueDepts.length > 0) {
+      return uniqueDepts.map((name, idx) => ({
+        code: fallbackLetters[idx % fallbackLetters.length],
+        deptCode: name.substring(0, 3).toUpperCase(),
+        department: name,
+        room: `Ruang ${idx + 1}`,
+        defaultDoctor: "Dokter DPJP",
+      }));
+    }
+
+    return [];
+  }, [authDepartments, worklist]);
 
   const [timeString, setTimeString] = useState("");
   const [dateString, setDateString] = useState("");
@@ -543,7 +534,7 @@ export function PublicQueueDisplayModal({
                       <span>{prof.icon}</span>
                       <span>{prof.name.split(" (")[0]}</span>
                       {profId === "jokowi" && (
-                        <span className="text-[8px] bg-white/20 text-white px-1 py-0.2 rounded font-extrabold ml-0.5 uppercase tracking-wider">
+                        <span className="text-[8px] bg-white/20 text-white px-1 py-0.5 rounded font-extrabold ml-0.5 uppercase tracking-wider">
                           Khas
                         </span>
                       )}
@@ -625,7 +616,7 @@ export function PublicQueueDisplayModal({
                     <span className="text-[9px] font-bold text-teal-300 uppercase tracking-widest block">
                       PANGGILAN ANTREAN TERAKHIR (HARI INI)
                     </span>
-                    <span className="text-[9px] bg-slate-800 text-teal-300 px-1.5 py-0.2 rounded border border-teal-500/30 font-mono">
+                    <span className="text-[9px] bg-slate-800 text-teal-300 px-1.5 py-0.5 rounded border border-teal-500/30 font-mono">
                       {VOICE_PROFILES[selectedVoiceProfile]?.name}
                     </span>
                     {isSpeaking && (
@@ -728,7 +719,7 @@ export function PublicQueueDisplayModal({
                       </div>
                       <p className="text-[9px] text-teal-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
                         <span>{dept.room} • Prefix: <strong>{dept.code}</strong></span>
-                        <span className="inline-flex items-center gap-1 text-[8px] font-bold text-teal-200 bg-teal-900/60 border border-teal-500/30 px-1 py-0.2 rounded" title="Location Terintegrasi SATUSEHAT">
+                        <span className="inline-flex items-center gap-1 text-[8px] font-bold text-teal-200 bg-teal-900/60 border border-teal-500/30 px-1 py-0.5 rounded" title="Location Terintegrasi SATUSEHAT">
                           <img src="/satusehat-default-logo.svg" alt="SATUSEHAT" className="h-2 w-2 object-contain" />
                           <span>SATUSEHAT Location</span>
                         </span>

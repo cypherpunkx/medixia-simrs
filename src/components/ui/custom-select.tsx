@@ -25,6 +25,7 @@ export interface CustomSelectProps<T extends string | number = string> {
   disabled?: boolean;
   size?: "sm" | "md" | "lg";
   align?: "left" | "right";
+  placement?: "bottom" | "top";
   title?: string;
   accentColor?: "teal" | "blue";
 }
@@ -41,14 +42,61 @@ export function CustomSelect<T extends string | number = string>({
   dropdownClassName = "",
   disabled = false,
   size = "md",
-  align = "left",
+  align,
+  placement,
   title,
   accentColor = "teal",
 }: CustomSelectProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const [computedPlacement, setComputedPlacement] = useState<"bottom" | "top">(placement || "bottom");
+  const [computedAlign, setComputedAlign] = useState<"left" | "right">(align || "left");
 
   const selectedOption = options.find((opt) => opt.value === value);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // Detect optimal vertical placement (top vs bottom)
+    if (placement) {
+      setComputedPlacement(placement);
+    } else if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const scrollParent = buttonRef.current.closest(".overflow-y-auto");
+      if (scrollParent) {
+        const parentRect = scrollParent.getBoundingClientRect();
+        const spaceBelowInParent = parentRect.bottom - rect.bottom;
+        const spaceAboveInParent = rect.top - parentRect.top;
+        if (spaceBelowInParent < 260 && spaceAboveInParent > spaceBelowInParent) {
+          setComputedPlacement("top");
+        } else {
+          setComputedPlacement("bottom");
+        }
+      } else {
+        const spaceBelowWindow = window.innerHeight - rect.bottom;
+        if (spaceBelowWindow < 260 && rect.top > 260) {
+          setComputedPlacement("top");
+        } else {
+          setComputedPlacement("bottom");
+        }
+      }
+    }
+
+    // Detect optimal horizontal alignment (left vs right to prevent horizontal overflow)
+    if (align) {
+      setComputedAlign(align);
+    } else if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      const scrollParent = buttonRef.current.closest(".overflow-y-auto") || document.body;
+      const parentRect = scrollParent.getBoundingClientRect();
+      if (parentRect.right - rect.left < 220) {
+        setComputedAlign("right");
+      } else {
+        setComputedAlign("left");
+      }
+    }
+  }, [isOpen, placement, align]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -88,6 +136,7 @@ export function CustomSelect<T extends string | number = string>({
     >
       {/* Trigger Button */}
       <button
+        ref={buttonRef}
         type="button"
         disabled={disabled}
         onClick={() => !disabled && setIsOpen(!isOpen)}
@@ -136,13 +185,16 @@ export function CustomSelect<T extends string | number = string>({
       {isOpen && (
         <div
           className={cn(
-            "absolute top-full mt-1.5 z-50 min-w-full bg-white rounded-xl shadow-xl border border-slate-200/90 py-1 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150",
-            className?.includes("w-full") ? "w-full" : "w-max max-w-xs sm:max-w-sm",
-            align === "right" ? "right-0" : "left-0",
+            "absolute z-50 bg-white rounded-xl shadow-xl border border-slate-200/90 py-1 overflow-hidden animate-in fade-in duration-150",
+            computedPlacement === "top"
+              ? "bottom-full mb-1.5 slide-in-from-bottom-1"
+              : "top-full mt-1.5 slide-in-from-top-1",
+            "min-w-full w-max max-w-xs sm:max-w-sm",
+            computedAlign === "right" ? "right-0" : "left-0",
             dropdownClassName
           )}
         >
-          <div className="max-h-64 overflow-y-auto divide-y divide-slate-100/70 p-1">
+          <div className="max-h-64 overflow-y-auto overscroll-contain divide-y divide-slate-100/70 p-1">
             {options.map((opt) => {
               const isSelected = opt.value === value;
               return (
@@ -154,7 +206,8 @@ export function CustomSelect<T extends string | number = string>({
                     setIsOpen(false);
                   }}
                   className={cn(
-                    "w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between gap-2.5 transition-colors cursor-pointer",
+                    "w-full text-left rounded-lg text-xs flex items-center justify-between gap-2.5 transition-colors cursor-pointer",
+                    size === "sm" ? "px-2.5 py-1.5" : "px-3 py-2",
                     isSelected
                       ? accentColor === "blue"
                         ? "bg-blue-50/90 text-blue-950 font-bold"
@@ -165,9 +218,29 @@ export function CustomSelect<T extends string | number = string>({
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     {opt.icon && <span className="shrink-0">{opt.icon}</span>}
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-semibold text-slate-800">{opt.label}</div>
+                      <div
+                        className={cn(
+                          "font-semibold leading-tight",
+                          isSelected
+                            ? accentColor === "blue"
+                              ? "text-blue-900"
+                              : "text-teal-900"
+                            : "text-slate-800"
+                        )}
+                      >
+                        {opt.label}
+                      </div>
                       {opt.description && (
-                        <div className="text-[11px] text-slate-400 font-normal truncate mt-0.5">
+                        <div
+                          className={cn(
+                            "text-[11px] font-normal leading-normal mt-0.5",
+                            isSelected
+                              ? accentColor === "blue"
+                                ? "text-blue-600/80"
+                                : "text-teal-700/80"
+                              : "text-slate-400"
+                          )}
+                        >
                           {opt.description}
                         </div>
                       )}

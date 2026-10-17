@@ -75,7 +75,9 @@ export function FacilityRegistrationModal({
   const [name, setName] = useState("");
   const [type, setType] = useState<FacilityType>("klinik_pratama");
   const [satusehatOrgId, setSatusehatOrgId] = useState("");
-  const [satusehatEnv, setSatusehatEnv] = useState<"staging" | "production">("staging");
+  const [satusehatEnv, setSatusehatEnv] = useState<"staging" | "production">(
+    "staging",
+  );
   const [licenseNumber, setLicenseNumber] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -91,8 +93,18 @@ export function FacilityRegistrationModal({
 
   // Initial Departments
   const [departments, setDepartments] = useState<DepartmentInput[]>([
-    { name: "Poli Umum", room: "Ruang Periksa 1", quota: 40, defaultDoctorName: "dr. Dokter Umum" },
-    { name: "Poli Gigi & Mulut", room: "Ruang Gigi", quota: 20, defaultDoctorName: "drg. Dokter Gigi" },
+    {
+      name: "Poli Umum",
+      room: "Ruang Periksa 1",
+      quota: 40,
+      defaultDoctorName: "dr. Dokter Umum",
+    },
+    {
+      name: "Poli Gigi & Mulut",
+      room: "Ruang Gigi",
+      quota: 20,
+      defaultDoctorName: "drg. Dokter Gigi",
+    },
   ]);
 
   const handleAddDepartment = () => {
@@ -118,7 +130,7 @@ export function FacilityRegistrationModal({
   const handleDepartmentChange = (
     index: number,
     field: keyof DepartmentInput,
-    value: string | number
+    value: string | number,
   ) => {
     setDepartments((prev) => {
       const updated = [...prev];
@@ -129,7 +141,9 @@ export function FacilityRegistrationModal({
 
   const handleTestConnection = async () => {
     if (!satusehatClientId.trim() || !satusehatClientSecret.trim()) {
-      toast.error("Isi Client ID dan Client Secret terlebih dahulu sebelum menguji koneksi.");
+      toast.error(
+        "Isi Client ID dan Client Secret terlebih dahulu sebelum menguji koneksi.",
+      );
       return;
     }
     try {
@@ -143,7 +157,7 @@ export function FacilityRegistrationModal({
           clientId: satusehatClientId.trim(),
           clientSecret: satusehatClientSecret.trim(),
           env: satusehatEnv,
-          orgId: satusehatOrgId.trim() || "b15a7ae7-f366-4a84-8385-0b8196c05002",
+          orgId: satusehatOrgId.trim() || undefined,
         }),
       });
 
@@ -256,7 +270,10 @@ export function FacilityRegistrationModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !isSubmitting && !open && onClose()}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => !isSubmitting && !open && onClose()}
+    >
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0 rounded-2xl border-slate-200">
         {/* Header Visual */}
         <div className="bg-gradient-to-r from-teal-700 via-teal-600 to-emerald-600 p-6 text-white">
@@ -275,7 +292,8 @@ export function FacilityRegistrationModal({
                 </Badge>
               </DialogTitle>
               <DialogDescription className="text-xs text-teal-100 mt-0.5">
-                Daftarkan Rumah Sakit, Klinik Pratama, Klinik Utama, atau Puskesmas baru secara instan ke sistem layanan faskes.
+                Daftarkan Rumah Sakit, Klinik Pratama, Klinik Utama, atau
+                Puskesmas baru secara instan ke sistem layanan faskes.
               </DialogDescription>
             </div>
           </div>
@@ -293,7 +311,8 @@ export function FacilityRegistrationModal({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5 sm:col-span-2">
                 <Label className="text-xs font-bold text-slate-700">
-                  Nama Fasilitas Kesehatan <span className="text-rose-500">*</span>
+                  Nama Fasilitas Kesehatan{" "}
+                  <span className="text-rose-500">*</span>
                 </Label>
                 <Input
                   required
@@ -315,11 +334,39 @@ export function FacilityRegistrationModal({
                   className="w-full"
                   buttonClassName="h-10 text-xs bg-white border border-slate-200 rounded-xl"
                   options={[
-                    { value: "klinik_pratama", label: "Klinik Pratama (Rawat Jalan)", icon: <Stethoscope className="h-3.5 w-3.5 text-teal-600" /> },
-                    { value: "klinik_utama", label: "Klinik Utama (Spesialistik)", icon: <Stethoscope className="h-3.5 w-3.5 text-indigo-600" /> },
-                    { value: "rumah_sakit", label: "Rumah Sakit (Tipe A/B/C/D)", icon: <Hospital className="h-3.5 w-3.5 text-blue-600" /> },
-                    { value: "puskesmas", label: "Puskesmas (Pusat Kesehatan Masyarakat)", icon: <Building2 className="h-3.5 w-3.5 text-emerald-600" /> },
-                    { value: "praktik_mandiri", label: "Praktik Mandiri (Dokter / Bidan)", icon: <Stethoscope className="h-3.5 w-3.5 text-purple-600" /> },
+                    {
+                      value: "klinik_pratama",
+                      label: "Klinik Pratama (Rawat Jalan)",
+                      icon: (
+                        <Stethoscope className="h-3.5 w-3.5 text-teal-600" />
+                      ),
+                    },
+                    {
+                      value: "klinik_utama",
+                      label: "Klinik Utama (Spesialistik)",
+                      icon: (
+                        <Stethoscope className="h-3.5 w-3.5 text-indigo-600" />
+                      ),
+                    },
+                    {
+                      value: "rumah_sakit",
+                      label: "Rumah Sakit (Tipe A/B/C/D)",
+                      icon: <Hospital className="h-3.5 w-3.5 text-blue-600" />,
+                    },
+                    {
+                      value: "puskesmas",
+                      label: "Puskesmas (Pusat Kesehatan Masyarakat)",
+                      icon: (
+                        <Building2 className="h-3.5 w-3.5 text-emerald-600" />
+                      ),
+                    },
+                    {
+                      value: "praktik_mandiri",
+                      label: "Praktik Mandiri (Dokter / Bidan)",
+                      icon: (
+                        <Stethoscope className="h-3.5 w-3.5 text-purple-600" />
+                      ),
+                    },
                   ]}
                 />
               </div>
@@ -340,7 +387,9 @@ export function FacilityRegistrationModal({
               </div>
 
               <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-xs font-bold text-slate-700">Alamat Lengkap Faskes</Label>
+                <Label className="text-xs font-bold text-slate-700">
+                  Alamat Lengkap Faskes
+                </Label>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-3 h-3.5 w-3.5 text-slate-400" />
                   <Input
@@ -353,7 +402,9 @@ export function FacilityRegistrationModal({
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700">Nomor Telepon / Kontak</Label>
+                <Label className="text-xs font-bold text-slate-700">
+                  Nomor Telepon / Kontak
+                </Label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                   <Input
@@ -367,7 +418,8 @@ export function FacilityRegistrationModal({
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold text-slate-700">
-                  Organization ID SATUSEHAT Kemenkes <span className="text-rose-500">*</span>
+                  Organization ID SATUSEHAT Kemenkes{" "}
+                  <span className="text-rose-500">*</span>
                 </Label>
                 <div className="relative">
                   <img
@@ -396,7 +448,9 @@ export function FacilityRegistrationModal({
                   alt="SATUSEHAT"
                   className="h-4 w-4 object-contain shrink-0"
                 />
-                <span>Kredensial OAuth2 SATUSEHAT Kemenkes (Terenkripsi AES-256)</span>
+                <span>
+                  Kredensial OAuth2 SATUSEHAT Kemenkes (Terenkripsi AES-256)
+                </span>
               </span>
               <div className="flex items-center gap-2">
                 <CustomSelect<"staging" | "production">
@@ -406,8 +460,16 @@ export function FacilityRegistrationModal({
                   className="w-40"
                   buttonClassName="h-7 text-[11px] font-semibold bg-white border border-slate-300 text-slate-700 rounded-lg px-2"
                   options={[
-                    { value: "staging", label: "Staging (Sandbox)", icon: <Server className="h-3 w-3 text-amber-500" /> },
-                    { value: "production", label: "Production (Live)", icon: <Zap className="h-3 w-3 text-emerald-600" /> },
+                    {
+                      value: "staging",
+                      label: "Staging (Sandbox)",
+                      icon: <Server className="h-3 w-3 text-amber-500" />,
+                    },
+                    {
+                      value: "production",
+                      label: "Production (Live)",
+                      icon: <Zap className="h-3 w-3 text-emerald-600" />,
+                    },
                   ]}
                 />
                 <Badge variant="outline" className="text-[9px] bg-white">
@@ -416,13 +478,17 @@ export function FacilityRegistrationModal({
               </div>
             </div>
             <p className="text-[11px] text-slate-500">
-              Kredensial disimpan terenkripsi di PostgreSQL per faskes. Anda dapat langsung menguji koneksi ke server Kemenkes sebelum menyimpan.
+              Kredensial disimpan terenkripsi di PostgreSQL per faskes. Anda
+              dapat langsung menguji koneksi ke server Kemenkes sebelum
+              menyimpan.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[11px] font-semibold text-slate-600">Client ID</Label>
+                  <Label className="text-[11px] font-semibold text-slate-600">
+                    Client ID
+                  </Label>
                   {satusehatClientId.length > 0 && (
                     <span
                       className={`text-[10px] font-mono font-medium ${
@@ -444,7 +510,8 @@ export function FacilityRegistrationModal({
                     setTestResult(null);
                   }}
                   className={`h-9 text-xs rounded-lg font-mono bg-white ${
-                    satusehatClientId.length > 0 && satusehatClientId.length !== 48
+                    satusehatClientId.length > 0 &&
+                    satusehatClientId.length !== 48
                       ? "border-amber-400 focus:border-amber-500"
                       : ""
                   }`}
@@ -453,7 +520,9 @@ export function FacilityRegistrationModal({
 
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <Label className="text-[11px] font-semibold text-slate-600">Client Secret</Label>
+                  <Label className="text-[11px] font-semibold text-slate-600">
+                    Client Secret
+                  </Label>
                   {satusehatClientSecret.length > 0 && (
                     <span
                       className={`text-[10px] font-mono font-medium ${
@@ -477,7 +546,8 @@ export function FacilityRegistrationModal({
                       setTestResult(null);
                     }}
                     className={`h-9 pr-8 text-xs rounded-lg font-mono bg-white ${
-                      satusehatClientSecret.length > 0 && satusehatClientSecret.length !== 64
+                      satusehatClientSecret.length > 0 &&
+                      satusehatClientSecret.length !== 64
                         ? "border-amber-400 focus:border-amber-500"
                         : ""
                     }`}
@@ -486,7 +556,11 @@ export function FacilityRegistrationModal({
                     type="button"
                     onClick={() => setShowClientSecret(!showClientSecret)}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none"
-                    title={showClientSecret ? "Sembunyikan secret" : "Tampilkan secret"}
+                    title={
+                      showClientSecret
+                        ? "Sembunyikan secret"
+                        : "Tampilkan secret"
+                    }
                   >
                     {showClientSecret ? (
                       <EyeOff className="h-4 w-4" />
@@ -506,7 +580,11 @@ export function FacilityRegistrationModal({
                   variant="outline"
                   size="sm"
                   onClick={handleTestConnection}
-                  disabled={isTestingConnection || !satusehatClientId || !satusehatClientSecret}
+                  disabled={
+                    isTestingConnection ||
+                    !satusehatClientId ||
+                    !satusehatClientSecret
+                  }
                   className="h-8 text-xs font-semibold rounded-lg bg-white hover:bg-slate-100 border-slate-300 text-teal-700 hover:text-teal-800 gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {isTestingConnection ? (
@@ -516,7 +594,6 @@ export function FacilityRegistrationModal({
                     </>
                   ) : (
                     <>
-                      <Sparkles className="h-3.5 w-3.5 text-teal-600" />
                       <span>Uji Koneksi SATUSEHAT Sekarang</span>
                     </>
                   )}
@@ -560,7 +637,9 @@ export function FacilityRegistrationModal({
             <div className="flex items-center justify-between pb-1 border-b border-slate-100">
               <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider">
                 <Layers className="h-4 w-4 text-teal-600" />
-                <span>2. Master Poliklinik / Unit Layanan ({departments.length})</span>
+                <span>
+                  2. Master Poliklinik / Unit Layanan ({departments.length})
+                </span>
               </div>
               <Button
                 type="button"
@@ -588,13 +667,17 @@ export function FacilityRegistrationModal({
                     <Input
                       placeholder="Nama Poli (mis: Poli Penyakit Dalam)"
                       value={dept.name}
-                      onChange={(e) => handleDepartmentChange(idx, "name", e.target.value)}
+                      onChange={(e) =>
+                        handleDepartmentChange(idx, "name", e.target.value)
+                      }
                       className="h-8 text-xs bg-white rounded-lg"
                     />
                     <Input
                       placeholder="Ruangan (mis: Ruang 101)"
                       value={dept.room}
-                      onChange={(e) => handleDepartmentChange(idx, "room", e.target.value)}
+                      onChange={(e) =>
+                        handleDepartmentChange(idx, "room", e.target.value)
+                      }
                       className="h-8 text-xs bg-white rounded-lg"
                     />
                     <div className="flex items-center gap-1.5">
@@ -605,7 +688,11 @@ export function FacilityRegistrationModal({
                         placeholder="Kuota"
                         value={dept.quota}
                         onChange={(e) =>
-                          handleDepartmentChange(idx, "quota", parseInt(e.target.value) || 30)
+                          handleDepartmentChange(
+                            idx,
+                            "quota",
+                            parseInt(e.target.value) || 30,
+                          )
                         }
                         className="h-8 text-xs bg-white rounded-lg font-mono w-20"
                       />
@@ -643,15 +730,21 @@ export function FacilityRegistrationModal({
               </Badge>
             </div>
             <p className="text-[11px] text-purple-800/80">
-              Akun ini digunakan oleh Penanggung Jawab / Admin Sistem untuk login pertama kali dan mendaftarkan dokter, perawat &amp; staf lainnya.
+              Akun ini digunakan oleh Penanggung Jawab / Admin Sistem untuk
+              login pertama kali dan mendaftarkan dokter, perawat &amp; staf
+              lainnya.
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-1 items-start">
               {/* Kolom 1: Nama PIC */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between h-5">
-                  <Label className="text-[11px] font-bold text-slate-700">Nama Admin / PIC</Label>
-                  <span className="text-[10px] text-purple-700/60 font-medium">Penanggung Jawab</span>
+                  <Label className="text-[11px] font-bold text-slate-700">
+                    Nama Admin / PIC
+                  </Label>
+                  <span className="text-[10px] text-purple-700/60 font-medium">
+                    Penanggung Jawab
+                  </span>
                 </div>
                 <Input
                   placeholder="mis: dr. Hendra / Budi S."
@@ -667,22 +760,38 @@ export function FacilityRegistrationModal({
               {/* Kolom 2: Username Login */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between h-5">
-                  <Label className="text-[11px] font-bold text-slate-700">Username Login</Label>
-                  <span className="text-[9px] font-bold text-purple-700 bg-purple-200/60 px-1.5 py-0.5 rounded">Wajib Unik</span>
+                  <Label className="text-[11px] font-bold text-slate-700">
+                    Username Login
+                  </Label>
+                  <span className="text-[9px] font-bold text-purple-700 bg-purple-200/60 px-1.5 py-0.5 rounded">
+                    Wajib Unik
+                  </span>
                 </div>
                 <Input
                   placeholder="mis: admin.sejahtera"
                   value={adminUsername}
-                  onChange={(e) => setAdminUsername(e.target.value.toLowerCase().replace(/\s+/g, ""))}
+                  onChange={(e) =>
+                    setAdminUsername(
+                      e.target.value.toLowerCase().replace(/\s+/g, ""),
+                    )
+                  }
                   className={`h-9 text-xs rounded-lg font-mono bg-white shadow-2xs focus-visible:ring-purple-500 ${
-                    ["admin", "superadmin", "dokter", "perawat"].includes(adminUsername.trim().toLowerCase())
+                    ["admin", "superadmin", "dokter", "perawat"].includes(
+                      adminUsername.trim().toLowerCase(),
+                    )
                       ? "border-rose-400 focus-visible:ring-rose-500"
                       : "border-slate-200"
                   }`}
                 />
-                {["admin", "superadmin", "dokter", "perawat"].includes(adminUsername.trim().toLowerCase()) ? (
+                {["admin", "superadmin", "dokter", "perawat"].includes(
+                  adminUsername.trim().toLowerCase(),
+                ) ? (
                   <p className="text-[10px] text-rose-600 font-medium leading-tight min-h-[14px]">
-                    Sudah dipakai. Coba: admin.{name.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10) || "faskes"}
+                    Sudah dipakai. Coba: admin.
+                    {name
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]/g, "")
+                      .slice(0, 10) || "faskes"}
                   </p>
                 ) : (
                   <p className="text-[10px] text-slate-500 leading-tight min-h-[14px]">
@@ -694,8 +803,12 @@ export function FacilityRegistrationModal({
               {/* Kolom 3: Password */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between h-5">
-                  <Label className="text-[11px] font-bold text-slate-700">Kata Sandi / Password</Label>
-                  <span className="text-[10px] text-purple-700/60 font-medium">Kredensial Awal</span>
+                  <Label className="text-[11px] font-bold text-slate-700">
+                    Kata Sandi / Password
+                  </Label>
+                  <span className="text-[10px] text-purple-700/60 font-medium">
+                    Kredensial Awal
+                  </span>
                 </div>
                 <div className="relative">
                   <Input
@@ -710,7 +823,11 @@ export function FacilityRegistrationModal({
                     onClick={() => setShowAdminPassword(!showAdminPassword)}
                     className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-purple-700 focus:outline-none transition-colors cursor-pointer"
                     tabIndex={-1}
-                    title={showAdminPassword ? "Sembunyikan password" : "Tampilkan password"}
+                    title={
+                      showAdminPassword
+                        ? "Sembunyikan password"
+                        : "Tampilkan password"
+                    }
                   >
                     {showAdminPassword ? (
                       <EyeOff className="h-4 w-4" />
@@ -729,7 +846,8 @@ export function FacilityRegistrationModal({
           {/* Footer Actions */}
           <DialogFooter className="pt-4 border-t border-slate-100 flex items-center justify-between sm:justify-between w-full">
             <p className="text-[11px] text-slate-400">
-              * Faskes akan langsung aktif di database &amp; dapat dipilih untuk pelayanan.
+              * Faskes akan langsung aktif di database &amp; dapat dipilih untuk
+              pelayanan.
             </p>
 
             <div className="flex items-center gap-2">

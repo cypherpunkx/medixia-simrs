@@ -92,6 +92,15 @@
   background: #94A3B8;
 }
 
+/* No Scrollbar Utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Clean EHR Cards & Elevation */
 .ehr-card {
   background-color: #FFFFFF;

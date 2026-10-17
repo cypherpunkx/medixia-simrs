@@ -14,20 +14,31 @@ import { Printer, CreditCard, QrCode, ShieldCheck, Activity, HeartPulse } from "
 import { PatientProfile } from "@/lib/satusehat/types";
 import { printHtmlElement } from "@/lib/print/print-service";
 import { useAuth } from "@/lib/auth/auth-context";
+import { useUIStore } from "@/stores/useUIStore";
+import { useClinicalStore } from "@/stores/useClinicalStore";
 
 interface PatientCardPrintModalProps {
-  isOpen: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
   patient?: PatientProfile | null;
   hospitalName?: string;
 }
 
 export function PatientCardPrintModal({
-  isOpen,
-  onOpenChange,
-  patient,
+  isOpen: propIsOpen,
+  onOpenChange: propOnOpenChange,
+  patient: propPatient,
   hospitalName = "RSUD Sehat Sejahtera",
-}: PatientCardPrintModalProps) {
+}: PatientCardPrintModalProps = {}) {
+  const storeIsOpen = useUIStore((s) => s.isPatientCardOpen);
+  const storeSetOpen = (open: boolean) =>
+    useUIStore.getState().setModalOpen("isPatientCardOpen", open);
+  const storePatient = useClinicalStore((s) => s.patient);
+
+  const isOpen = propIsOpen !== undefined ? propIsOpen : storeIsOpen;
+  const onOpenChange = propOnOpenChange ?? storeSetOpen;
+  const patient = propPatient !== undefined ? propPatient : storePatient;
+
   const { facility } = useAuth();
   const printAreaRef = useRef<HTMLDivElement>(null);
 

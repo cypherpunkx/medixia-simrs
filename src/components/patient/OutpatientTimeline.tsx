@@ -112,7 +112,7 @@ export function OutpatientTimeline({
                 <span>{enc.clinicDepartment}</span>
               </span>
               <span
-                className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${
+                className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
                   isSelected
                     ? "bg-teal-800 text-teal-100"
                     : "bg-slate-100 text-slate-500"
@@ -323,7 +323,7 @@ export function OutpatientTimeline({
                               <span className="font-bold text-xs text-slate-900">
                                 {lr.testName}
                               </span>
-                              <span className="text-[9px] font-mono font-bold text-teal-800 bg-teal-50 px-1.5 py-0.2 rounded border border-teal-200">
+                              <span className="text-[9px] font-mono font-bold text-teal-800 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
                                 {lr.testCode}
                               </span>
                             </div>
