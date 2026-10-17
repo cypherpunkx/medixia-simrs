@@ -56,7 +56,14 @@ export const QueueRepository = {
             conditions.push(eq(queueItems.queueDate, date));
           } else {
             const todayStr = getLocalDateString();
-            conditions.push(eq(queueItems.queueDate, todayStr));
+            // Konsisten & Deterministik: Tampilkan seluruh antrean hari ini,
+            // serta antrean aktif (menunggu / sedang diperiksa) agar tidak hilang-timbul.
+            conditions.push(
+              or(
+                eq(queueItems.queueDate, todayStr),
+                inArray(queueItems.status, ["arrived", "in-progress"])
+              )!
+            );
           }
         }
 
@@ -67,26 +74,8 @@ export const QueueRepository = {
           query = query.where(and(...conditions)) as any;
         }
 
-        let rows = await query
+        const rows = await query
           .orderBy(desc(queueItems.queueDate), asc(queueItems.arrivalTimestamp));
-
-        // Fallback: If no records match today's date yet and no explicit past filter was queried, fetch any active queue items
-        if (rows.length === 0 && !date && !startDate && !endDate && !all) {
-          let fallbackWhere: SQL | undefined = undefined;
-          if (deptFilter) {
-            fallbackWhere = eq(queueItems.department, deptFilter);
-          } else if (deptsList && deptsList.length > 0) {
-            fallbackWhere = inArray(queueItems.department, deptsList);
-          } else if (facilityDeptNames && facilityDeptNames.length > 0) {
-            fallbackWhere = inArray(queueItems.department, facilityDeptNames);
-          }
-
-          let fallbackQuery = db.select().from(queueItems);
-          if (fallbackWhere) {
-            fallbackQuery = fallbackQuery.where(fallbackWhere) as any;
-          }
-          rows = await fallbackQuery.orderBy(asc(queueItems.arrivalTimestamp));
-        }
 
         if (rows.length === 0) return [];
 
@@ -102,15 +91,16 @@ export const QueueRepository = {
         if (encounterIds.length > 0) encConditions.push(inArray(encounters.id, encounterIds));
         if (regNumbers.length > 0) encConditions.push(inArray(encounters.registrationNumber, regNumbers));
 
-        const encounterByEncId = new Map<string, { id: string; registrationNumber: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
-        const encounterByRegNum = new Map<string, { id: string; registrationNumber: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
-        const encounterByPatientId = new Map<string, { id: string; registrationNumber: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
+        const encounterByEncId = new Map<string, { id: string; registrationNumber: string | null; clinicDepartment: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
+        const encounterByRegNum = new Map<string, { id: string; registrationNumber: string | null; clinicDepartment: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
+        const encounterByPatientDept = new Map<string, { id: string; registrationNumber: string | null; clinicDepartment: string | null; syncStatus: string | null; satusehatEncounterId: string | null }>();
 
         if (encConditions.length > 0 || patientIds.length > 0) {
           const encRows = await db
             .select({
               id: encounters.id,
               registrationNumber: encounters.registrationNumber,
+              clinicDepartment: encounters.clinicDepartment,
               patientId: encounters.patientId,
               syncStatus: encounters.syncStatus,
               satusehatEncounterId: encounters.satusehatEncounterId,
@@ -125,7 +115,9 @@ export const QueueRepository = {
           for (const enc of encRows) {
             encounterByEncId.set(enc.id, enc);
             if (enc.registrationNumber) encounterByRegNum.set(enc.registrationNumber, enc);
-            if (enc.patientId) encounterByPatientId.set(enc.patientId, enc);
+            if (enc.patientId && enc.clinicDepartment) {
+              encounterByPatientDept.set(`${enc.patientId}_${enc.clinicDepartment}`, enc);
+            }
           }
         }
 
@@ -137,7 +129,7 @@ export const QueueRepository = {
             const matchedEnc =
               (row.encounterId ? encounterByEncId.get(row.encounterId) : null) ||
               (row.registrationNumber ? encounterByRegNum.get(row.registrationNumber) : null) ||
-              encounterByPatientId.get(row.patientId);
+              encounterByPatientDept.get(`${row.patientId}_${row.department}`);
 
             // True sync status derived from actual clinical encounter
             const isSynced =
@@ -192,7 +184,7 @@ export const QueueRepository = {
     }
 
     const todayStr = getLocalDateString();
-    const id = item.id || generatePrefixedId("q_");
+    let queueId = item.id;
 
     // 1. Resolve encounter and its facility context if available
     let resolvedEncounterId = item.encounterId || null;
@@ -239,6 +231,16 @@ export const QueueRepository = {
 
     // 2. Resolve departmentId strictly within facility context
     let resolvedDepartmentId = item.departmentId || null;
+    if (resolvedDepartmentId) {
+      const existsDept = await db
+        .select({ id: departments.id })
+        .from(departments)
+        .where(eq(departments.id, resolvedDepartmentId))
+        .limit(1);
+      if (existsDept.length === 0) {
+        resolvedDepartmentId = null;
+      }
+    }
     if (!resolvedDepartmentId && item.department) {
       const deptCondition = encFacilityId
         ? and(eq(departments.name, item.department), eq(departments.facilityId, encFacilityId))
@@ -256,6 +258,16 @@ export const QueueRepository = {
 
     // 3. Resolve doctorId strictly within facility context
     let resolvedDoctorId = item.doctorId || null;
+    if (resolvedDoctorId) {
+      const existsDoc = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.id, resolvedDoctorId))
+        .limit(1);
+      if (existsDoc.length === 0) {
+        resolvedDoctorId = null;
+      }
+    }
     if (!resolvedDoctorId && item.doctor) {
       const docCleanName = item.doctor.split(" (")[0].trim();
       const userCondition = encFacilityId
@@ -272,7 +284,24 @@ export const QueueRepository = {
       }
     }
 
-    const existingRows = await db.select().from(queueItems).where(eq(queueItems.id, id)).limit(1);
+    let existingRows = queueId
+      ? await db.select().from(queueItems).where(eq(queueItems.id, queueId)).limit(1)
+      : [];
+
+    // Idempotency Guard: Jika queueId belum ada namun registrationNumber disertakan, periksa antrean yang sudah terdaftar
+    if (existingRows.length === 0 && item.registrationNumber) {
+      const existingByReg = await db
+        .select()
+        .from(queueItems)
+        .where(eq(queueItems.registrationNumber, item.registrationNumber))
+        .limit(1);
+      if (existingByReg.length > 0) {
+        queueId = existingByReg[0].id;
+        existingRows = existingByReg;
+      }
+    }
+
+    const id = queueId || generatePrefixedId("q_");
     const existing = existingRows[0];
 
     const regNumToUse =

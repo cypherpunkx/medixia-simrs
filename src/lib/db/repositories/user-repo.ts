@@ -161,58 +161,7 @@ export const UserRepository = {
       }));
     } catch (error) {
       console.error("Gagal mengambil daftar pengguna dari DB:", error);
-      // Fallback default core users
-      return [
-        {
-          id: "usr-superadmin",
-          username: "superadmin",
-          name: "Super Admin (Vendor RME)",
-          role: "super_admin",
-          department: "Pusat Operasi RME Vendor",
-          facilityName: "Konsol Multi-Faskes Pusat",
-          facilityType: "rumah_sakit",
-          isActive: true,
-        },
-        {
-          id: "usr-admin",
-          facilityId: "fac-rsud-01",
-          username: "admin",
-          name: "Administrator SIMRS",
-          role: "admin",
-          department: "Instalasi SIMRS & TI",
-          facilityName: "RS Umum Daerah Sehat Sejahtera",
-          facilityType: "rumah_sakit",
-          isActive: true,
-        },
-        {
-          id: "usr-dr-rian",
-          facilityId: "fac-rsud-01",
-          departmentId: "dept-rs-01",
-          username: "dr.rian",
-          name: "dr. Rian Pratama, Sp.PD",
-          role: "doctor",
-          sip: "SIP.446/089/DS/Dinkes/2026",
-          ihsPractitionerId: "N10000001",
-          department: "Poli Penyakit Dalam",
-          facilityName: "RS Umum Daerah Sehat Sejahtera",
-          facilityType: "rumah_sakit",
-          isActive: true,
-        },
-        {
-          id: "usr-nurse-siti",
-          facilityId: "fac-rsud-01",
-          departmentId: "dept-rs-01",
-          username: "ns.siti",
-          name: "Ns. Siti Rahmawati, S.Kep",
-          role: "nurse",
-          sip: "SIP.446/102/SKEP/Dinkes/2026",
-          ihsPractitionerId: "N10000001",
-          department: "Poli Penyakit Dalam",
-          facilityName: "RS Umum Daerah Sehat Sejahtera",
-          facilityType: "rumah_sakit",
-          isActive: true,
-        },
-      ];
+      return [];
     }
   },
 
@@ -300,35 +249,11 @@ export const UserRepository = {
         );
       });
 
-      // Jika belum ada user superadmin di tabel users DB, izinkan fallback bawaan
-      if (!matched && (cleanUsername === "superadmin" || cleanUsername === "super_admin" || cleanUsername === "vendor")) {
-        const p = passwordAttempt.trim();
-        if (p === "password123" || p === "admin123" || p === "superadmin123") {
-          return {
-            id: "usr-superadmin",
-            username: "superadmin",
-            name: "Super Admin (Vendor RME)",
-            role: "super_admin",
-            department: "Pusat Operasi RME Vendor",
-            facilityName: "Konsol Multi-Faskes Pusat",
-            facilityType: "rumah_sakit",
-            isActive: true,
-          };
-        }
-      }
-
       if (!matched) return null;
 
-      // Verifikasi kata sandi dengan hash bcrypt (aman & anti-bypass)
+      // Verifikasi kata sandi dengan hash bcrypt secara ketat (standar keamanan produksi)
       const p = passwordAttempt.trim();
-      let validPass = await verifyPassword(p, matched.passwordHash);
-
-      // Dukungan kompatibilitas developer: izinkan admin123 dan password123 untuk superadmin
-      if (!validPass && (matched.role === "super_admin" || matched.username === "superadmin")) {
-        if (p === "password123" || p === "admin123" || p === "superadmin123" || p === "admin") {
-          validPass = true;
-        }
-      }
+      const validPass = await verifyPassword(p, matched.passwordHash);
 
       if (!validPass) {
         return null;

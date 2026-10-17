@@ -77,9 +77,15 @@ medixia-simrs-satusehat/
 │   ├── BPMN_FSD_Alur_Kerja_Klinis_SIMRS_SATUSEHAT.pdf
 │   ├── User_Manual_Juknis_Operasional_SIMRS_SATUSEHAT.pdf
 │   └── Investment_Deck_and_Executive_Overview_SIMRS_SATUSEHAT.pdf
-├── scripts/                    # Script seeding database & benchmark utilities
-│   ├── seed.ts                 # Seeder master pasien, poli, antrean, dan rekam medis PostgreSQL
-│   └── benchmark-performance.ts# Benchmark suite performa query & cache
+├── scripts/                    # Skrip migrasi, seeder modular & automasi database
+│   ├── migrate.ts              # Migrasi DDL 20 tabel relasional, mutasi kolom & 46 indeks
+│   ├── clean_db.ts             # Pembersihan 14 tabel transaksi operasional & reset sequences
+│   ├── seed.ts                 # Master Database Orchestrator (Migrasi -> Clean -> Master -> Transaksi)
+│   ├── seed_master.ts          # Seeder master faskes, poli, users, obat KFA, ICD-10 & ICD-9
+│   ├── seed_users.ts           # Seeder khusus 15 akun nakes & pengguna RBAC
+│   ├── seed_transactions.ts   # Seeder 14 tabel data transaksi operasional klinis
+│   ├── test_satusehat_error_logging.ts # Smoke test integrasi & penanganan error FHIR
+│   └── fixtures/               # Dataset sampel klinis terisolasi (mock-data)
 ├── src/
 │   ├── app/                    # Next.js App Router (Halaman Utama & API Endpoints)
 │   │   ├── api/

@@ -123,6 +123,18 @@ async function buildEncounter(row: typeof encounters.$inferSelect): Promise<Outp
     instructions: rx.instructions,
     satusehatMedicationRequestId: rx.satusehatMedicationRequestId || undefined,
     satusehatMedicationId: rx.satusehatMedicationId || undefined,
+    dispenseStatus: (rx.dispenseStatus as PrescriptionItem["dispenseStatus"]) || "pending_review",
+    reviewedBy: rx.reviewedBy || undefined,
+    reviewedAt: rx.reviewedAt || undefined,
+    preparedBy: rx.preparedBy || undefined,
+    preparedAt: rx.preparedAt || undefined,
+    dispensedBy: rx.dispensedBy || undefined,
+    dispensedAt: rx.dispensedAt || undefined,
+    satusehatMedicationDispenseId: rx.satusehatMedicationDispenseId || undefined,
+    etiquetteType: (rx.etiquetteType as "white" | "blue") || "white",
+    batchNumber: rx.batchNumber || undefined,
+    expiryDate: rx.expiryDate || undefined,
+    counselingNotes: rx.counselingNotes || undefined,
   }));
 
   const diagnosticOrdersData: DiagnosticOrder[] = orderRows.map((o: typeof diagnosticOrders.$inferSelect) => ({
@@ -189,13 +201,33 @@ async function buildEncounter(row: typeof encounters.$inferSelect): Promise<Outp
     noteText: a.noteText,
   }));
 
-  let fName = "RS Umum Daerah Sehat Sejahtera";
-  let fOrgId = "b15a7ae7-f366-4a84-8385-0b8196c05002";
+  let fName = "";
+  let fOrgId = "";
   if (row.facilityId) {
     const fRow = await db.select().from(facilities).where(eq(facilities.id, row.facilityId)).limit(1);
     if (fRow[0]) {
       fName = fRow[0].name;
       fOrgId = fRow[0].satusehatOrgId;
+    }
+  }
+
+  let locId: string | undefined = undefined;
+  let locName: string | undefined = undefined;
+  if (row.departmentId) {
+    const dRow = await db.select().from(departments).where(eq(departments.id, row.departmentId)).limit(1);
+    if (dRow[0]?.satusehatLocationId) {
+      locId = dRow[0].satusehatLocationId;
+      locName = `Ruang Pelayanan ${dRow[0].name} (${dRow[0].room || "Ruang Periksa"})`;
+    }
+  } else if (row.clinicDepartment && row.facilityId) {
+    const dRow = await db
+      .select()
+      .from(departments)
+      .where(and(eq(departments.facilityId, row.facilityId), eq(departments.name, row.clinicDepartment)))
+      .limit(1);
+    if (dRow[0]?.satusehatLocationId) {
+      locId = dRow[0].satusehatLocationId;
+      locName = `Ruang Pelayanan ${dRow[0].name} (${dRow[0].room || "Ruang Periksa"})`;
     }
   }
 
@@ -206,6 +238,8 @@ async function buildEncounter(row: typeof encounters.$inferSelect): Promise<Outp
     departmentId: row.departmentId || undefined,
     doctorId: row.doctorId || undefined,
     satusehatEncounterId: row.satusehatEncounterId || undefined,
+    locationId: locId,
+    locationName: locName,
     visitDate: row.visitDate,
     clinicDepartment: row.clinicDepartment,
     doctorName: row.doctorName,
@@ -352,6 +386,18 @@ async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSele
       instructions: rx.instructions,
       satusehatMedicationRequestId: rx.satusehatMedicationRequestId || undefined,
       satusehatMedicationId: rx.satusehatMedicationId || undefined,
+      dispenseStatus: (rx.dispenseStatus as PrescriptionItem["dispenseStatus"]) || "pending_review",
+      reviewedBy: rx.reviewedBy || undefined,
+      reviewedAt: rx.reviewedAt || undefined,
+      preparedBy: rx.preparedBy || undefined,
+      preparedAt: rx.preparedAt || undefined,
+      dispensedBy: rx.dispensedBy || undefined,
+      dispensedAt: rx.dispensedAt || undefined,
+      satusehatMedicationDispenseId: rx.satusehatMedicationDispenseId || undefined,
+      etiquetteType: (rx.etiquetteType as "white" | "blue") || "white",
+      batchNumber: rx.batchNumber || undefined,
+      expiryDate: rx.expiryDate || undefined,
+      counselingNotes: rx.counselingNotes || undefined,
     });
     prescriptionsMap.set(rx.encounterId, list);
   }
@@ -445,9 +491,14 @@ async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSele
     addendumMap.set(a.encounterId, list);
   }
 
-  // Pre-fetch fasilitas untuk pemetaan multi-tenant murni dari database
-  const allFacs = await db.select({ id: facilities.id, name: facilities.name, orgId: facilities.satusehatOrgId }).from(facilities);
+  // Pre-fetch fasilitas & departemen untuk pemetaan lokasi multi-tenant murni dari database
+  const [allFacs, allDepts] = await Promise.all([
+    db.select({ id: facilities.id, name: facilities.name, orgId: facilities.satusehatOrgId }).from(facilities),
+    db.select({ id: departments.id, facilityId: departments.facilityId, name: departments.name, room: departments.room, satusehatLocationId: departments.satusehatLocationId }).from(departments),
+  ]);
   const facMap = new Map(allFacs.map((f) => [f.id, { name: f.name, orgId: f.orgId }]));
+  const deptMapById = new Map(allDepts.map((d) => [d.id, d]));
+  const deptMapByNameAndFac = new Map(allDepts.map((d) => [`${d.facilityId}_${d.name.toLowerCase()}`, d]));
 
   // Construct OutpatientEncounter objects in memory
   return encounterRows.map((row) => {
@@ -461,6 +512,9 @@ async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSele
     const syncList = syncMap.get(encId);
     const addList = addendumMap.get(encId);
     const fMeta = row.facilityId ? facMap.get(row.facilityId) : null;
+    const dMeta =
+      (row.departmentId ? deptMapById.get(row.departmentId) : null) ||
+      (row.facilityId && row.clinicDepartment ? deptMapByNameAndFac.get(`${row.facilityId}_${row.clinicDepartment.toLowerCase()}`) : null);
 
     return {
       id: row.id,
@@ -469,13 +523,15 @@ async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSele
       departmentId: row.departmentId || undefined,
       doctorId: row.doctorId || undefined,
       satusehatEncounterId: row.satusehatEncounterId || undefined,
+      locationId: dMeta?.satusehatLocationId || undefined,
+      locationName: dMeta ? `Ruang Pelayanan ${dMeta.name} (${dMeta.room || "Ruang Periksa"})` : undefined,
       visitDate: row.visitDate,
       clinicDepartment: row.clinicDepartment,
       doctorName: row.doctorName,
       doctorSip: row.doctorSip,
       doctorIhsId: row.doctorIhsId || undefined,
-      hospitalName: fMeta?.name || "RS Umum Daerah Sehat Sejahtera",
-      hospitalOrgId: fMeta?.orgId || "b15a7ae7-f366-4a84-8385-0b8196c05002",
+      hospitalName: fMeta?.name || "",
+      hospitalOrgId: fMeta?.orgId || "",
       chiefComplaint: row.chiefComplaint,
       anamnesis: row.anamnesis,
       vitals: vitalsMap.get(encId),
@@ -507,15 +563,19 @@ async function buildEncountersBatch(encounterRows: (typeof encounters.$inferSele
 }
 
 export const EncounterRepository = {
-  async getAll(): Promise<OutpatientEncounter[]> {
-    return MemoryCache.getOrSetAsync(
-      CACHE_CONFIG.KEYS.ENCOUNTER_ALL,
-      async () => {
-        const rows = await db.select().from(encounters).orderBy(desc(encounters.visitDate));
-        return await buildEncountersBatch(rows);
-      },
-      CACHE_CONFIG.TTL.MEDIUM
-    );
+  async getAll(options?: { page?: number; limit?: number }): Promise<OutpatientEncounter[]> {
+    const page = Math.max(1, options?.page || 1);
+    const limit = Math.min(100, Math.max(1, options?.limit || 50));
+    const offset = (page - 1) * limit;
+
+    const rows = await db
+      .select()
+      .from(encounters)
+      .where(eq(encounters.isDeleted, false))
+      .orderBy(desc(encounters.visitDate))
+      .limit(limit)
+      .offset(offset);
+    return await buildEncountersBatch(rows);
   },
 
   async getById(id: string): Promise<OutpatientEncounter | null> {
@@ -523,7 +583,11 @@ export const EncounterRepository = {
     return MemoryCache.getOrSetAsync(
       CACHE_CONFIG.KEYS.ENCOUNTER_SINGLE(id),
       async () => {
-        const rows = await db.select().from(encounters).where(eq(encounters.id, id)).limit(1);
+        const rows = await db
+          .select()
+          .from(encounters)
+          .where(and(eq(encounters.id, id), eq(encounters.isDeleted, false)))
+          .limit(1);
         return rows[0] ? await buildEncounter(rows[0]) : null;
       },
       CACHE_CONFIG.TTL.MEDIUM
@@ -538,7 +602,7 @@ export const EncounterRepository = {
         const rows = await db
           .select()
           .from(encounters)
-          .where(eq(encounters.patientId, patientId))
+          .where(and(eq(encounters.patientId, patientId), eq(encounters.isDeleted, false)))
           .orderBy(desc(encounters.visitDate));
         return await buildEncountersBatch(rows);
       },
@@ -547,10 +611,29 @@ export const EncounterRepository = {
   },
 
   async create(enc: OutpatientEncounter, patientId: string): Promise<OutpatientEncounter> {
-    const encounterId = enc.id || generatePrefixedId("enc_");
-    const now = new Date().toISOString();
+    let encounterId = enc.id;
+    let existingRows = encounterId
+      ? await db.select().from(encounters).where(eq(encounters.id, encounterId)).limit(1)
+      : [];
 
-    const existingRows = await db.select().from(encounters).where(eq(encounters.id, encounterId)).limit(1);
+    // Idempotency Guard: Jika encounter.id belum ada namun registrationNumber disertakan, cari record yang sudah ada
+    if (existingRows.length === 0 && enc.registrationNumber) {
+      const existingByReg = await db
+        .select()
+        .from(encounters)
+        .where(eq(encounters.registrationNumber, enc.registrationNumber))
+        .limit(1);
+      if (existingByReg.length > 0) {
+        encounterId = existingByReg[0].id;
+        existingRows = existingByReg;
+      }
+    }
+
+    if (!encounterId) {
+      encounterId = generatePrefixedId("enc_");
+    }
+
+    const now = new Date().toISOString();
     const existing = existingRows[0];
 
     // 1. Resolve facilityId strictly (from encounter -> existing encounter -> facilities table lookup by org/name -> active default)
@@ -855,6 +938,18 @@ export const EncounterRepository = {
             instructions: rx.instructions || "Minum teratur",
             satusehatMedicationRequestId: rx.satusehatMedicationRequestId || null,
             satusehatMedicationId: rx.satusehatMedicationId || null,
+            dispenseStatus: rx.dispenseStatus || "pending_review",
+            reviewedBy: rx.reviewedBy || null,
+            reviewedAt: rx.reviewedAt || null,
+            preparedBy: rx.preparedBy || null,
+            preparedAt: rx.preparedAt || null,
+            dispensedBy: rx.dispensedBy || null,
+            dispensedAt: rx.dispensedAt || null,
+            satusehatMedicationDispenseId: rx.satusehatMedicationDispenseId || null,
+            etiquetteType: rx.etiquetteType || (rx.form?.toLowerCase().includes("salep") || rx.form?.toLowerCase().includes("tetes") || rx.form?.toLowerCase().includes("injeksi") ? "blue" : "white"),
+            batchNumber: rx.batchNumber || null,
+            expiryDate: rx.expiryDate || null,
+            counselingNotes: rx.counselingNotes || null,
           });
         }
       }
@@ -1218,5 +1313,26 @@ export const EncounterRepository = {
       lockedAt: now,
       lockedBy,
     });
+  },
+
+  /**
+   * Resilient Soft Delete: Prevents catastrophic cascade data loss of EHR records
+   */
+  async softDelete(id: string): Promise<boolean> {
+    const existing = await this.getById(id);
+    if (!existing) return false;
+
+    const now = new Date().toISOString();
+    await db
+      .update(encounters)
+      .set({
+        isDeleted: true,
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(encounters.id, id));
+
+    InvalidationService.invalidateEncounter(id, existing.patientId);
+    return true;
   },
 };

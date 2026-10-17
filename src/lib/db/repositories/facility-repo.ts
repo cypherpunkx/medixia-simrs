@@ -70,29 +70,7 @@ export const FacilityRepository = {
       return result;
     } catch (error) {
       console.error("Gagal mengambil daftar faskes dari DB:", error);
-      // Fallback default
-      return [
-        {
-          id: "fac-rsud-01",
-          name: "RS Umum Daerah Sehat Sejahtera",
-          type: "rumah_sakit",
-          satusehatOrgId: "10000004",
-          satusehatEnv: "staging",
-          satusehatStatus: "connected",
-          address: "Jl. Kesehatan Medika No. 45, Jakarta Pusat",
-          phone: "021-5550199",
-          licenseNumber: "440/012/Dinkes/RS-B/2024",
-          isActive: true,
-          departments: [
-            { id: "dept-rs-01", facilityId: "fac-rsud-01", code: "INT", queuePrefix: "A", name: "Poli Penyakit Dalam", room: "Ruang 204 (Lt. 2)", quota: 35, defaultDoctorName: "dr. Rian Pratama, Sp.PD", isActive: true, satusehatLocationId: "LOC-10000004-INT" },
-            { id: "dept-rs-02", facilityId: "fac-rsud-01", code: "UMU", queuePrefix: "B", name: "Poli Umum", room: "Ruang 101 (Lt. 1)", quota: 50, defaultDoctorName: "dr. Amanda Putri, M.Biomed", isActive: true, satusehatLocationId: "LOC-10000004-UMU" },
-            { id: "dept-rs-03", facilityId: "fac-rsud-01", code: "ANA", queuePrefix: "C", name: "Poli Anak", room: "Ruang 208 (Lt. 2)", quota: 30, defaultDoctorName: "dr. Sarah Amanda, Sp.A", isActive: true, satusehatLocationId: "LOC-10000004-ANA" },
-            { id: "dept-rs-04", facilityId: "fac-rsud-01", code: "GIG", queuePrefix: "D", name: "Poli Gigi & Mulut", room: "Ruang 105 (Lt. 1)", quota: 25, defaultDoctorName: "drg. Hendra Wijaya", isActive: true, satusehatLocationId: "LOC-10000004-GIG" },
-            { id: "dept-rs-05", facilityId: "fac-rsud-01", code: "JAN", queuePrefix: "E", name: "Poli Jantung & Pembuluh Darah", room: "Ruang 301 (Lt. 3)", quota: 20, defaultDoctorName: "dr. Maya Kartika, Sp.JP", isActive: true, satusehatLocationId: "LOC-10000004-JAN" },
-            { id: "dept-rs-06", facilityId: "fac-rsud-01", code: "MAT", queuePrefix: "F", name: "Poli Mata", room: "Ruang 107 (Lt. 1)", quota: 25, defaultDoctorName: "dr. Budi Setiawan, Sp.M", isActive: true, satusehatLocationId: "LOC-10000004-MAT" },
-          ],
-        },
-      ];
+      return [];
     }
   },
 

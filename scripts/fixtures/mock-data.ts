@@ -1,4 +1,4 @@
-import { OutpatientEncounter, PatientProfile, ClinicQueuePatientItem } from "./types";
+import { OutpatientEncounter, PatientProfile, ClinicQueuePatientItem } from "../../src/lib/satusehat/types";
 
 export const MOCK_PATIENT: PatientProfile = {
   id: "P02478375538", // SATUSEHAT Patient ID Resmi Kemenkes RI (Benchmark Pasien #1)

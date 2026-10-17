@@ -37,6 +37,47 @@ export const OutboxRepository = {
     // Pertama kali masuk: siap diproses segera (next_retry_at = now)
     const nextRetryAt = now.toISOString();
 
+    // Idempotensi: Cek apakah sudah ada antrean pending/processing/failed untuk encounter & resourceType ini
+    const existing = await db
+      .select()
+      .from(satusehatOutbox)
+      .where(
+        and(
+          eq(satusehatOutbox.encounterId, encounterId),
+          eq(satusehatOutbox.resourceType, resourceType),
+          inArray(satusehatOutbox.status, ["pending", "processing", "failed"])
+        )
+      )
+      .limit(1);
+
+    if (existing.length > 0) {
+      const item = existing[0];
+      await db
+        .update(satusehatOutbox)
+        .set({
+          payload: payloadStr,
+          status: "pending",
+          nextRetryAt,
+          errorMessage: null,
+          updatedAt: now.toISOString(),
+        })
+        .where(eq(satusehatOutbox.id, item.id));
+
+      return {
+        id: item.id,
+        encounterId,
+        resourceType,
+        payload: payloadStr,
+        status: "pending",
+        retryCount: item.retryCount,
+        maxRetries: item.maxRetries,
+        nextRetryAt,
+        errorMessage: null,
+        createdAt: item.createdAt,
+        updatedAt: now.toISOString(),
+      };
+    }
+
     await db.insert(satusehatOutbox).values({
       id,
       encounterId,
@@ -122,6 +163,25 @@ export const OutboxRepository = {
         updatedAt: new Date().toISOString(),
       })
       .where(eq(satusehatOutbox.id, id));
+  },
+
+  /**
+   * Menandai semua antrean untuk encounter tertentu sebagai synced
+   */
+  async markSyncedByEncounter(encounterId: string): Promise<void> {
+    await db
+      .update(satusehatOutbox)
+      .set({
+        status: "synced",
+        errorMessage: null,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(
+        and(
+          eq(satusehatOutbox.encounterId, encounterId),
+          inArray(satusehatOutbox.status, ["pending", "processing", "failed"])
+        )
+      );
   },
 
   /**

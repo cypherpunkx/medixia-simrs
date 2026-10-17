@@ -1,6 +1,6 @@
 import { db } from "../index";
 import { patients } from "../schema";
-import { eq, or, ilike, desc, inArray } from "drizzle-orm";
+import { eq, or, ilike, desc, inArray, and } from "drizzle-orm";
 import { PatientProfile } from "@/lib/satusehat/types";
 import { MemoryCache, CACHE_CONFIG, InvalidationService } from "@/lib/cache";
 import { generatePrefixedId, generateMRN } from "@/lib/id-generator";
@@ -42,15 +42,19 @@ function mapRowToPatient(row: typeof patients.$inferSelect): PatientProfile {
 }
 
 export const PatientRepository = {
-  async getAll(): Promise<PatientProfile[]> {
-    return MemoryCache.getOrSetAsync(
-      CACHE_CONFIG.KEYS.PATIENTS_ALL,
-      async () => {
-        const rows = await db.select().from(patients).orderBy(desc(patients.updatedAt));
-        return rows.map(mapRowToPatient);
-      },
-      CACHE_CONFIG.TTL.LONG
-    );
+  async getAll(options?: { page?: number; limit?: number }): Promise<PatientProfile[]> {
+    const page = Math.max(1, options?.page || 1);
+    const limit = Math.min(100, Math.max(1, options?.limit || 50));
+    const offset = (page - 1) * limit;
+
+    const rows = await db
+      .select()
+      .from(patients)
+      .where(eq(patients.isDeleted, false))
+      .orderBy(desc(patients.updatedAt))
+      .limit(limit)
+      .offset(offset);
+    return rows.map(mapRowToPatient);
   },
 
   async getById(id: string): Promise<PatientProfile | null> {
@@ -58,7 +62,11 @@ export const PatientRepository = {
     return MemoryCache.getOrSetAsync(
       CACHE_CONFIG.KEYS.PATIENT(id),
       async () => {
-        const rows = await db.select().from(patients).where(eq(patients.id, id)).limit(1);
+        const rows = await db
+          .select()
+          .from(patients)
+          .where(and(eq(patients.id, id), eq(patients.isDeleted, false)))
+          .limit(1);
         return rows[0] ? mapRowToPatient(rows[0]) : null;
       },
       CACHE_CONFIG.TTL.LONG
@@ -84,7 +92,10 @@ export const PatientRepository = {
 
     // Single Batch Query for missing IDs
     if (missingIds.length > 0) {
-      const rows = await db.select().from(patients).where(inArray(patients.id, missingIds));
+      const rows = await db
+        .select()
+        .from(patients)
+        .where(and(inArray(patients.id, missingIds), eq(patients.isDeleted, false)));
       for (const row of rows) {
         const patient = mapRowToPatient(row);
         resultMap.set(patient.id, patient);
@@ -100,7 +111,11 @@ export const PatientRepository = {
     return MemoryCache.getOrSetAsync(
       CACHE_CONFIG.KEYS.PATIENT_NIK(nik),
       async () => {
-        const rows = await db.select().from(patients).where(eq(patients.nik, nik)).limit(1);
+        const rows = await db
+          .select()
+          .from(patients)
+          .where(and(eq(patients.nik, nik), eq(patients.isDeleted, false)))
+          .limit(1);
         return rows[0] ? mapRowToPatient(rows[0]) : null;
       },
       CACHE_CONFIG.TTL.LONG
@@ -112,27 +127,36 @@ export const PatientRepository = {
     return MemoryCache.getOrSetAsync(
       CACHE_CONFIG.KEYS.PATIENT_MRN(mrn),
       async () => {
-        const rows = await db.select().from(patients).where(eq(patients.mrn, mrn)).limit(1);
+        const rows = await db
+          .select()
+          .from(patients)
+          .where(and(eq(patients.mrn, mrn), eq(patients.isDeleted, false)))
+          .limit(1);
         return rows[0] ? mapRowToPatient(rows[0]) : null;
       },
       CACHE_CONFIG.TTL.LONG
     );
   },
 
-  async search(q: string): Promise<PatientProfile[]> {
+  async search(q: string, limitCount: number = 50): Promise<PatientProfile[]> {
     const cleanQ = `%${q.trim()}%`;
+    const safeLimit = Math.min(100, Math.max(1, limitCount));
     const rows = await db
       .select()
       .from(patients)
       .where(
-        or(
-          ilike(patients.name, cleanQ),
-          ilike(patients.nik, cleanQ),
-          ilike(patients.mrn, cleanQ),
-          ilike(patients.phone, cleanQ)
+        and(
+          eq(patients.isDeleted, false),
+          or(
+            ilike(patients.name, cleanQ),
+            ilike(patients.nik, cleanQ),
+            ilike(patients.mrn, cleanQ),
+            ilike(patients.phone, cleanQ)
+          )
         )
       )
-      .orderBy(desc(patients.updatedAt));
+      .orderBy(desc(patients.updatedAt))
+      .limit(safeLimit);
     return rows.map(mapRowToPatient);
   },
 
@@ -227,5 +251,26 @@ export const PatientRepository = {
 
     InvalidationService.invalidatePatient(id, existing.nik, existing.mrn);
     return await this.getById(id);
+  },
+
+  /**
+   * Resilient Soft Delete: Prevents catastrophic cascade data loss
+   */
+  async softDelete(id: string): Promise<boolean> {
+    const existing = await this.getById(id);
+    if (!existing) return false;
+
+    const now = new Date().toISOString();
+    await db
+      .update(patients)
+      .set({
+        isDeleted: true,
+        deletedAt: now,
+        updatedAt: now,
+      })
+      .where(eq(patients.id, id));
+
+    InvalidationService.invalidatePatient(id, existing.nik, existing.mrn);
+    return true;
   },
 };

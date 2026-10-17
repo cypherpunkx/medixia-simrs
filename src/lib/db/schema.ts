@@ -32,7 +32,7 @@ export const departments = pgTable(
   "departments",
   {
     id: text("id").primaryKey(), // e.g. "dept-rs-01"
-    facilityId: text("facility_id").notNull().references(() => facilities.id, { onDelete: "cascade" }),
+    facilityId: text("facility_id").notNull().references(() => facilities.id, { onDelete: "restrict" }),
     code: text("code").notNull().default(""), // e.g. "INT", "UMU", "ANA", "GIG"
     queuePrefix: text("queue_prefix").notNull().default("A"), // e.g. "A", "B", "C", "D"
     name: text("name").notNull(), // e.g. "Poli Penyakit Dalam", "Poli Umum"
@@ -102,6 +102,8 @@ export const patients = pgTable(
     patientStatus: text("patient_status").default("outpatient"), // "outpatient" | "inpatient" | "deceased"
     inpatientDetails: text("inpatient_details"), // JSON string { room, bed, admissionDate, dpjp }
     satusehatConsent: text("satusehat_consent").default("opt-in"), // "opt-in" | "opt-out"
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    deletedAt: text("deleted_at"),
     createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
     updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
   },
@@ -110,6 +112,7 @@ export const patients = pgTable(
     index("idx_patients_phone").on(table.phone),
     index("idx_patients_ihs_number").on(table.ihsNumber),
     index("idx_patients_updated_at").on(table.updatedAt),
+    index("idx_patients_is_deleted").on(table.isDeleted),
   ]
 );
 
@@ -118,7 +121,7 @@ export const encounters = pgTable(
   "encounters",
   {
     id: text("id").primaryKey(), // Local Encounter ID (e.g. "ENC-20260902-0001")
-    patientId: text("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+    patientId: text("patient_id").notNull().references(() => patients.id, { onDelete: "restrict" }),
     facilityId: text("facility_id").references(() => facilities.id, { onDelete: "set null" }),
     departmentId: text("department_id").references(() => departments.id, { onDelete: "set null" }),
     doctorId: text("doctor_id").references(() => users.id, { onDelete: "set null" }),
@@ -143,6 +146,8 @@ export const encounters = pgTable(
     isLocked: boolean("is_locked").default(false),
     lockedAt: text("locked_at"),
     lockedBy: text("locked_by"),
+    isDeleted: boolean("is_deleted").notNull().default(false),
+    deletedAt: text("deleted_at"),
     createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
     updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
   },
@@ -156,6 +161,7 @@ export const encounters = pgTable(
     index("idx_encounters_reg_number").on(table.registrationNumber),
     index("idx_encounters_status").on(table.encounterStatus),
     index("idx_encounters_sync_status").on(table.syncStatus),
+    index("idx_encounters_is_deleted").on(table.isDeleted),
   ]
 );
 
@@ -252,11 +258,24 @@ export const prescriptions = pgTable(
     instructions: text("instructions").notNull(),
     satusehatMedicationRequestId: text("satusehat_medication_request_id"), // SATUSEHAT FHIR MedicationRequest ID
     satusehatMedicationId: text("satusehat_medication_id"), // SATUSEHAT FHIR Medication ID
+    dispenseStatus: text("dispense_status").default("pending_review"), // "pending_review" | "in_preparation" | "ready" | "dispensed" | "cancelled"
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: text("reviewed_at"),
+    preparedBy: text("prepared_by"),
+    preparedAt: text("prepared_at"),
+    dispensedBy: text("dispensed_by"),
+    dispensedAt: text("dispensed_at"),
+    satusehatMedicationDispenseId: text("satusehat_medication_dispense_id"), // SATUSEHAT FHIR MedicationDispense ID
+    etiquetteType: text("etiquette_type").default("white"), // "white" (oral) | "blue" (luar)
+    batchNumber: text("batch_number"),
+    expiryDate: text("expiry_date"),
+    counselingNotes: text("counseling_notes"),
   },
   (table) => [
     index("idx_prescriptions_encounter_id").on(table.encounterId),
     index("idx_prescriptions_kfa_code").on(table.kfaCode),
     index("idx_prescriptions_satusehat_req_id").on(table.satusehatMedicationRequestId),
+    index("idx_prescriptions_dispense_status").on(table.dispenseStatus),
   ]
 );
 
@@ -353,7 +372,7 @@ export const queueItems = pgTable(
     id: text("id").primaryKey(),
     queueNumber: text("queue_number").notNull(),
     registrationNumber: text("registration_number"), // e.g. "RJ-20260913-0001"
-    patientId: text("patient_id").notNull().references(() => patients.id, { onDelete: "cascade" }),
+    patientId: text("patient_id").notNull().references(() => patients.id, { onDelete: "restrict" }),
     departmentId: text("department_id").references(() => departments.id, { onDelete: "set null" }),
     doctorId: text("doctor_id").references(() => users.id, { onDelete: "set null" }),
     encounterId: text("encounter_id").references(() => encounters.id, { onDelete: "set null" }),
@@ -497,6 +516,31 @@ export const masterIcd9 = pgTable(
     index("idx_master_icd9_code").on(table.code),
     index("idx_master_icd9_category").on(table.category),
     index("idx_master_icd9_active").on(table.isActive),
+  ]
+);
+
+// 17. Kartu Mutasi Stok Obat Farmasi (Stock Mutations & Audit Log)
+export const stockMutations = pgTable(
+  "stock_mutations",
+  {
+    id: text("id").primaryKey(), // e.g. "mut-1727250000-001"
+    medicationId: text("medication_id").notNull().references(() => masterMedications.id, { onDelete: "restrict" }),
+    kfaCode: text("kfa_code").notNull(),
+    type: text("type").notNull(), // "dispense" | "restock" | "adjustment" | "return"
+    quantity: integer("quantity").notNull(), // minus for dispense, plus for restock
+    stockBefore: integer("stock_before").notNull(),
+    stockAfter: integer("stock_after").notNull(),
+    referenceType: text("reference_type").default("prescription"), // "prescription" | "po" | "opname"
+    referenceId: text("reference_id"), // e.g. prescriptionId or encounterId
+    notes: text("notes"),
+    createdBy: text("created_by").notNull().default("Apoteker"),
+    createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+  },
+  (table) => [
+    index("idx_stock_mut_med_id").on(table.medicationId),
+    index("idx_stock_mut_kfa").on(table.kfaCode),
+    index("idx_stock_mut_created_at").on(table.createdAt),
+    index("idx_stock_mut_ref_id").on(table.referenceId),
   ]
 );
 
