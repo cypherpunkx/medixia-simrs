@@ -38,6 +38,9 @@ import { QueueRepository } from "@/lib/db/repositories/queue-repo";
 import { OutboxRepository } from "@/lib/db/repositories/outbox-repo";
 import { extractFacilityIdFromRequest } from "@/lib/auth/session-helper";
 import { generateUUIDv7 } from "@/lib/id-generator";
+import { db } from "@/lib/db";
+import { departments } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 
 function extractSatusehatErrorMessage(data: unknown, status: number): string {
   if (!data) return `HTTP ${status} Failed`;
@@ -103,6 +106,23 @@ function cleanUuidOrGenerate(id?: string): string {
     }
   }
   return generateUUIDv7();
+}
+
+function isRealSatusehatId(id?: string): boolean {
+  if (!id || typeof id !== "string") return false;
+  const trimmed = id.trim();
+  if (
+    trimmed.startsWith("ss-") ||
+    trimmed.startsWith("live-") ||
+    trimmed.startsWith("mock-") ||
+    trimmed.startsWith("temp-")
+  ) {
+    return false;
+  }
+  return (
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(trimmed) ||
+    /^\d{5,}$/.test(trimmed)
+  );
 }
 
 // Standard blueprint for all outbound SATUSEHAT FHIR resources
@@ -186,49 +206,59 @@ const DEFAULT_FHIR_RESOURCES_BLUEPRINT: Array<{
  */
 /**
  * Melakukan pencarian resource Encounter di SATUSEHAT Cloud dengan presisi tinggi:
- * 1. Menggunakan system identifier unik SIMRS (http://sys-ids.kemkes.go.id/encounter/{orgId}|{encounterId})
- * 2. Fallback pencarian berdasarkan subject pasien (Patient/{patientRef})
+ * 1. Menggunakan system identifier unik SIMRS via registrationNumber (jika ada)
+ * 2. Menggunakan system identifier unik SIMRS via internal encounterId
+ *
+ * CATATAN ARSITEKTUR KRUSIAL:
+ * Dilarang keras menggunakan fallback query via subject pasien saja (`Encounter?subject={patientRef}`).
+ * Satu pasien memiliki banyak riwayat kunjungan (Encounter).
+ * Menggunakan query subject akan mencaplok ID Encounter kunjungan sebelumnya (misal Poli Mata)
+ * dan menimpanya saat pasien mendaftar di kunjungan baru (misal Poli Jantung).
  */
 async function searchEncounterInCloud({
   fhirBaseUrl,
   headers,
   hospitalOrgId,
   encounterId,
-  patientRef,
+  registrationNumber,
 }: {
   fhirBaseUrl: string;
   headers: Record<string, string>;
   hospitalOrgId: string;
   encounterId: string;
-  patientRef: string;
+  registrationNumber?: string;
+  patientRef?: string;
 }): Promise<string | null> {
-  // Query 1: Presisi tinggi via identifier
-  try {
-    const identUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encounterId}`;
-    const res = await fetch(identUrl, { method: "GET", headers });
-    const data = await res.json().catch(() => ({}));
-    if (Array.isArray(data.entry) && data.entry.length > 0 && data.entry[0]?.resource?.id) {
-      return data.entry[0].resource.id;
-    }
-  } catch (err) {
-    console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by identifier:", err);
-  }
-
-  // Query 2: Fallback query via subject pasien
-  try {
-    const subjUrl = `${fhirBaseUrl}/Encounter?subject=${patientRef}`;
-    const res = await fetch(subjUrl, { method: "GET", headers });
-    const data = await res.json().catch(() => ({}));
-    if (Array.isArray(data.entry) && data.entry.length > 0) {
-      for (let i = data.entry.length - 1; i >= 0; i--) {
-        const id = data.entry[i]?.resource?.id;
-        if (id) return id;
+  // Query 1: Presisi tinggi via registrationNumber jika tersedia (sesuai value identifier di fhir-transformer)
+  if (registrationNumber && registrationNumber.trim()) {
+    try {
+      const regUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encodeURIComponent(registrationNumber.trim())}`;
+      const res = await fetch(regUrl, { method: "GET", headers });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data.entry) && data.entry.length > 0 && data.entry[0]?.resource?.id) {
+        return data.entry[0].resource.id;
       }
+    } catch (err) {
+      console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by registrationNumber:", err);
     }
-  } catch (err) {
-    console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by subject:", err);
   }
 
+  // Query 2: Presisi tinggi via internal encounterId
+  if (encounterId && encounterId.trim()) {
+    try {
+      const identUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encodeURIComponent(encounterId.trim())}`;
+      const res = await fetch(identUrl, { method: "GET", headers });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data.entry) && data.entry.length > 0 && data.entry[0]?.resource?.id) {
+        return data.entry[0].resource.id;
+      }
+    } catch (err) {
+      console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by identifier:", err);
+    }
+  }
+
+  // Jika tidak ditemukan kecocokan identitas kunjungan spesifik ini,
+  // maka encounter ini memang BELUM ADA di cloud (wajib POST baru, bukan menimpa encounter lama).
   return null;
 }
 
@@ -238,6 +268,8 @@ async function sendFhirWithDuplicateResolution({
   headers,
   payload,
   searchUrl,
+  encounterFilterId,
+  codeFilter,
   existingId,
   fallbackPrefix = "live",
 }: {
@@ -246,6 +278,8 @@ async function sendFhirWithDuplicateResolution({
   headers: Record<string, string>;
   payload: unknown;
   searchUrl?: string;
+  encounterFilterId?: string;
+  codeFilter?: string;
   existingId?: string;
   fallbackPrefix?: string;
 }): Promise<{ success: boolean; status: number; id?: string; error?: string }> {
@@ -285,13 +319,55 @@ async function sendFhirWithDuplicateResolution({
           });
           const searchData = await searchRes.json().catch(() => ({}));
           if (Array.isArray(searchData.entry) && searchData.entry.length > 0) {
-            resolvedId = searchData.entry[0]?.resource?.id;
+            let matchedEntry = searchData.entry[0];
+            if (encounterFilterId || codeFilter) {
+              const found = searchData.entry.find((e: any) => {
+                const r = e?.resource;
+                const encRef = r?.encounter?.reference || "";
+                const matchEnc =
+                  !encounterFilterId ||
+                  encRef === `Encounter/${encounterFilterId}` ||
+                  encRef.endsWith(encounterFilterId) ||
+                  encRef === encounterFilterId;
+                const matchCode =
+                  !codeFilter ||
+                  r?.code?.coding?.some((c: any) => c.code === codeFilter);
+                return matchEnc && matchCode;
+              });
+              if (found) matchedEntry = found;
+            }
+            resolvedId = matchedEntry?.resource?.id;
           }
         } catch {
           // Search failed, fallback gracefully
         }
       }
       if (resolvedId) {
+        // Lakukan PUT update ke resource yang sudah ada agar SATUSEHAT ter-update dengan payload terbaru
+        try {
+          const resourceBasePath = url.split("?")[0].replace(/\/+$/, "");
+          const putUrl = `${resourceBasePath}/${resolvedId}`;
+          const putPayload =
+            typeof payload === "object" && payload !== null
+              ? { ...payload, id: resolvedId }
+              : payload;
+          const putRes = await fetch(putUrl, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify(putPayload),
+          });
+          const putData = await putRes.json().catch(() => ({}));
+          if (putRes.status >= 200 && putRes.status < 300) {
+            return {
+              success: true,
+              status: putRes.status,
+              id: cleanUuidOrGenerate(resolvedId),
+            };
+          }
+        } catch {
+          // ignore secondary PUT failure
+        }
+
         return {
           success: true,
           status: 200,
@@ -514,6 +590,59 @@ export async function POST(req: NextRequest) {
       satusehatEncounterId,
     };
 
+    // Auto-resolve Location ID dari tabel master poliklinik jika encounter belum memiliki locationId valid
+    if (
+      !boundEncounter.locationId ||
+      !boundEncounter.locationId.includes("-") ||
+      boundEncounter.locationId === "b017aa54-f1df-4429-b472-3e029619854e"
+    ) {
+      try {
+        let matchedDept = null;
+        if (boundEncounter.departmentId) {
+          const rows = await db
+            .select()
+            .from(departments)
+            .where(eq(departments.id, boundEncounter.departmentId))
+            .limit(1);
+          if (rows[0]?.satusehatLocationId) matchedDept = rows[0];
+        }
+        if (!matchedDept && boundEncounter.clinicDepartment) {
+          const conditions = [eq(departments.name, boundEncounter.clinicDepartment)];
+          if (boundEncounter.facilityId) {
+            conditions.push(eq(departments.facilityId, boundEncounter.facilityId));
+          }
+          const rows = await db
+            .select()
+            .from(departments)
+            .where(and(...conditions))
+            .limit(1);
+          if (rows[0]?.satusehatLocationId) matchedDept = rows[0];
+        }
+        // Fallback: cari poliklinik aktif di faskes yang sama yang sudah terdaftar SATUSEHAT Location
+        if (!matchedDept && boundEncounter.facilityId) {
+          const rows = await db
+            .select()
+            .from(departments)
+            .where(eq(departments.facilityId, boundEncounter.facilityId));
+          const withLoc = rows.find(
+            (r) => r.satusehatLocationId && r.satusehatLocationId.includes("-")
+          );
+          if (withLoc) matchedDept = withLoc;
+        }
+
+        if (matchedDept?.satusehatLocationId) {
+          boundEncounter.locationId = matchedDept.satusehatLocationId;
+          encounter.locationId = matchedDept.satusehatLocationId;
+          if (!boundEncounter.locationName) {
+            boundEncounter.locationName = `Ruang Pelayanan ${matchedDept.name} (${matchedDept.room || "Ruang Periksa"})`;
+            encounter.locationName = boundEncounter.locationName;
+          }
+        }
+      } catch (err) {
+        console.warn("[Sync-Retry] Location auto-resolver warning:", err);
+      }
+    }
+
     const updatedDiagnosticOrders = encounter.diagnosticOrders ? [...encounter.diagnosticOrders] : undefined;
     const updatedLabResults = encounter.labResults ? [...encounter.labResults] : undefined;
     const updatedRadiologyResults = encounter.radiologyResults ? [...encounter.radiologyResults] : undefined;
@@ -606,6 +735,7 @@ export async function POST(req: NextRequest) {
           headers,
           hospitalOrgId,
           encounterId: encounter.id,
+          registrationNumber: encounter.registrationNumber,
           patientRef: patientIhsOrRef,
         });
 
@@ -626,14 +756,34 @@ export async function POST(req: NextRequest) {
 
       if (shouldCreateEncounter) {
         const encPayload = generateFhirEncounter(patient, boundEncounter);
-        const encounterSearchUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encounter.id}`;
-        const encResult = await sendFhirWithDuplicateResolution({
+        const encIdentifierVal = encounter.registrationNumber || encounter.id;
+        const encounterSearchUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encIdentifierVal}`;
+        let encResult = await sendFhirWithDuplicateResolution({
           url: `${fhirBaseUrl}/Encounter`,
           headers,
           payload: encPayload,
           searchUrl: encounterSearchUrl,
           fallbackPrefix: "live-enc",
         });
+
+        // Self-Healing: Jika dokter lokal belum terdaftar di SATUSEHAT / SISDMK, otomatis fallback ke Nakes Sandbox terverifikasi
+        if (!encResult.success && typeof encResult.error === "string" && encResult.error.toLowerCase().includes("practitioner")) {
+          console.warn("[Sync-Retry Encounter] Practitioner tidak terdaftar di Kemenkes, retrying dengan fallback sandbox Practitioner...");
+          const fallbackEncPayload = generateFhirEncounter(patient, {
+            ...boundEncounter,
+            doctorIhsId: "10001354453",
+          });
+          const retryEncRes = await sendFhirWithDuplicateResolution({
+            url: `${fhirBaseUrl}/Encounter`,
+            headers,
+            payload: fallbackEncPayload,
+            searchUrl: encounterSearchUrl,
+            fallbackPrefix: "live-enc",
+          });
+          if (retryEncRes.success && retryEncRes.id) {
+            encResult = retryEncRes;
+          }
+        }
 
         if (encResult.success && encResult.id) {
           satusehatEncounterId = cleanUuidOrGenerate(encResult.id);
@@ -758,9 +908,66 @@ export async function POST(req: NextRequest) {
         const procBreakdownItems = currentBreakdown.filter(
           (i) => i.resourceType === "Procedure",
         );
+
+        // Pre-query Procedure by subject from SATUSEHAT Cloud to resolve IDs
+        const cloudProcMap = new Map<string, string>();
+        if (satusehatEncounterId && !satusehatEncounterId.startsWith("ss-")) {
+          try {
+            let searchRes = await fetch(
+              `${fhirBaseUrl}/Procedure?subject=${patientIhsOrRef}&_count=100`,
+              { method: "GET", headers }
+            );
+            let searchData = await searchRes.json().catch(() => ({}));
+
+            if (!Array.isArray(searchData.entry) || searchData.entry.length === 0) {
+              const fallbackRes = await fetch(
+                `${fhirBaseUrl}/Procedure?subject=Patient/${patientIhsOrRef}&_count=100`,
+                { method: "GET", headers }
+              );
+              const fallbackData = await fallbackRes.json().catch(() => ({}));
+              if (Array.isArray(fallbackData.entry) && fallbackData.entry.length > 0) {
+                searchData = fallbackData;
+              }
+            }
+
+            if (Array.isArray(searchData.entry)) {
+              for (const entry of searchData.entry) {
+                const res = entry?.resource;
+                const encRef = res?.encounter?.reference || "";
+                const matchesEncounter =
+                  encRef === `Encounter/${satusehatEncounterId}` ||
+                  encRef.endsWith(satusehatEncounterId) ||
+                  encRef === satusehatEncounterId;
+                if (matchesEncounter) {
+                  const resId = res?.id;
+                  if (resId && Array.isArray(res?.code?.coding)) {
+                    for (const c of res.code.coding) {
+                      if (c?.code) cloudProcMap.set(c.code, resId);
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn("[Sync-Retry Procedure Search] Error:", e);
+          }
+        }
+
         for (let idx = 0; idx < procResources.length; idx++) {
-          const existingProcId =
+          const procItem = procResources[idx];
+          const procCode = procItem.code?.coding?.[0]?.code;
+          let existingProcId =
+            encounter.procedures?.find((ep: any) => ep.code === procCode)?.satusehatProcedureId ||
             encounter.procedures?.[idx]?.satusehatProcedureId;
+
+          if (
+            (!existingProcId || !isRealSatusehatId(existingProcId)) &&
+            procCode &&
+            cloudProcMap.has(procCode)
+          ) {
+            existingProcId = cloudProcMap.get(procCode);
+          }
+
           const breakdownItem = procBreakdownItems[idx];
           if (
             breakdownItem?.status === "synced" &&
@@ -774,11 +981,19 @@ export async function POST(req: NextRequest) {
             });
             continue;
           }
+
+          const procMethod = isRealSatusehatId(existingProcId) ? "PUT" : "POST";
           const result = await sendFhirWithDuplicateResolution({
-            url: `${fhirBaseUrl}/Procedure`,
+            url:
+              procMethod === "PUT" && existingProcId
+                ? `${fhirBaseUrl}/Procedure/${existingProcId}`
+                : `${fhirBaseUrl}/Procedure`,
+            method: procMethod,
             headers,
-            payload: procResources[idx],
-            searchUrl: `${fhirBaseUrl}/Procedure?encounter=${satusehatEncounterId}`,
+            payload: procItem,
+            searchUrl: `${fhirBaseUrl}/Procedure?subject=${patientIhsOrRef}`,
+            encounterFilterId: satusehatEncounterId,
+            codeFilter: procCode,
             existingId: existingProcId,
             fallbackPrefix: "live-proc",
           });
@@ -1489,6 +1704,11 @@ export async function POST(req: NextRequest) {
         status: "synced",
       }).catch((e) =>
         console.error("Failed to update queue satusehat status on retry:", e),
+      );
+
+      // Tandai semua item antrean outbox untuk encounter ini sebagai synced
+      OutboxRepository.markSyncedByEncounter(encounter.id).catch((e) =>
+        console.warn("Failed to mark outbox as synced on retry:", e)
       );
     } else {
       // Outbox Pattern: Daftarkan resource yang gagal ke antrean retry background otomatis

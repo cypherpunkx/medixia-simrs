@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SatusehatClient } from "@/lib/satusehat/client";
 import { SatusehatEnvironment } from "@/lib/satusehat/types";
 import { UserRepository } from "@/lib/db/repositories/user-repo";
-import { SATUSEHAT_OFFICIAL_PRACTITIONERS } from "@/lib/satusehat/mock-data";
+import { SATUSEHAT_OFFICIAL_PRACTITIONERS } from "@/lib/satusehat/benchmark-data";
 
 export async function GET(req: NextRequest) {
   const startTime = Date.now();
@@ -154,28 +154,19 @@ export async function GET(req: NextRequest) {
     console.error("Local DB check error:", dbErr);
   }
 
-  // 6. Graceful Fallback Sandbox / SISDMK verified algorithmic provider
-  const fallbackIhs = id || `N${nik ? nik.slice(-8) : "10000001"}`;
-  const isFemale = nik ? parseInt(nik.substring(6, 8)) > 40 : false;
-
-  return NextResponse.json({
-    success: true,
-    source: "sisdmk_verified",
-    data: {
-      id: fallbackIhs,
-      nik: nik || "3171010101900001",
-      name: isFemale ? "dr. Siti Rahmawati, Sp.A" : "dr. Ahmad Fauzi, Sp.PD",
-      gender: isFemale ? "female" : "male",
-      profession: "Dokter Spesialis",
-      sip: `SIP.${Math.floor(100000 + Math.random() * 900000)}/DKI/2024`,
-      str: `STR.${Math.floor(10000000 + Math.random() * 90000000)}`,
+  // 6. Jika tidak ditemukan di SATUSEHAT maupun Database Lokal
+  return NextResponse.json(
+    {
+      success: false,
+      error: "Data praktisi / tenaga medis (IHS/NIK) tidak ditemukan di SATUSEHAT maupun database lokal SIMRS.",
+      telemetry: {
+        latencyMs: Math.max(80, Date.now() - startTime),
+        targetUrl: `/api/satusehat/practitioner`,
+        httpStatus: 404,
+        timestamp: new Date().toISOString(),
+        method: "NOT_FOUND",
+      },
     },
-    telemetry: {
-      latencyMs: Math.max(80, Date.now() - startTime),
-      targetUrl: "https://api-satusehat-stg.kemkes.go.id/fhir-r4/v1/Practitioner",
-      httpStatus: 200,
-      timestamp: new Date().toISOString(),
-      method: "FALLBACK_MOCK",
-    },
-  });
+    { status: 404 }
+  );
 }

@@ -471,65 +471,142 @@ export function SatusehatFhirDetailModal({
         </DialogHeader>
 
         <div className="space-y-4 max-h-[72vh] overflow-y-auto pr-1 py-2">
-          {/* Active Patient & Polyclinic Context Banner */}
-          <div className="rounded-xl border border-teal-200/90 bg-gradient-to-r from-teal-50/90 via-emerald-50/40 to-slate-50 p-3 shadow-xs">
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-teal-200/50 pb-2.5">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-600 text-white shadow-xs">
-                  <User className="h-4 w-4" />
+          {/* Active Patient & Polyclinic Context Card (Clean Enterprise EHR Spec) */}
+          <div className="rounded-2xl border border-teal-200/90 bg-white shadow-2xs overflow-hidden">
+            {/* 1. Top Bar: Profil Pasien di Kiri, DPJP di Kanan */}
+            <div className="p-3.5 sm:p-4 bg-gradient-to-r from-teal-50/70 via-emerald-50/30 to-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-teal-100/80">
+              <div className="flex items-center gap-3.5 min-w-0">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-teal-700 text-white shadow-2xs font-extrabold text-sm tracking-wide">
+                  {patient?.name
+                    ? patient.name
+                        .split(" ")
+                        .map((n) => n[0])
+                        .slice(0, 2)
+                        .join("")
+                    : <User className="h-5 w-5" />}
                 </div>
+
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 text-sm truncate">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-extrabold text-slate-900 text-sm tracking-tight truncate">
                       {patient?.name || "Pasien Rawat Jalan"}
-                    </span>
+                    </h3>
                     {patient?.gender && (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-white/90 border-slate-200 text-slate-600 shrink-0">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600 font-semibold shadow-2xs">
                         {patient.gender === "female" ? "Perempuan" : "Laki-laki"}
-                      </Badge>
+                      </span>
                     )}
                     {patient?.birthDate && (
-                      <span className="text-[11px] text-slate-500 font-medium shrink-0">
-                        {calculatePatientAge(patient.birthDate)} thn
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        • {calculatePatientAge(patient.birthDate)} thn
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 text-[11px] text-slate-600 font-mono mt-0.5 flex-wrap">
-                    <span>RM: <strong className="text-slate-900 font-semibold">{patient?.mrn || "-"}</strong></span>
-                    {encounter?.registrationNumber && (
-                      <>
-                        <span>•</span>
-                        <span>Reg: <strong className="text-slate-800">{encounter.registrationNumber}</strong></span>
-                      </>
-                    )}
-                    <span>•</span>
-                    <span>NIK: <strong className="text-slate-900 font-semibold">{patient?.nik || "-"}</strong></span>
-                    {patient?.ihsNumber && (
-                      <>
-                        <span>•</span>
-                        <span className="text-teal-700 font-semibold">IHS: {patient.ihsNumber}</span>
-                      </>
-                    )}
+                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium mt-0.5">
+                    <span>Pasien Rawat Jalan</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-teal-700 font-semibold">{encounter?.clinicDepartment || "Poliklinik Rawat Jalan"}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                <Badge className="bg-teal-700 hover:bg-teal-800 text-white text-[11px] font-semibold flex items-center gap-1 px-2.5 py-1">
-                  <Building2 className="h-3 w-3" />
-                  <span>{encounter?.clinicDepartment || "Poliklinik Rawat Jalan"}</span>
-                </Badge>
+              {/* DPJP Chip Kanan */}
+              <div className="flex items-center gap-2 shrink-0 sm:self-center">
+                <div className="flex items-center gap-1.5 text-xs text-slate-700 bg-white border border-slate-200/90 px-3 py-1.5 rounded-xl shadow-2xs">
+                  <Stethoscope className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                  <span className="truncate max-w-[210px]">
+                    DPJP: <strong className="text-slate-900 font-bold">{encounter?.doctorName || "Dokter Pemeriksa"}</strong>
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-slate-600 pt-2">
-              <div className="flex items-center gap-1.5 truncate">
-                <Stethoscope className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                <span>DPJP: <strong className="text-slate-800 font-medium">{encounter?.doctorName || "Dokter Pemeriksa"}</strong></span>
+            {/* 2. Middle Bar: 4-Column Clean Metadata Grid (Spacious & No-Clutter) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 bg-white p-3 text-xs">
+              {/* Kolom 1: No. Rekam Medis */}
+              <div className="px-3 py-1.5 sm:py-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  No. Rekam Medis
+                </span>
+                <span className="font-mono font-bold text-slate-900 text-xs mt-0.5 block">
+                  {patient?.mrn?.replace(/^RM-?/i, "") || "-"}
+                </span>
               </div>
-              <span className="text-[10px] text-teal-800 bg-teal-100/70 font-semibold px-2 py-0.5 rounded-md border border-teal-200/60">
-                Resource FHIR Terisolasi untuk Sesi Pasien Ini
-              </span>
+
+              {/* Kolom 2: No. Registrasi */}
+              <div className="px-3 py-1.5 sm:py-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  No. Registrasi
+                </span>
+                <span className="font-mono font-semibold text-slate-700 text-xs mt-0.5 block truncate" title={encounter?.registrationNumber}>
+                  {encounter?.registrationNumber || "-"}
+                </span>
+              </div>
+
+              {/* Kolom 3: NIK Pasien */}
+              <div className="px-3 py-1.5 sm:py-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  NIK Pasien
+                </span>
+                <span className="font-mono font-semibold text-slate-800 text-xs mt-0.5 block tracking-tight">
+                  {patient?.nik || "-"}
+                </span>
+              </div>
+
+              {/* Kolom 4: IHS SATUSEHAT */}
+              <div className="px-3 py-1.5 sm:py-0">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  IHS SATUSEHAT
+                </span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {patient?.ihsNumber ? (
+                    <div className="flex items-center gap-1 font-mono font-bold text-teal-800 text-xs">
+                      <img
+                        src="/satusehat-default-logo.svg"
+                        alt="SATUSEHAT"
+                        className="h-2.5 w-2.5 object-contain shrink-0"
+                      />
+                      <span>{patient.ihsNumber}</span>
+                    </div>
+                  ) : (
+                    <span className="text-slate-400 italic text-[11px]">
+                      Belum Terdaftar
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 3. Bottom Bar: Status Encounter & FHIR Isolation Shield */}
+            <div className="px-4 py-2 bg-slate-50/80 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div className="flex items-center gap-2">
+                {encounter?.encounterStatus === "in-progress" && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse" />
+                    <span>Sedang Diperiksa</span>
+                  </span>
+                )}
+                {encounter?.encounterStatus === "finished" && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    <span>Pelayanan Selesai</span>
+                  </span>
+                )}
+                {encounter?.encounterStatus === "arrived" && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                    <span>Menunggu Antrean</span>
+                  </span>
+                )}
+                <span className="text-[10px] text-slate-400 font-mono">
+                  Encounter: {encounter?.id ? `${encounter.id.slice(0, 18)}...` : "-"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1 text-[10px] text-teal-800 font-medium">
+                <ShieldCheck className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                <span>Resource FHIR Terisolasi untuk Sesi Pasien Ini</span>
+              </div>
             </div>
           </div>
 
@@ -618,7 +695,7 @@ export function SatusehatFhirDetailModal({
               <div className="text-[10px] text-teal-800">
                 Fasilitas Kesehatan:{" "}
                 <span className="font-semibold text-teal-950">
-                  {encounter?.hospitalName || "RS Umum Daerah Sehat Sejahtera"} ({encounter?.hospitalOrgId || "10000004"})
+                  {encounter?.hospitalName || "Fasilitas Kesehatan"} {encounter?.hospitalOrgId ? `(${encounter.hospitalOrgId})` : ""}
                 </span>
               </div>
             </div>
@@ -877,12 +954,12 @@ export function SatusehatFhirDetailModal({
                                       {subItem.label}
                                     </p>
                                     <div className="text-[10px] text-slate-500 font-mono flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-[9px] font-bold text-teal-800 bg-teal-50 px-1 py-0.2 rounded border border-teal-200">
+                                      <span className="text-[9px] font-bold text-teal-800 bg-teal-50 px-1 py-0.5 rounded border border-teal-200">
                                         {subItem.resourceType}
                                       </span>
                                       <span>{subItem.standard}</span>
                                       {subItem.fhirId ? (
-                                        <span className="text-teal-700 bg-teal-50 px-1 py-0.2 rounded border border-teal-200">
+                                        <span className="text-teal-700 bg-teal-50 px-1 py-0.5 rounded border border-teal-200">
                                           ID: {subItem.fhirId}
                                         </span>
                                       ) : (
@@ -891,7 +968,7 @@ export function SatusehatFhirDetailModal({
                                         </span>
                                       )}
                                       {subItem.retryCount && subItem.retryCount > 0 ? (
-                                        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded border border-slate-200">
+                                        <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1 py-0.5 rounded border border-slate-200">
                                           Retry #{subItem.retryCount}
                                         </span>
                                       ) : null}
@@ -902,12 +979,12 @@ export function SatusehatFhirDetailModal({
                                 <div className="shrink-0 flex items-center gap-1.5">
                                   <Badge
                                     variant="outline"
-                                    className={`text-[9px] font-mono font-bold ${
+                                    className={`text-[9px] font-mono font-bold transition-colors ${
                                       isSubSynced
-                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                        ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 border-emerald-200"
                                         : isSubFailed
-                                        ? "bg-rose-50 text-rose-700 border-rose-300"
-                                        : "bg-slate-100 text-slate-600 border-slate-200"
+                                        ? "bg-rose-50 text-rose-700 hover:bg-rose-100/70 border-rose-300"
+                                        : "bg-slate-100 text-slate-600 hover:bg-slate-200/70 border-slate-200"
                                     }`}
                                   >
                                     {isSubSynced

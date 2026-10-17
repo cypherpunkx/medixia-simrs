@@ -288,7 +288,7 @@ export function SatusehatSyncLoadingModal({
                           {stg.title}
                         </span>
                         {isCurrent && (
-                          <span className="text-[9px] font-extrabold text-teal-800 bg-teal-100 px-1.5 py-0.2 rounded-full shrink-0">
+                          <span className="text-[9px] font-extrabold text-teal-800 bg-teal-100 px-1.5 py-0.5 rounded-full shrink-0">
                             Memproses...
                           </span>
                         )}

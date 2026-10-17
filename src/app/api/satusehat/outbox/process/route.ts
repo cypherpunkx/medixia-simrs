@@ -39,6 +39,25 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    // 0. Keamanan Cron / Webhook: Validasi rahasia jika CRON_SECRET disetel
+    const expectedSecret = process.env.CRON_SECRET;
+    if (expectedSecret) {
+      const authHeader = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+      const cronKeyHeader = req.headers.get("x-cron-key");
+      const providedSecret = authHeader || cronKeyHeader;
+
+      if (!providedSecret || providedSecret !== expectedSecret) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Akses Ditolak: Kunci otentikasi cron (CRON_SECRET) tidak valid.",
+            code: "UNAUTHORIZED_CRON",
+          },
+          { status: 401 }
+        );
+      }
+    }
+
     let body: any = {};
     try {
       body = await req.json();

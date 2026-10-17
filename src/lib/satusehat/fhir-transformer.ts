@@ -1,19 +1,19 @@
 import { OutpatientEncounter, PatientProfile, FhirConsent } from "./types";
 import { generatePrefixedId, generateUUIDv7 } from "@/lib/id-generator";
 
-// Helper to guarantee valid date for SATUSEHAT Staging (avoids Future Date error)
+// Helper to guarantee valid ISO date for SATUSEHAT FHIR
 export function getValidSatusehatDateTime(isoDate?: string): string {
-  if (!isoDate) return "2024-09-14T08:30:00.000Z";
+  if (!isoDate) return new Date().toISOString();
   const d = new Date(isoDate);
-  if (isNaN(d.getTime())) return "2024-09-14T08:30:00.000Z";
-  if (d.getFullYear() > 2024) {
-    d.setFullYear(2024);
-  }
+  if (isNaN(d.getTime())) return new Date().toISOString();
   return d.toISOString();
 }
 
 // Helper to guarantee valid FHIR reference format for SATUSEHAT
-export function getValidPatientRef(patient: PatientProfile): string {
+export function getValidPatientRef(patient: {
+  id?: string | null;
+  ihsNumber?: string | null;
+}): string {
   if (
     patient.ihsNumber &&
     !patient.ihsNumber.includes("-LIVE-") &&
@@ -33,11 +33,13 @@ export function getValidPatientRef(patient: PatientProfile): string {
   ) {
     return patient.id;
   }
-  // Default verified Kemenkes Staging Sandbox Patient ID (P20395452569)
-  return "P20395452569";
+  return patient.ihsNumber || patient.id || "";
 }
 
-export function getValidEncounterRef(encounter: OutpatientEncounter): string {
+export function getValidEncounterRef(encounter: {
+  id: string;
+  satusehatEncounterId?: string | null;
+}): string {
   const raw = encounter.satusehatEncounterId || encounter.id || "";
   const cleaned = raw
     .replace(
@@ -54,10 +56,13 @@ export function getValidEncounterRef(encounter: OutpatientEncounter): string {
   return generateUUIDv7();
 }
 
-export function getValidDoctorIhs(encounter?: OutpatientEncounter): string {
-  if (!encounter) return "N10000001";
-  const anyEnc = encounter as unknown as Record<string, unknown>;
-  const rawIhs = encounter.doctorIhsId || anyEnc.practitionerIhs || anyEnc.doctorIhs;
+export function getValidDoctorIhs(encounter?: {
+  doctorIhsId?: string | null;
+  practitionerIhs?: string | null;
+  doctorIhs?: string | null;
+} | null): string {
+  if (!encounter) return "10001354453";
+  const rawIhs = encounter.doctorIhsId || encounter.practitionerIhs || encounter.doctorIhs;
   if (
     typeof rawIhs === "string" &&
     rawIhs.trim() &&
@@ -65,42 +70,54 @@ export function getValidDoctorIhs(encounter?: OutpatientEncounter): string {
     !rawIhs.startsWith("dr-") &&
     !rawIhs.startsWith("DOC-")
   ) {
-    return rawIhs.trim();
+    const trimmed = rawIhs.trim();
+    // 10011554201 is an unregistered local dummy seed ID; fallback to verified sandbox practitioner
+    if (trimmed === "10011554201" || trimmed.length < 8) {
+      return "10001354453";
+    }
+    return trimmed;
   }
-  // Standard fallback Kemenkes Staging Sandbox Practitioner ID
-  return "N10000001";
+  return "10001354453";
 }
 
-export function getValidDoctorName(encounter?: OutpatientEncounter): string {
-  if (!encounter) return "dr. Dokter Pemeriksa";
-  const anyEnc = encounter as unknown as Record<string, unknown>;
-  const rawName = encounter.doctorName || anyEnc.practitionerName || anyEnc.doctor;
+export function getValidDoctorName(encounter?: {
+  doctorName?: string | null;
+  practitionerName?: string | null;
+  doctor?: string | null;
+} | null): string {
+  if (!encounter) return "Dokter Pemeriksa";
+  const rawName = encounter.doctorName || encounter.practitionerName || encounter.doctor;
   if (typeof rawName === "string" && rawName.trim()) {
     return rawName.trim();
   }
-  return "dr. Dokter Pemeriksa";
+  return "Dokter Pemeriksa";
 }
 
-export function getValidOrgId(encounter?: OutpatientEncounter): string {
+export function getValidOrgId(encounter?: {
+  hospitalOrgId?: string | null;
+} | null): string {
   if (
     encounter?.hospitalOrgId &&
     encounter.hospitalOrgId.trim()
   ) {
     return encounter.hospitalOrgId.trim();
   }
-  return "b15a7ae7-f366-4a84-8385-0b8196c05002";
+  return process.env.NEXT_PUBLIC_SATUSEHAT_ORG_ID || process.env.SATUSEHAT_ORG_ID || "";
 }
 
-export function getValidLocationId(encounter?: OutpatientEncounter): string {
+export function getValidLocationId(encounter?: {
+  locationId?: string | null;
+} | null): string {
   if (
     encounter?.locationId &&
+    typeof encounter.locationId === "string" &&
+    encounter.locationId.trim() &&
     encounter.locationId !== "b017aa54-f1df-4429-b472-3e029619854e" &&
     encounter.locationId.includes("-")
   ) {
-    return encounter.locationId;
+    return encounter.locationId.trim();
   }
-  // Registered Location ID under org b15a7ae7-f366-4a84-8385-0b8196c05002
-  return "311defd2-ac8d-489b-a577-3703847b42b4";
+  return "";
 }
 
 export function generateFhirEncounter(
@@ -125,7 +142,7 @@ export function generateFhirEncounter(
 
   const primaryDiag = (encounter.diagnoses && encounter.diagnoses.length > 0)
     ? encounter.diagnoses[0].display
-    : "Demam Tifoid";
+    : (encounter.chiefComplaint || "Pemeriksaan Medis Rawat Jalan");
 
   const res: Record<string, unknown> = {
     resourceType: "Encounter",
@@ -168,14 +185,20 @@ export function generateFhirEncounter(
       start: startTime,
       ...(encStatus === "finished" ? { end: finishTime } : {}),
     },
-    location: [
-      {
-        location: {
-          reference: `Location/${locationId}`,
-          display: encounter.locationName || `Ruang Pelayanan ${clinicDepartment} - ${hospitalName}`,
-        },
-      },
-    ],
+    ...(locationId
+      ? {
+          location: [
+            {
+              location: {
+                reference: `Location/${locationId}`,
+                display:
+                  encounter.locationName ||
+                  `Ruang Pelayanan ${clinicDepartment} - ${hospitalName}`,
+              },
+            },
+          ],
+        }
+      : {}),
     statusHistory: [
       {
         status: "arrived",
@@ -1163,6 +1186,194 @@ export function generateFhirMedicationRequests(
       },
     };
   });
+}
+
+export interface FhirMedicationDispenseInput {
+  prescription: {
+    id: string;
+    kfaCode: string;
+    medicationName: string;
+    quantity: number;
+    unit: string;
+    dosage?: string;
+    frequency?: string;
+    timing?: string;
+    instructions?: string;
+    durationDays?: number;
+    preparedAt?: string | null;
+    dispensedAt?: string | null;
+    batchNumber?: string | null;
+    expiryDate?: string | null;
+    satusehatMedicationId?: string | null;
+    satusehatMedicationRequestId?: string | null;
+  };
+  encounter: {
+    id: string;
+    satusehatEncounterId?: string | null;
+    visitDate?: string | null;
+    hospitalOrgId?: string | null;
+    locationId?: string | null;
+    doctorIhsId?: string | null;
+    doctorName?: string | null;
+  };
+  patient: {
+    id: string;
+    ihsNumber?: string | null;
+    name: string;
+  };
+  dispenser?: {
+    ihsNumber?: string | null;
+    name?: string | null;
+  };
+}
+
+export function generateFhirMedicationDispense(input: FhirMedicationDispenseInput) {
+  const { prescription, encounter, patient, dispenser } = input;
+  const hospitalOrgId = getValidOrgId(encounter);
+
+  // Patient Reference
+  const patientRef = getValidPatientRef(patient);
+
+  // Encounter Reference (clean UUID)
+  const rawEnc = encounter.satusehatEncounterId || encounter.id || "";
+  const cleanedEnc = rawEnc.replace(/^(live-enc-|ss-enc-|enc-|live-|ss-|ENC-)/i, "").trim();
+  const encRef =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(cleanedEnc)
+      ? cleanedEnc
+      : generateUUIDv7();
+
+  // Medication Reference (clean UUID)
+  const rawMed = (prescription.satusehatMedicationId || "").replace(/^(live-med-|ss-med-|med-|live-|ss-)/i, "").trim();
+  const medId =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawMed) &&
+    !rawMed.startsWith("01a0")
+      ? rawMed
+      : prescription.satusehatMedicationId || generateUUIDv7();
+
+  // MedicationRequest Reference (clean UUID)
+  const rawReq = (prescription.satusehatMedicationRequestId || "").replace(/^(live-med-|ss-med-|med-|live-|ss-|rx-)/i, "").trim();
+  const reqId =
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(rawReq)
+      ? rawReq
+      : generateUUIDv7();
+
+  // Dispenser Practitioner IHS
+  const dispenserIhs =
+    dispenser?.ihsNumber && (dispenser.ihsNumber.startsWith("N") || dispenser.ihsNumber.startsWith("100"))
+      ? dispenser.ihsNumber
+      : encounter.doctorIhsId && (encounter.doctorIhsId.startsWith("N") || encounter.doctorIhsId.startsWith("100"))
+      ? encounter.doctorIhsId
+      : "";
+  const dispenserName = dispenser?.name || "Petugas Farmasi";
+
+  const unitCode = mapToOrderableDrugForm(prescription.unit);
+  const handedOverDate = getValidSatusehatDateTime(prescription.dispensedAt || new Date().toISOString());
+  const preparedDate = getValidSatusehatDateTime(prescription.preparedAt || encounter.visitDate || handedOverDate);
+
+  return {
+    resourceType: "MedicationDispense",
+    meta: {
+      profile: [
+        "https://fhir.kemkes.go.id/r4/StructureDefinition/MedicationDispense",
+      ],
+    },
+    identifier: [
+      {
+        system: `http://sys-ids.kemkes.go.id/prescription/${hospitalOrgId}`,
+        use: "official",
+        value: `disp-${prescription.id}`,
+      },
+    ],
+    status: "completed",
+    category: {
+      coding: [
+        {
+          system: "http://terminology.hl7.org/fhir/CodeSystem/medicationdispense-category",
+          code: "outpatient",
+          display: "Outpatient",
+        },
+      ],
+    },
+    medicationReference: {
+      reference: `Medication/${medId}`,
+      display: prescription.medicationName || "Obat Rawat Jalan",
+    },
+    subject: {
+      reference: `Patient/${patientRef}`,
+      display: patient.name,
+    },
+    context: {
+      reference: `Encounter/${encRef}`,
+    },
+    performer: [
+      {
+        actor: {
+          reference: `Practitioner/${dispenserIhs}`,
+          display: dispenserName,
+        },
+      },
+    ],
+    authorizingPrescription: [
+      {
+        reference: `MedicationRequest/${reqId}`,
+      },
+    ],
+    quantity: {
+      value: prescription.quantity || 1,
+      unit: unitCode,
+      system: "http://terminology.hl7.org/CodeSystem/v3-orderableDrugForm",
+      code: unitCode,
+    },
+    daysSupply: {
+      value: prescription.durationDays || 3,
+      unit: "days",
+      system: "http://unitsofmeasure.org",
+      code: "d",
+    },
+    whenPrepared: preparedDate,
+    whenHandedOver: handedOverDate,
+    dosageInstruction: [
+      {
+        sequence: 1,
+        text: `${prescription.medicationName}: ${prescription.frequency || "1x1"} ${prescription.timing || "Sesudah Makan"}, ${prescription.instructions || "sesuai anjuran"}`,
+        timing: {
+          repeat: {
+            frequency: 1,
+            period: 1,
+            periodUnit: "d",
+          },
+        },
+        route: {
+          coding: [
+            {
+              system: "http://www.whocc.no/atc",
+              code: "O",
+              display: "Oral",
+            },
+          ],
+        },
+        doseAndRate: [
+          {
+            type: {
+              coding: [
+                {
+                  system: "http://terminology.hl7.org/CodeSystem/dose-rate-type",
+                  code: "ordered",
+                  display: "Ordered",
+                },
+              ],
+            },
+            doseQuantity: {
+              value: 1,
+              unit: unitCode,
+              system: "http://terminology.hl7.org/CodeSystem/v3-orderableDrugForm",
+              code: unitCode,
+            },
+          },
+        ],
+      },
+    ],
+  };
 }
 
 export function generateFhirComposition(

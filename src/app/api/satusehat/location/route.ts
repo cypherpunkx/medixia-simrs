@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { SatusehatClient } from "@/lib/satusehat/client";
 import { SatusehatEnvironment } from "@/lib/satusehat/types";
 import { FacilityRepository } from "@/lib/db/repositories/facility-repo";
+import { getSatusehatFhirUrl } from "@/lib/satusehat/config";
+import { db } from "@/lib/db";
+import { departments } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export async function POST(req: NextRequest) {
@@ -14,6 +18,7 @@ export async function POST(req: NextRequest) {
       name,
       code,
       room,
+      force = false,
       env = "staging",
     } = body;
 
@@ -30,7 +35,7 @@ export async function POST(req: NextRequest) {
     // 1. Ambil Data Faskes untuk memperoleh Organization ID SATUSEHAT murni dari Database
     const { extractFacilityIdFromRequest } = await import("@/lib/auth/session-helper");
     const targetFacilityId = extractFacilityIdFromRequest(req, facilityId);
-    let satusehatOrgId = "b15a7ae7-f366-4a84-8385-0b8196c05002";
+    let satusehatOrgId = "";
     if (targetFacilityId) {
       const facility = await FacilityRepository.getById(targetFacilityId);
       if (facility?.satusehatOrgId) {
@@ -38,8 +43,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const locationCode = code || `LOC-${name.replace(/\s+/g, "-").toUpperCase()}`;
-    const locationDescription = `Ruang Pelayanan ${name} (${room || "Ruang Periksa"})`;
+    if (!satusehatOrgId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Organization ID SATUSEHAT untuk faskes ini belum dikonfigurasi di database.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Idempotency: Periksa apakah poliklinik sudah memiliki Location ID yang valid di database
+    const deptRows = await db
+      .select()
+      .from(departments)
+      .where(eq(departments.id, departmentId))
+      .limit(1);
+    const existingDept = deptRows[0];
+    const existingLocationId = existingDept?.satusehatLocationId;
+
+    const baseFhirUrl = getSatusehatFhirUrl(env as SatusehatEnvironment);
 
     // 2. Dapatkan token OAuth2 murni berbasis faskes
     let token = req.headers.get("authorization")?.replace("Bearer ", "");
@@ -51,6 +74,73 @@ export async function POST(req: NextRequest) {
         token = authRes.data.accessToken;
       }
     }
+
+    if (
+      existingLocationId &&
+      existingLocationId.includes("-") &&
+      existingLocationId !== "b017aa54-f1df-4429-b472-3e029619854e" &&
+      !force
+    ) {
+      if (token) {
+        try {
+          const verifyRes = await fetch(`${baseFhirUrl}/Location/${existingLocationId}`, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+          if (verifyRes.status >= 200 && verifyRes.status < 300) {
+            const locData = await verifyRes.json();
+            return NextResponse.json({
+              success: true,
+              source: "satusehat_verified",
+              message: `Ruang Poliklinik sudah terdaftar dan terverifikasi di SATUSEHAT Cloud (ID: ${existingLocationId}).`,
+              data: {
+                department: existingDept,
+                location: locData,
+                satusehatLocationId: existingLocationId,
+              },
+              telemetry: {
+                latencyMs: Date.now() - startTime,
+                targetUrl: `${baseFhirUrl}/Location/${existingLocationId}`,
+                httpStatus: 200,
+                timestamp: new Date().toISOString(),
+                method: "GET",
+              },
+            });
+          }
+        } catch (err) {
+          console.warn("[Location API] Verification check warning:", err);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        source: "local_retained",
+        message: `Ruang Poliklinik sudah terdaftar dengan Location ID: ${existingLocationId}.`,
+        data: {
+          department: existingDept,
+          location: {
+            resourceType: "Location",
+            id: existingLocationId,
+            status: "active",
+            name: name.trim(),
+          },
+          satusehatLocationId: existingLocationId,
+        },
+        telemetry: {
+          latencyMs: Date.now() - startTime,
+          targetUrl: `${baseFhirUrl}/Location/${existingLocationId}`,
+          httpStatus: 200,
+          timestamp: new Date().toISOString(),
+          method: "CHECK",
+        },
+      });
+    }
+
+    const locationCode = code || `LOC-${name.replace(/\s+/g, "-").toUpperCase()}`;
+    const locationDescription = `Ruang Pelayanan ${name} (${room || "Ruang Periksa"})`;
 
     let satusehatLocationId: string | null = null;
     let locationResponseData = null;

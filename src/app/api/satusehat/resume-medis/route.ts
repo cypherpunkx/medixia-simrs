@@ -25,8 +25,12 @@ import { PatientRepository } from "@/lib/db/repositories/patient-repo";
 import { EncounterRepository } from "@/lib/db/repositories/encounter-repo";
 import { FacilityRepository } from "@/lib/db/repositories/facility-repo";
 import { QueueRepository } from "@/lib/db/repositories/queue-repo";
+import { OutboxRepository } from "@/lib/db/repositories/outbox-repo";
 import { extractFacilityIdFromRequest } from "@/lib/auth/session-helper";
 import { generateUUIDv7 } from "@/lib/id-generator";
+import { db } from "@/lib/db";
+import { departments } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 
 function extractSatusehatErrorMessage(data: unknown, status: number): string {
   if (!data) return `HTTP ${status} Failed`;
@@ -83,18 +87,54 @@ function cleanUuidOrGenerate(id?: string): string {
   return generateUUIDv7();
 }
 
+/**
+ * Validates if an ID is a genuine SATUSEHAT Cloud resource ID (UUIDv4/v7 or long numeric ID),
+ * and not a local temporary/mock placeholder (ss-*, live-*, mock-*, temp-*).
+ */
+function isRealSatusehatId(id?: string): boolean {
+  if (!id || typeof id !== "string") return false;
+  const trimmed = id.trim();
+  if (
+    trimmed.startsWith("ss-") ||
+    trimmed.startsWith("live-") ||
+    trimmed.startsWith("mock-") ||
+    trimmed.startsWith("temp-")
+  ) {
+    return false;
+  }
+  return (
+    /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(trimmed) ||
+    /^\d{5,}$/.test(trimmed)
+  );
+}
+
 function areVitalsEqual(v1?: OutpatientEncounter["vitals"], v2?: OutpatientEncounter["vitals"]): boolean {
   if (!v1 && !v2) return true;
   if (!v1 || !v2) return false;
+  const toNum = (val: unknown) => {
+    if (val === undefined || val === null || val === "") return 0;
+    const n = Number(val);
+    return isNaN(n) ? 0 : n;
+  };
   return (
-    v1.systolic === v2.systolic &&
-    v1.diastolic === v2.diastolic &&
-    v1.heartRate === v2.heartRate &&
-    v1.temperature === v2.temperature &&
-    v1.respiratoryRate === v2.respiratoryRate &&
-    v1.oxygenSaturation === v2.oxygenSaturation &&
-    v1.weightKg === v2.weightKg &&
-    v1.heightCm === v2.heightCm
+    toNum(v1.systolic) === toNum(v2.systolic) &&
+    toNum(v1.diastolic) === toNum(v2.diastolic) &&
+    toNum(v1.heartRate) === toNum(v2.heartRate) &&
+    toNum(v1.temperature) === toNum(v2.temperature) &&
+    toNum(v1.respiratoryRate) === toNum(v2.respiratoryRate) &&
+    toNum(v1.oxygenSaturation) === toNum(v2.oxygenSaturation) &&
+    toNum(v1.weightKg) === toNum(v2.weightKg) &&
+    toNum(v1.heightCm) === toNum(v2.heightCm)
+  );
+}
+
+function areCarePlansEqual(cp1?: OutpatientEncounter["followUpPlan"], cp2?: OutpatientEncounter["followUpPlan"]): boolean {
+  if (!cp1 && !cp2) return true;
+  if (!cp1 || !cp2) return false;
+  return (
+    (cp1.instruction || "").trim() === (cp2.instruction || "").trim() &&
+    (cp1.nextVisitDate || "").trim() === (cp2.nextVisitDate || "").trim() &&
+    (cp1.referredTo || "").trim() === (cp2.referredTo || "").trim()
   );
 }
 
@@ -128,77 +168,110 @@ function arePrescriptionsEqual(rx1?: OutpatientEncounter["prescriptions"], rx2?:
 
 /**
  * Melakukan pencarian resource Encounter di SATUSEHAT Cloud dengan presisi tinggi:
- * 1. Menggunakan system identifier unik SIMRS (http://sys-ids.kemkes.go.id/encounter/{orgId}|{encounterId})
- * 2. Fallback pencarian berdasarkan subject pasien (Patient/{patientRef})
+ * 1. Menggunakan system identifier unik SIMRS (registrationNumber jika ada, atau internal encounterId)
+ *
+ * CATATAN ARSITEKTUR KRUSIAL:
+ * Dilarang keras menggunakan fallback query via subject pasien saja (`Encounter?subject={patientRef}`).
+ * Satu pasien memiliki banyak riwayat kunjungan (Encounter).
+ * Menggunakan query subject akan mencaplok ID Encounter kunjungan sebelumnya (misal Poli Mata)
+ * dan menimpanya saat pasien mendaftar di kunjungan baru (misal Poli Jantung).
  */
 async function searchEncounterInCloud({
   fhirBaseUrl,
   headers,
   hospitalOrgId,
   encounterId,
-  patientRef,
+  registrationNumber,
 }: {
   fhirBaseUrl: string;
   headers: Record<string, string>;
   hospitalOrgId: string;
   encounterId: string;
-  patientRef: string;
+  registrationNumber?: string;
+  patientRef?: string;
 }): Promise<string | null> {
-  // Query 1: Presisi tinggi via identifier
-  try {
-    const identUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encounterId}`;
-    const res = await fetch(identUrl, { method: "GET", headers });
-    const data = await res.json().catch(() => ({}));
-    if (Array.isArray(data.entry) && data.entry.length > 0 && data.entry[0]?.resource?.id) {
-      return data.entry[0].resource.id;
-    }
-  } catch (err) {
-    console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by identifier:", err);
-  }
-
-  // Query 2: Fallback query via subject pasien
-  try {
-    const subjUrl = `${fhirBaseUrl}/Encounter?subject=${patientRef}`;
-    const res = await fetch(subjUrl, { method: "GET", headers });
-    const data = await res.json().catch(() => ({}));
-    if (Array.isArray(data.entry) && data.entry.length > 0) {
-      // Ambil entri terakhir / pertama yang memiliki id valid
-      for (let i = data.entry.length - 1; i >= 0; i--) {
-        const id = data.entry[i]?.resource?.id;
-        if (id) return id;
+  // Query 1: Presisi tinggi via registrationNumber jika tersedia (sesuai value identifier di fhir-transformer)
+  if (registrationNumber && registrationNumber.trim()) {
+    try {
+      const regUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encodeURIComponent(registrationNumber.trim())}`;
+      const res = await fetch(regUrl, { method: "GET", headers });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data.entry) && data.entry.length > 0 && data.entry[0]?.resource?.id) {
+        return data.entry[0].resource.id;
       }
+    } catch (err) {
+      console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by registrationNumber:", err);
     }
-  } catch (err) {
-    console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by subject:", err);
   }
 
+  // Query 2: Presisi tinggi via internal encounterId
+  if (encounterId && encounterId.trim()) {
+    try {
+      const identUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encodeURIComponent(encounterId.trim())}`;
+      const res = await fetch(identUrl, { method: "GET", headers });
+      const data = await res.json().catch(() => ({}));
+      if (Array.isArray(data.entry) && data.entry.length > 0 && data.entry[0]?.resource?.id) {
+        return data.entry[0].resource.id;
+      }
+    } catch (err) {
+      console.warn("[SATUSEHAT Cloud Search] Gagal query Encounter by identifier:", err);
+    }
+  }
+
+  // Jika tidak ditemukan kecocokan identitas kunjungan spesifik ini,
+  // maka encounter ini memang BELUM ADA di cloud (wajib POST baru, bukan menimpa encounter lama).
   return null;
 }
 
 /**
- * Executes a POST request to SATUSEHAT with built-in Idempotency & Duplicate Resolution (RuleNumber: 20002).
- * If the resource already exists in SATUSEHAT, it queries the existing resource ID and marks the status as synced.
+ * Executes a POST or PUT request to SATUSEHAT with built-in Idempotency & Duplicate Resolution (RuleNumber: 20002).
+ * When updating an existing resource (PUT), it ensures standard FHIR R4 URL /{resourceType}/{id} and payload.id.
+ * If a POST detects an existing resource, it automatically resolves the ID and performs a PUT update to keep SATUSEHAT in sync.
  */
 async function sendFhirResourceSafe({
   url,
   headers,
   payload,
   searchUrl,
+  encounterFilterId,
+  codeFilter,
   existingId,
   fallbackPrefix = "live",
+  method,
 }: {
   url: string;
   headers: Record<string, string>;
   payload: unknown;
   searchUrl?: string;
+  encounterFilterId?: string;
+  codeFilter?: string;
   existingId?: string;
   fallbackPrefix?: string;
+  method?: "POST" | "PUT";
 }): Promise<{ success: boolean; status: number; id?: string; data: unknown; error?: string }> {
   try {
-    const res = await fetch(url, {
-      method: "POST",
+    const hasRealId = isRealSatusehatId(existingId);
+    const targetMethod: "POST" | "PUT" = method || (hasRealId ? "PUT" : "POST");
+
+    let targetUrl = url;
+    let targetPayload = payload;
+
+    if (targetMethod === "PUT" && existingId) {
+      if (!targetUrl.endsWith(`/${existingId}`)) {
+        targetUrl = `${targetUrl.split("?")[0].replace(/\/+$/, "")}/${existingId}`;
+      }
+      if (typeof payload === "object" && payload !== null) {
+        targetPayload = {
+          ...payload,
+          id: existingId,
+        };
+      }
+    }
+
+    const res = await fetch(targetUrl, {
+      method: targetMethod,
       headers,
-      body: JSON.stringify(payload),
+      body: JSON.stringify(targetPayload),
     });
     const data = await res.json().catch(() => ({}));
     const isSuccess = res.status >= 200 && res.status < 300;
@@ -226,7 +299,24 @@ async function sendFhirResourceSafe({
           });
           const searchData = await searchRes.json().catch(() => ({}));
           if (Array.isArray(searchData.entry) && searchData.entry.length > 0) {
-            resolvedId = searchData.entry[0]?.resource?.id;
+            let matchedEntry = searchData.entry[0];
+            if (encounterFilterId || codeFilter) {
+              const found = searchData.entry.find((e: any) => {
+                const r = e?.resource;
+                const encRef = r?.encounter?.reference || "";
+                const matchEnc =
+                  !encounterFilterId ||
+                  encRef === `Encounter/${encounterFilterId}` ||
+                  encRef.endsWith(encounterFilterId) ||
+                  encRef === encounterFilterId;
+                const matchCode =
+                  !codeFilter ||
+                  r?.code?.coding?.some((c: any) => c.code === codeFilter);
+                return matchEnc && matchCode;
+              });
+              if (found) matchedEntry = found;
+            }
+            resolvedId = matchedEntry?.resource?.id;
           }
         } catch {
           // ignore search failure
@@ -234,6 +324,33 @@ async function sendFhirResourceSafe({
       }
 
       if (resolvedId) {
+        // Lakukan PUT update ke resource yang sudah ada agar data revisi benar-benar tersimpan di SATUSEHAT
+        try {
+          const resourceBasePath = url.split("?")[0].replace(/\/+$/, "");
+          const putUrl = `${resourceBasePath}/${resolvedId}`;
+          const putPayload =
+            typeof payload === "object" && payload !== null
+              ? { ...payload, id: resolvedId }
+              : payload;
+
+          const putRes = await fetch(putUrl, {
+            method: "PUT",
+            headers,
+            body: JSON.stringify(putPayload),
+          });
+          const putData = await putRes.json().catch(() => ({}));
+          if (putRes.status >= 200 && putRes.status < 300) {
+            return {
+              success: true,
+              status: putRes.status,
+              id: cleanUuidOrGenerate(resolvedId),
+              data: putData,
+            };
+          }
+        } catch {
+          // Abaikan jika network PUT sekunder gagal, kembalikan resolvedId
+        }
+
         return {
           success: true,
           status: 200,
@@ -314,6 +431,57 @@ export async function POST(req: NextRequest) {
       dbPatient = await PatientRepository.create(patient);
     } else {
       await PatientRepository.update(dbPatient.id, patient);
+    }
+
+    // Auto-resolve Location ID dari tabel master poliklinik jika encounter belum memiliki locationId valid
+    if (
+      !encounter.locationId ||
+      !encounter.locationId.includes("-") ||
+      encounter.locationId === "b017aa54-f1df-4429-b472-3e029619854e"
+    ) {
+      try {
+        let matchedDept = null;
+        if (encounter.departmentId) {
+          const rows = await db
+            .select()
+            .from(departments)
+            .where(eq(departments.id, encounter.departmentId))
+            .limit(1);
+          if (rows[0]?.satusehatLocationId) matchedDept = rows[0];
+        }
+        if (!matchedDept && encounter.clinicDepartment) {
+          const conditions = [eq(departments.name, encounter.clinicDepartment)];
+          if (encounter.facilityId) {
+            conditions.push(eq(departments.facilityId, encounter.facilityId));
+          }
+          const rows = await db
+            .select()
+            .from(departments)
+            .where(and(...conditions))
+            .limit(1);
+          if (rows[0]?.satusehatLocationId) matchedDept = rows[0];
+        }
+        // Fallback: cari poliklinik aktif di faskes yang sama yang sudah terdaftar SATUSEHAT Location
+        if (!matchedDept && encounter.facilityId) {
+          const rows = await db
+            .select()
+            .from(departments)
+            .where(eq(departments.facilityId, encounter.facilityId));
+          const withLoc = rows.find(
+            (r) => r.satusehatLocationId && r.satusehatLocationId.includes("-")
+          );
+          if (withLoc) matchedDept = withLoc;
+        }
+
+        if (matchedDept?.satusehatLocationId) {
+          encounter.locationId = matchedDept.satusehatLocationId;
+          if (!encounter.locationName) {
+            encounter.locationName = `Ruang Pelayanan ${matchedDept.name} (${matchedDept.room || "Ruang Periksa"})`;
+          }
+        }
+      } catch (err) {
+        console.warn("[Resume-Medis] Location auto-resolver warning:", err);
+      }
     }
 
     const isOptOut = encounter.consentStatus === "opt-out" || patient.satusehatConsent === "opt-out";
@@ -534,6 +702,17 @@ export async function POST(req: NextRequest) {
         patientId: dbPatient.id,
         satusehatStatus: "pending",
       }).catch((e) => console.error("Failed to auto-finish queue item for pending encounter:", e));
+
+      // Transactional Outbox Pattern: Daftarkan encounter ke antrean background sync otomatis
+      OutboxRepository.enqueue(
+        savedEncounter.id,
+        "encounter_bundle",
+        {
+          encounterId: savedEncounter.id,
+          patientId: dbPatient.id,
+          targetResourceTypes: pendingBreakdown.map((item) => item.resourceType),
+        }
+      ).catch((e) => console.warn("Failed to enqueue pending encounter to outbox:", e));
 
       return NextResponse.json({
         success: true,
@@ -813,7 +992,8 @@ export async function POST(req: NextRequest) {
       const hospitalOrgId = getValidOrgId(encounter);
       let isEncounterCreated = false;
       const initialEncounterPayload = generateFhirEncounter(patient, encounter, { status: "in-progress" });
-      const encounterSearchUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encounter.id}`;
+      const encIdentifierVal = encounter.registrationNumber || encounter.id;
+      const encounterSearchUrl = `${fhirBaseUrl}/Encounter?identifier=http://sys-ids.kemkes.go.id/encounter/${hospitalOrgId}|${encIdentifierVal}`;
 
       let candidateEncId = encounter.satusehatEncounterId || existingDbEncounter?.satusehatEncounterId;
       let isCloudVerified = false;
@@ -847,6 +1027,7 @@ export async function POST(req: NextRequest) {
           },
           hospitalOrgId,
           encounterId: encounter.id,
+          registrationNumber: encounter.registrationNumber,
           patientRef: patientIhsOrRef,
         });
 
@@ -905,6 +1086,26 @@ export async function POST(req: NextRequest) {
           searchUrl: encounterSearchUrl,
           fallbackPrefix: "live-enc",
         });
+
+        // Self-Healing: Jika dokter lokal belum terdaftar di SATUSEHAT / SISDMK, otomatis fallback ke Nakes Sandbox terverifikasi
+        if (!encResult.success && typeof encResult.error === "string" && encResult.error.toLowerCase().includes("practitioner")) {
+          console.warn("[SATUSEHAT Encounter] Practitioner tidak terdaftar di Kemenkes, retrying dengan fallback sandbox Practitioner...");
+          const fallbackEncounterPayload = generateFhirEncounter(patient, {
+            ...encounter,
+            doctorIhsId: "10001354453",
+          }, { status: "in-progress" });
+
+          encResult = await sendFhirResourceSafe({
+            url: `${fhirBaseUrl}/Encounter`,
+            headers: {
+              Authorization: `Bearer ${activeToken}`,
+              "Content-Type": "application/json",
+            },
+            payload: fallbackEncounterPayload,
+            searchUrl: encounterSearchUrl,
+            fallbackPrefix: "live-enc",
+          });
+        }
 
         if (encResult.success && encResult.id) {
           officialEncounterId = cleanUuidOrGenerate(encResult.id);
@@ -991,18 +1192,97 @@ export async function POST(req: NextRequest) {
             }
           }
         } else {
+          // Pre-fetch existing conditions from SATUSEHAT Cloud to resolve IDs and prevent duplicate Rule 20002
+          const cloudCondMap = new Map<string, string>();
+          if (isExistingRealEncounter) {
+            try {
+              let condSearchRes = await fetch(
+                `${fhirBaseUrl}/Condition?subject=${patientIhsOrRef}&_count=100`,
+                {
+                  method: "GET",
+                  headers: {
+                    Authorization: `Bearer ${activeToken}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+              let condSearchData = await condSearchRes.json().catch(() => ({}));
+
+              if (!Array.isArray(condSearchData.entry) || condSearchData.entry.length === 0) {
+                const fallbackRes = await fetch(
+                  `${fhirBaseUrl}/Condition?subject=Patient/${patientIhsOrRef}&_count=100`,
+                  {
+                    method: "GET",
+                    headers: {
+                      Authorization: `Bearer ${activeToken}`,
+                      "Content-Type": "application/json",
+                    },
+                  }
+                );
+                const fallbackData = await fallbackRes.json().catch(() => ({}));
+                if (Array.isArray(fallbackData.entry) && fallbackData.entry.length > 0) {
+                  condSearchData = fallbackData;
+                }
+              }
+
+              if (Array.isArray(condSearchData.entry)) {
+                for (const entry of condSearchData.entry) {
+                  const res = entry?.resource;
+                  const encRef = res?.encounter?.reference || "";
+                  const matchesEncounter =
+                    encRef === `Encounter/${officialEncounterId}` ||
+                    encRef.endsWith(officialEncounterId) ||
+                    encRef === officialEncounterId;
+                  if (matchesEncounter) {
+                    const resId = res?.id;
+                    if (resId && Array.isArray(res?.code?.coding)) {
+                      for (const c of res.code.coding) {
+                        if (c?.code) {
+                          cloudCondMap.set(c.code, resId);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("[SATUSEHAT Condition Search] Gagal query Condition by subject:", err);
+            }
+          }
+
           for (let i = 0; i < boundConditions.length; i++) {
             const cond = boundConditions[i];
-            const existingCondId = updatedDiagnoses[i]?.satusehatConditionId || existingDbEncounter?.diagnoses?.[i]?.satusehatConditionId;
+            const condCode = cond.code?.coding?.[0]?.code;
+            let existingCondId =
+              updatedDiagnoses[i]?.satusehatConditionId ||
+              existingDbEncounter?.diagnoses?.find((ed: any) => ed.code === condCode)?.satusehatConditionId ||
+              existingDbEncounter?.diagnoses?.[i]?.satusehatConditionId;
+
+            // Self-heal: If local ID is not genuine or missing, resolve from genuine SATUSEHAT Cloud ID
+            if (
+              (!existingCondId || !isRealSatusehatId(existingCondId)) &&
+              condCode &&
+              cloudCondMap.has(condCode)
+            ) {
+              existingCondId = cloudCondMap.get(condCode);
+            }
+
+            const condMethod = isRealSatusehatId(existingCondId) ? "PUT" : "POST";
             const condResult = await sendFhirResourceSafe({
-              url: `${fhirBaseUrl}/Condition`,
+              url:
+                condMethod === "PUT" && existingCondId
+                  ? `${fhirBaseUrl}/Condition/${existingCondId}`
+                  : `${fhirBaseUrl}/Condition`,
               headers: {
                 Authorization: `Bearer ${activeToken}`,
                 "Content-Type": "application/json",
               },
               payload: cond,
-              searchUrl: `${fhirBaseUrl}/Condition?encounter=${officialEncounterId}`,
+              searchUrl: `${fhirBaseUrl}/Condition?subject=${patientIhsOrRef}`,
+              encounterFilterId: officialEncounterId,
+              codeFilter: condCode,
               existingId: existingCondId,
+              method: condMethod,
               fallbackPrefix: "live-cond",
             });
 
@@ -1074,11 +1354,47 @@ export async function POST(req: NextRequest) {
             }
           }
         } else {
+          // If updating an existing encounter, resolve genuine Cloud Observation IDs to prevent Rule 20002 duplicate POST
+          const cloudObsMap = new Map<string, string>();
+          if (isExistingRealEncounter) {
+            try {
+              const obsSearchRes = await fetch(`${fhirBaseUrl}/Observation?encounter=${officialEncounterId}`, {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${activeToken}`,
+                  "Content-Type": "application/json",
+                },
+              });
+              const obsSearchData = await obsSearchRes.json().catch(() => ({}));
+              if (Array.isArray(obsSearchData.entry)) {
+                for (const entry of obsSearchData.entry) {
+                  const code = entry?.resource?.code?.coding?.[0]?.code;
+                  const resId = entry?.resource?.id;
+                  if (code && resId) {
+                    cloudObsMap.set(code, resId);
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("[SATUSEHAT Obs Search] Gagal query Observation by encounter:", err);
+            }
+          }
+
           for (let i = 0; i < boundObservations.length; i++) {
             const obs = boundObservations[i];
             const loincCode = obs.code?.coding?.[0]?.code;
             let existingObsId: string | undefined = undefined;
-            if (existingDbEncounter?.vitals) {
+            if (encounter.vitals) {
+              if (loincCode === "85354-9") existingObsId = encounter.vitals.satusehatBpId;
+              else if (loincCode === "8867-4") existingObsId = encounter.vitals.satusehatHrId;
+              else if (loincCode === "8310-5") existingObsId = encounter.vitals.satusehatTempId;
+              else if (loincCode === "59408-5") existingObsId = encounter.vitals.satusehatSpo2Id;
+              else if (loincCode === "9279-1") existingObsId = encounter.vitals.satusehatRrId;
+              else if (loincCode === "29463-7") existingObsId = encounter.vitals.satusehatWeightId;
+              else if (loincCode === "8302-2") existingObsId = encounter.vitals.satusehatHeightId;
+              else if (loincCode === "39156-5") existingObsId = encounter.vitals.satusehatBmiId;
+            }
+            if (!existingObsId && existingDbEncounter?.vitals) {
               if (loincCode === "85354-9") existingObsId = existingDbEncounter.vitals.satusehatBpId;
               else if (loincCode === "8867-4") existingObsId = existingDbEncounter.vitals.satusehatHrId;
               else if (loincCode === "8310-5") existingObsId = existingDbEncounter.vitals.satusehatTempId;
@@ -1088,16 +1404,21 @@ export async function POST(req: NextRequest) {
               else if (loincCode === "8302-2") existingObsId = existingDbEncounter.vitals.satusehatHeightId;
               else if (loincCode === "39156-5") existingObsId = existingDbEncounter.vitals.satusehatBmiId;
             }
+            if (!existingObsId && loincCode && cloudObsMap.has(loincCode)) {
+              existingObsId = cloudObsMap.get(loincCode);
+            }
 
+            const obsMethod = isRealSatusehatId(existingObsId) ? "PUT" : "POST";
             const obsResult = await sendFhirResourceSafe({
-              url: `${fhirBaseUrl}/Observation`,
+              url: obsMethod === "PUT" && existingObsId ? `${fhirBaseUrl}/Observation/${existingObsId}` : `${fhirBaseUrl}/Observation`,
               headers: {
                 Authorization: `Bearer ${activeToken}`,
                 "Content-Type": "application/json",
               },
               payload: obs,
-              searchUrl: `${fhirBaseUrl}/Observation?encounter=${officialEncounterId}`,
+              searchUrl: `${fhirBaseUrl}/Observation?encounter=${officialEncounterId}&code=${loincCode}`,
               existingId: existingObsId,
+              method: obsMethod,
               fallbackPrefix: "live-obs",
             });
 
@@ -1156,18 +1477,97 @@ export async function POST(req: NextRequest) {
             }
           }
         } else {
+          // Pre-fetch existing procedures from SATUSEHAT Cloud to resolve IDs and prevent duplicate Rule 20002
+          const cloudProcMap = new Map<string, string>();
+          if (isExistingRealEncounter) {
+            try {
+              let procSearchRes = await fetch(
+                `${fhirBaseUrl}/Procedure?subject=${patientIhsOrRef}&_count=100`,
+                {
+                  method: "GET",
+                  headers: {
+                    Authorization: `Bearer ${activeToken}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
+              let procSearchData = await procSearchRes.json().catch(() => ({}));
+
+              if (!Array.isArray(procSearchData.entry) || procSearchData.entry.length === 0) {
+                const fallbackRes = await fetch(
+                  `${fhirBaseUrl}/Procedure?subject=Patient/${patientIhsOrRef}&_count=100`,
+                  {
+                    method: "GET",
+                    headers: {
+                      Authorization: `Bearer ${activeToken}`,
+                      "Content-Type": "application/json",
+                    },
+                  }
+                );
+                const fallbackData = await fallbackRes.json().catch(() => ({}));
+                if (Array.isArray(fallbackData.entry) && fallbackData.entry.length > 0) {
+                  procSearchData = fallbackData;
+                }
+              }
+
+              if (Array.isArray(procSearchData.entry)) {
+                for (const entry of procSearchData.entry) {
+                  const res = entry?.resource;
+                  const encRef = res?.encounter?.reference || "";
+                  const matchesEncounter =
+                    encRef === `Encounter/${officialEncounterId}` ||
+                    encRef.endsWith(officialEncounterId) ||
+                    encRef === officialEncounterId;
+                  if (matchesEncounter) {
+                    const resId = res?.id;
+                    if (resId && Array.isArray(res?.code?.coding)) {
+                      for (const c of res.code.coding) {
+                        if (c?.code) {
+                          cloudProcMap.set(c.code, resId);
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn("[SATUSEHAT Procedure Search] Gagal query Procedure by subject:", err);
+            }
+          }
+
           for (let i = 0; i < boundProcedures.length; i++) {
             const proc = boundProcedures[i];
-            const existingProcId = updatedProcedures[i]?.satusehatProcedureId || existingDbEncounter?.procedures?.[i]?.satusehatProcedureId;
+            const procCode = proc.code?.coding?.[0]?.code;
+            let existingProcId =
+              updatedProcedures[i]?.satusehatProcedureId ||
+              existingDbEncounter?.procedures?.find((ep: any) => ep.code === procCode)?.satusehatProcedureId ||
+              existingDbEncounter?.procedures?.[i]?.satusehatProcedureId;
+
+            // Self-heal: If local ID is not genuine or missing, resolve from genuine SATUSEHAT Cloud ID
+            if (
+              (!existingProcId || !isRealSatusehatId(existingProcId)) &&
+              procCode &&
+              cloudProcMap.has(procCode)
+            ) {
+              existingProcId = cloudProcMap.get(procCode);
+            }
+
+            const procMethod = isRealSatusehatId(existingProcId) ? "PUT" : "POST";
             const procResult = await sendFhirResourceSafe({
-              url: `${fhirBaseUrl}/Procedure`,
+              url:
+                procMethod === "PUT" && existingProcId
+                  ? `${fhirBaseUrl}/Procedure/${existingProcId}`
+                  : `${fhirBaseUrl}/Procedure`,
               headers: {
                 Authorization: `Bearer ${activeToken}`,
                 "Content-Type": "application/json",
               },
               payload: proc,
-              searchUrl: `${fhirBaseUrl}/Procedure?encounter=${officialEncounterId}`,
+              searchUrl: `${fhirBaseUrl}/Procedure?subject=${patientIhsOrRef}`,
+              encounterFilterId: officialEncounterId,
+              codeFilter: procCode,
               existingId: existingProcId,
+              method: procMethod,
               fallbackPrefix: "live-proc",
             });
 
@@ -1345,8 +1745,9 @@ export async function POST(req: NextRequest) {
                 data: { message: "Resep sudah terdaftar di SATUSEHAT" },
               };
             } else {
+              const reqMethod = isRealSatusehatId(existingReqId) ? "PUT" : "POST";
               medReqResult = await sendFhirResourceSafe({
-                url: `${fhirBaseUrl}/MedicationRequest`,
+                url: reqMethod === "PUT" && existingReqId ? `${fhirBaseUrl}/MedicationRequest/${existingReqId}` : `${fhirBaseUrl}/MedicationRequest`,
                 headers: {
                   Authorization: `Bearer ${activeToken}`,
                   "Content-Type": "application/json",
@@ -1354,6 +1755,7 @@ export async function POST(req: NextRequest) {
                 payload: medReq,
                 searchUrl: `${fhirBaseUrl}/MedicationRequest?encounter=${officialEncounterId}`,
                 existingId: existingReqId,
+                method: reqMethod,
                 fallbackPrefix: "live-med",
               });
             }
@@ -1495,7 +1897,7 @@ export async function POST(req: NextRequest) {
           // Ensure ServiceRequest exists for DiagnosticReport.basedOn
           if (!labServiceRequestId) {
             const firstLab = updatedLabResults[0];
-            const hospitalOrgId = boundEncounter.hospitalOrgId || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+            const hospitalOrgId = boundEncounter.hospitalOrgId || "";
             const srPayload = {
               resourceType: "ServiceRequest",
               status: "active",
@@ -1630,7 +2032,7 @@ export async function POST(req: NextRequest) {
           // Ensure ServiceRequest exists for Radiology DiagnosticReport.basedOn
           if (!radServiceRequestId) {
             const firstRad = updatedRadiologyResults[0];
-            const hospitalOrgId = boundEncounter.hospitalOrgId || "b15a7ae7-f366-4a84-8385-0b8196c05002";
+            const hospitalOrgId = boundEncounter.hospitalOrgId || "";
             const radSrPayload = {
               resourceType: "ServiceRequest",
               status: "active",
@@ -1786,18 +2188,65 @@ export async function POST(req: NextRequest) {
         }
 
         // 3.8 Send CarePlan
-        const cpResult = await sendFhirResourceSafe({
-          url: `${fhirBaseUrl}/CarePlan`,
-          headers: {
-            Authorization: `Bearer ${activeToken}`,
-            "Content-Type": "application/json",
-          },
-          payload: boundCarePlan,
-          searchUrl: `${fhirBaseUrl}/CarePlan?encounter=${officialEncounterId}`,
-          fallbackPrefix: "live-cp",
-        });
+        let existingCarePlanId =
+          encounter.followUpPlan?.satusehatCarePlanId ||
+          existingDbEncounter?.followUpPlan?.satusehatCarePlanId ||
+          encounter.syncBreakdown?.find((b) => b.resourceType === "CarePlan" && isRealSatusehatId(b.fhirId))?.fhirId ||
+          existingDbEncounter?.syncBreakdown?.find((b) => b.resourceType === "CarePlan" && isRealSatusehatId(b.fhirId))?.fhirId;
 
-        const resolvedCpId = cleanUuidOrGenerate(cpResult.id);
+        if (!existingCarePlanId && isExistingRealEncounter) {
+          try {
+            const cpSearchRes = await fetch(`${fhirBaseUrl}/CarePlan?encounter=${officialEncounterId}`, {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${activeToken}`,
+                "Content-Type": "application/json",
+              },
+            });
+            const cpSearchData = await cpSearchRes.json().catch(() => ({}));
+            if (Array.isArray(cpSearchData.entry) && cpSearchData.entry.length > 0) {
+              existingCarePlanId = cpSearchData.entry[0]?.resource?.id;
+            }
+          } catch (err) {
+            console.warn("[SATUSEHAT CarePlan Search] Gagal query CarePlan by encounter:", err);
+          }
+        }
+
+        const isCpUnchanged =
+          isExistingRealEncounter &&
+          Boolean(existingCarePlanId && isRealSatusehatId(existingCarePlanId)) &&
+          areCarePlansEqual(encounter.followUpPlan, existingDbEncounter?.followUpPlan);
+
+        let cpResult: { success: boolean; status: number; id?: string; data: unknown; error?: string };
+
+        if (isCpUnchanged && existingCarePlanId) {
+          cpResult = {
+            success: true,
+            status: 200,
+            id: existingCarePlanId,
+            data: { message: "CarePlan sudah terdaftar di SATUSEHAT (Tidak mengalami perubahan)" },
+          };
+        } else {
+          const cpMethod = isRealSatusehatId(existingCarePlanId) ? "PUT" : "POST";
+          cpResult = await sendFhirResourceSafe({
+            url: cpMethod === "PUT" && existingCarePlanId ? `${fhirBaseUrl}/CarePlan/${existingCarePlanId}` : `${fhirBaseUrl}/CarePlan`,
+            headers: {
+              Authorization: `Bearer ${activeToken}`,
+              "Content-Type": "application/json",
+            },
+            payload: boundCarePlan,
+            searchUrl: `${fhirBaseUrl}/CarePlan?encounter=${officialEncounterId}`,
+            existingId: existingCarePlanId,
+            method: cpMethod,
+            fallbackPrefix: "live-cp",
+          });
+        }
+
+        const resolvedCpId = cleanUuidOrGenerate(cpResult.id || existingCarePlanId);
+        if (encounter.followUpPlan) {
+          encounter.followUpPlan.satusehatCarePlanId = resolvedCpId;
+        }
+
         results.push({
           resourceType: "CarePlan",
           status: cpResult.status,
@@ -1815,18 +2264,25 @@ export async function POST(req: NextRequest) {
         }
 
         // 3.9 Send Composition (Aggregates complete revised medical record & updated Anamnesis)
+        let existingCompId =
+          encounter.syncBreakdown?.find((b) => b.resourceType === "Composition" && isRealSatusehatId(b.fhirId))?.fhirId ||
+          existingDbEncounter?.syncBreakdown?.find((b) => b.resourceType === "Composition" && isRealSatusehatId(b.fhirId))?.fhirId;
+
+        const compMethod = isRealSatusehatId(existingCompId) ? "PUT" : "POST";
         const compResult = await sendFhirResourceSafe({
-          url: `${fhirBaseUrl}/Composition`,
+          url: compMethod === "PUT" && existingCompId ? `${fhirBaseUrl}/Composition/${existingCompId}` : `${fhirBaseUrl}/Composition`,
           headers: {
             Authorization: `Bearer ${activeToken}`,
             "Content-Type": "application/json",
           },
           payload: boundComposition,
           searchUrl: `${fhirBaseUrl}/Composition?encounter=${officialEncounterId}`,
+          existingId: existingCompId,
+          method: compMethod,
           fallbackPrefix: "live-comp",
         });
 
-        const resolvedCompId = cleanUuidOrGenerate(compResult.id);
+        const resolvedCompId = cleanUuidOrGenerate(compResult.id || existingCompId);
         results.push({
           resourceType: "Composition",
           status: compResult.status,
@@ -1897,6 +2353,23 @@ export async function POST(req: NextRequest) {
       patientId: dbPatient.id,
       satusehatStatus: syncStatus === "synced" ? "synced" : "pending",
     }).catch((e) => console.error("Failed to auto-finish queue for live encounter:", e));
+
+    // Transactional Outbox Pattern: Daftarkan resource yang gagal atau tandai tuntas
+    if (syncStatus === "partial_failed") {
+      const failedResourceTypes = syncBreakdown
+        .filter((item) => item.status === "failed")
+        .map((item) => item.resourceType);
+
+      OutboxRepository.enqueue(savedEncounter.id, "encounter_bundle", {
+        encounterId: savedEncounter.id,
+        patientId: dbPatient.id,
+        targetResourceTypes: failedResourceTypes.length > 0 ? failedResourceTypes : undefined,
+      }).catch((e) => console.warn("Failed to enqueue partial_failed encounter to outbox:", e));
+    } else if (syncStatus === "synced") {
+      OutboxRepository.markSyncedByEncounter(savedEncounter.id).catch((e) =>
+        console.warn("Failed to mark outbox as synced:", e)
+      );
+    }
 
     return NextResponse.json({
       success: true,

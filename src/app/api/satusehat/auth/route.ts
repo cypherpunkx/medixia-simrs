@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
         clientId: clientId.trim(),
         clientSecret: clientSecret.trim(),
         env,
-        orgId: orgId?.trim() || "b15a7ae7-f366-4a84-8385-0b8196c05002",
+        orgId: orgId?.trim() || undefined,
       },
       { forceRefresh }
     );

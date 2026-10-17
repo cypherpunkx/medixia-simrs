@@ -418,6 +418,33 @@ export interface PrescriptionItem {
   instructions: string;
   satusehatMedicationRequestId?: string;
   satusehatMedicationId?: string;
+  dispenseStatus?: "pending_review" | "in_preparation" | "ready" | "dispensed" | "cancelled";
+  reviewedBy?: string;
+  reviewedAt?: string;
+  preparedBy?: string;
+  preparedAt?: string;
+  dispensedBy?: string;
+  dispensedAt?: string;
+  satusehatMedicationDispenseId?: string;
+  etiquetteType?: "white" | "blue";
+  batchNumber?: string;
+  expiryDate?: string;
+  counselingNotes?: string;
+}
+
+export interface StockMutationItem {
+  id: string;
+  medicationId: string;
+  kfaCode: string;
+  type: "dispense" | "restock" | "adjustment" | "return";
+  quantity: number;
+  stockBefore: number;
+  stockAfter: number;
+  referenceType?: "prescription" | "po" | "opname";
+  referenceId?: string;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
 }
 
 export type SyncStatusType = "synced" | "draft" | "pending" | "partial_failed";
@@ -476,6 +503,7 @@ export interface OutpatientEncounter {
     instruction: string;
     nextVisitDate?: string;
     referredTo?: string;
+    satusehatCarePlanId?: string;
   };
   dischargeDisposition: string; // e.g. "Pulang Berobat Jalan"
   encounterStatus?: "arrived" | "in-progress" | "finished" | "cancelled";
@@ -488,6 +516,7 @@ export interface OutpatientEncounter {
   lockedAt?: string;
   lockedBy?: string;
   addendums?: MedicalAddendum[];
+  isReopened?: boolean; // Menandakan kunjungan dibuka kembali dari status selesai untuk koreksi/revisi RME
 }
 
 export interface ClinicQueuePatientItem {
@@ -511,6 +540,7 @@ export interface ClinicQueuePatientItem {
   paymentPayer?: string;
   isSequentialMultiClinic?: boolean; // Pendaftaran konsul antar-poli berurutan di hari yang sama
   pausedReason?: string; // Alasan penundaan pemeriksaan (misal: "Menunggu Hasil Lab/Radiologi")
+  isReopened?: boolean; // Menandakan antrean dibuka kembali dari status selesai
 }
 
 // ==========================================

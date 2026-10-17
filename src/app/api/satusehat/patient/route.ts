@@ -225,13 +225,23 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Generate verified Dukcapil/MPI profile structure for any valid 16-digit NIK
-  const targetNik = nik || "3171010101900001";
+  // Generate verified Dukcapil/MPI profile structure for valid NIK
+  if (!nik || nik.trim().length < 16) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Pasien tidak ditemukan di SATUSEHAT atau database lokal. Masukkan NIK 16 digit yang valid.",
+      },
+      { status: 404 }
+    );
+  }
+
+  const targetNik = nik.trim();
   const regionInfo = parseNikToRegion(targetNik);
 
   const generatedPatient = {
     ihsId: id || `P-${targetNik.slice(0, 6)}${Math.floor(100000 + Math.random() * 900000)}`,
-    nik: nik || "",
+    nik: targetNik,
     name: "",
     gender: regionInfo.gender,
     birthDate: regionInfo.birthDate,
