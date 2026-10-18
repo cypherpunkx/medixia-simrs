@@ -22,6 +22,8 @@ import {
   AlertTriangle,
   HeartPulse,
   CheckCircle2,
+  Tv,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -315,7 +317,8 @@ export function EhrHeader({
         w.triagePriority !== "urgent" &&
         !(w.chiefComplaint && /\bcito\b/i.test(w.chiefComplaint)),
     );
-    arrived.slice(0, 5).forEach((w, idx) => {
+    // Tampilkan antrean menunggu dengan batas aman hingga 20 item
+    arrived.slice(0, 20).forEach((w, idx) => {
       const notifId = `notif-waiting-${w.id || idx}`;
       list.push({
         id: notifId,
@@ -339,7 +342,8 @@ export function EhrHeader({
         w.triagePriority !== "urgent" &&
         !(w.chiefComplaint && /\bcito\b/i.test(w.chiefComplaint)),
     );
-    recentFinished.slice(0, 3).forEach((f, idx) => {
+    // Tampilkan seluruh pasien selesai terbaru (sampai 20 item) agar dapat diakses via scroll
+    recentFinished.slice(0, 20).forEach((f, idx) => {
       const notifId = `notif-finished-${f.id || idx}`;
       list.push({
         id: notifId,
@@ -1104,6 +1108,25 @@ export function EhrHeader({
                     );
                   })
                 )}
+              </div>
+
+              {/* Footer Shortcut: Buka Monitor Antrean Lengkap */}
+              <div className="p-2.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Total {worklist.length} Pasien Hari Ini
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsNotifOpen(false);
+                    useUIStore.getState().setModalOpen("isQueueDisplayOpen", true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 text-[11px] font-semibold border border-teal-200/80 transition-colors cursor-pointer group"
+                >
+                  <Tv className="h-3.5 w-3.5 text-teal-600 group-hover:scale-110 transition-transform" />
+                  <span>Buka Monitor Antrean</span>
+                  <ExternalLink className="h-3 w-3 opacity-60 group-hover:opacity-100" />
+                </button>
               </div>
             </div>
           )}
